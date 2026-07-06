@@ -1,0 +1,60 @@
+package com.santsg.tourvisio.entity;
+
+import jakarta.persistence.*;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Entity
+@Table(name = "reservations")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class Reservation {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "reservation_number", unique = true, nullable = false)
+    private String reservationNumber;
+
+    @Column(nullable = false)
+    private String type; // e.g., HOTEL, FLIGHT
+
+    @Column(name = "item_name", nullable = false)
+    private String itemName;
+
+    @Column(nullable = false)
+    private String destination;
+
+    @Column(name = "start_date", nullable = false)
+    private LocalDate startDate;
+
+    @Column(name = "end_date", nullable = false)
+    private LocalDate endDate;
+
+    @Column(name = "total_price", nullable = false)
+    private Double totalPrice;
+
+    @Column(nullable = false)
+    private String currency;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @OneToMany(mappedBy = "reservation", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @Builder.Default
+    private List<Passenger> passengers = new ArrayList<>();
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+    }
+}
