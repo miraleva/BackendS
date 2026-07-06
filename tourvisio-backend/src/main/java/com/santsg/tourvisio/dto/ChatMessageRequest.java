@@ -11,4 +11,6 @@ import lombok.NoArgsConstructor;
 public class ChatMessageRequest {
     @NotBlank(message = "User message cannot be empty")
     private String userMessage;
+
+    private String sessionId;
 }

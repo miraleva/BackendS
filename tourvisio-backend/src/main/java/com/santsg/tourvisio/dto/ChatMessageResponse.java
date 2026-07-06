@@ -14,4 +14,5 @@ public class ChatMessageResponse {
     private String intent;
     private List<String> missingFields;
     private String botMessage;
+    private String chatStatus;
 }

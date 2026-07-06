@@ -53,6 +53,19 @@ public class MissingParameterService {
                 missingFields.add("yetişkin sayısı");
             }
 
+            // Check if user mentions children but does not mention child ages
+            boolean hasChildren = lowerMsg.contains("çocuk") || lowerMsg.contains("cocuk") || 
+                                  lowerMsg.contains("child") || lowerMsg.contains("kids");
+            if (hasChildren) {
+                boolean hasChildAges = lowerMsg.contains("yaş") || lowerMsg.contains("yas") || 
+                                       lowerMsg.contains("yaşında") || lowerMsg.contains("yasinda") || 
+                                       lowerMsg.contains("age") || lowerMsg.contains("yaşları") || 
+                                       lowerMsg.contains("yaslari");
+                if (!hasChildAges) {
+                    missingFields.add("childAges");
+                }
+            }
+
             // 5. Para Birimi: check for "tl", "try", "euro", "dolar", "usd", "eur", "lira" as full words
             boolean hasCurrency = hasWord(lowerMsg, "tl") || hasWord(lowerMsg, "try") || 
                                   hasWord(lowerMsg, "euro") || hasWord(lowerMsg, "dolar") || 
