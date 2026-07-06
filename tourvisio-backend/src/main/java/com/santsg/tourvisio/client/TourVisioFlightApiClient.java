@@ -2,12 +2,15 @@ package com.santsg.tourvisio.client;
 
 import com.santsg.tourvisio.dto.FlightSearchRequest;
 import com.santsg.tourvisio.dto.FlightSearchResponseItem;
+import com.santsg.tourvisio.dto.tourvisio.TourVisioFlightSearchRequest;
+import com.santsg.tourvisio.dto.tourvisio.TourVisioFlightSearchResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 
 @Component
@@ -26,8 +29,8 @@ public class TourVisioFlightApiClient {
     private final RestTemplate restTemplate = new RestTemplate();
 
     public List<FlightSearchResponseItem> searchFlights(FlightSearchRequest request) {
-        if (mockMode) {
-            log.info("TourVisio Flight search API running in MOCK mode.");
+        if (mockMode || baseUrl == null || baseUrl.trim().isEmpty() || token == null || token.trim().isEmpty()) {
+            log.info("TourVisio Flight search API running in MOCK mode (or missing connection credentials).");
             return generateMockFlights(request);
         }
 
@@ -37,18 +40,37 @@ public class TourVisioFlightApiClient {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("Authorization", "Bearer " + token);
 
-            HttpEntity<FlightSearchRequest> entity = new HttpEntity<>(request, headers);
+            TourVisioFlightSearchRequest tvRequest = TourVisioFlightSearchRequest.builder()
+                    .departureLocation(request.getDepartureLocation())
+                    .arrivalLocation(request.getArrivalLocation())
+                    .departureDate(request.getDepartureDate().toString())
+                    .passengerCount(request.getPassengerCount())
+                    .tripType(request.getTripType())
+                    .currency(request.getCurrency())
+                    .build();
+
+            HttpEntity<TourVisioFlightSearchRequest> entity = new HttpEntity<>(tvRequest, headers);
 
             log.info("Making TourVisio Flight Search request to: {}", url);
-            ResponseEntity<FlightSearchResponseItem[]> response = restTemplate.exchange(
+            ResponseEntity<TourVisioFlightSearchResponse> response = restTemplate.exchange(
                     url,
                     HttpMethod.POST,
                     entity,
-                    FlightSearchResponseItem[].class
+                    TourVisioFlightSearchResponse.class
             );
 
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return List.of(response.getBody());
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null && response.getBody().getFlights() != null) {
+                return response.getBody().getFlights().stream()
+                        .map(tvItem -> FlightSearchResponseItem.builder()
+                                .airline(tvItem.getAirline())
+                                .departureTime(tvItem.getDepartureTime())
+                                .arrivalTime(tvItem.getArrivalTime())
+                                .transfers(tvItem.getTransfers())
+                                .baggage(tvItem.getBaggage())
+                                .price(tvItem.getPrice())
+                                .currency(tvItem.getCurrency())
+                                .build())
+                        .collect(Collectors.toList());
             } else {
                 log.warn("TourVisio Flight API returned status code: {}", response.getStatusCode());
                 return generateMockFlights(request);

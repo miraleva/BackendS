@@ -2,12 +2,15 @@ package com.santsg.tourvisio.client;
 
 import com.santsg.tourvisio.dto.HotelSearchRequest;
 import com.santsg.tourvisio.dto.HotelSearchResponseItem;
+import com.santsg.tourvisio.dto.tourvisio.TourVisioHotelSearchRequest;
+import com.santsg.tourvisio.dto.tourvisio.TourVisioHotelSearchResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 
 @Component
@@ -26,8 +29,8 @@ public class TourVisioHotelApiClient {
     private final RestTemplate restTemplate = new RestTemplate();
 
     public List<HotelSearchResponseItem> searchHotels(HotelSearchRequest request) {
-        if (mockMode) {
-            log.info("TourVisio Hotel search API running in MOCK mode.");
+        if (mockMode || baseUrl == null || baseUrl.trim().isEmpty() || token == null || token.trim().isEmpty()) {
+            log.info("TourVisio Hotel search API running in MOCK mode (or missing connection credentials).");
             return generateMockHotels(request);
         }
 
@@ -37,18 +40,37 @@ public class TourVisioHotelApiClient {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("Authorization", "Bearer " + token);
 
-            HttpEntity<HotelSearchRequest> entity = new HttpEntity<>(request, headers);
+            TourVisioHotelSearchRequest tvRequest = TourVisioHotelSearchRequest.builder()
+                    .checkInDate(request.getCheckInDate().toString())
+                    .checkOutDate(request.getCheckOutDate().toString())
+                    .destination(request.getLocation())
+                    .nationality("TR")
+                    .adultCount(request.getAdultsCount())
+                    .currency(request.getCurrency())
+                    .build();
+
+            HttpEntity<TourVisioHotelSearchRequest> entity = new HttpEntity<>(tvRequest, headers);
 
             log.info("Making TourVisio Hotel Search request to: {}", url);
-            ResponseEntity<HotelSearchResponseItem[]> response = restTemplate.exchange(
+            ResponseEntity<TourVisioHotelSearchResponse> response = restTemplate.exchange(
                     url,
                     HttpMethod.POST,
                     entity,
-                    HotelSearchResponseItem[].class
+                    TourVisioHotelSearchResponse.class
             );
 
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return List.of(response.getBody());
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null && response.getBody().getHotels() != null) {
+                return response.getBody().getHotels().stream()
+                        .map(tvItem -> HotelSearchResponseItem.builder()
+                                .name(tvItem.getName())
+                                .region(tvItem.getRegion())
+                                .stars(tvItem.getStars())
+                                .price(tvItem.getPrice())
+                                .currency(tvItem.getCurrency())
+                                .pensionType(tvItem.getPensionType())
+                                .available(tvItem.isAvailable())
+                                .build())
+                        .collect(Collectors.toList());
             } else {
                 log.warn("TourVisio Hotel API returned status code: {}", response.getStatusCode());
                 return generateMockHotels(request);
@@ -65,7 +87,6 @@ public class TourVisioHotelApiClient {
         String currency = request.getCurrency();
         int adults = request.getAdultsCount();
 
-        // Standardize location string for checks
         String locationLower = location != null ? location.toLowerCase() : "";
 
         if (locationLower.contains("antalya") || locationLower.contains("alanya") || 
