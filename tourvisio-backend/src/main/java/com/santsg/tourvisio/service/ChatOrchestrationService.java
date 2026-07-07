@@ -1,5 +1,9 @@
 package com.santsg.tourvisio.service;
 
+import com.santsg.tourvisio.chat.ChatSessionStore;
+import com.santsg.tourvisio.chat.CriteriaMissingFieldsService;
+import com.santsg.tourvisio.chat.SearchCriteria;
+import com.santsg.tourvisio.chat.SearchCriteriaExtractor;
 import com.santsg.tourvisio.client.AIProviderClient;
 import com.santsg.tourvisio.dto.ChatRequest;
 import com.santsg.tourvisio.dto.ChatResponse;
@@ -13,20 +17,19 @@ import java.util.UUID;
 /**
  * Chatbot orkestrasyonunu yöneten merkezi servis.
  *
- * <p>Akış:</p>
+ * <h3>Çok-turlu konuşma akışı</h3>
  * <ol>
- *   <li>Oturumu al veya oluştur</li>
- *   <li>Oturum sonlandırılmışsa erken dön</li>
- *   <li>Intent tespiti ({@link IntentDetectionService})</li>
- *   <li>OUT_OF_SCOPE / UNKNOWN yönetimi</li>
- *   <li>Eksik parametre tespiti ({@link MissingParameterService})</li>
- *   <li>Bilgiler eksikse kullanıcıya soru sor</li>
- *   <li>Bilgiler tamsa AI ile zengin bir yanıt üret ({@link AIProviderClient})</li>
- *   <li>İleride: hotel/flight search servisine yönlendir</li>
+ *   <li>Session al / oluştur ({@link ChatSessionStore})</li>
+ *   <li>Oturum sonlandırılmışsa erken çık</li>
+ *   <li>Intent tespiti — <strong>aktif bir search session varsa intent atlanır</strong>;
+ *       gelen mesaj takip yanıtı olarak işlenir</li>
+ *   <li>OUT_OF_SCOPE yönetimi (aktif session yokken)</li>
+ *   <li>UNKNOWN: kullanıcıya otel mi uçak mı sorusu</li>
+ *   <li>Mesajdan arama kriterleri çıkar ({@link SearchCriteriaExtractor})</li>
+ *   <li>Yeni kriterler önceki session kriterleri üzerine birleştir (merge)</li>
+ *   <li>Eksik alan kontrolü ({@link CriteriaMissingFieldsService})</li>
+ *   <li>Eksik varsa → kullanıcıya soru; tamamsa → arama servisine yönlendir (TODO)</li>
  * </ol>
- *
- * <p>Bu sınıf rezervasyon işlemine karışmaz; yalnızca arama amacını
- * ve eksik parametreleri tespit eder.</p>
  */
 @Service
 public class ChatOrchestrationService {
@@ -34,87 +37,108 @@ public class ChatOrchestrationService {
     private static final Logger log = LoggerFactory.getLogger(ChatOrchestrationService.class);
 
     private final IntentDetectionService intentDetectionService;
-    private final MissingParameterService missingParameterService;
     private final ChatSessionManager chatSessionManager;
+    private final ChatSessionStore sessionStore;
+    private final SearchCriteriaExtractor extractor;
+    private final CriteriaMissingFieldsService missingFieldsService;
     private final AIProviderClient aiProviderClient;
 
-    public ChatOrchestrationService(IntentDetectionService intentDetectionService,
-                                    MissingParameterService missingParameterService,
-                                    ChatSessionManager chatSessionManager,
-                                    AIProviderClient aiProviderClient) {
-        this.intentDetectionService  = intentDetectionService;
-        this.missingParameterService = missingParameterService;
-        this.chatSessionManager      = chatSessionManager;
-        this.aiProviderClient        = aiProviderClient;
+    public ChatOrchestrationService(
+            IntentDetectionService intentDetectionService,
+            ChatSessionManager chatSessionManager,
+            ChatSessionStore sessionStore,
+            SearchCriteriaExtractor extractor,
+            CriteriaMissingFieldsService missingFieldsService,
+            AIProviderClient aiProviderClient) {
+
+        this.intentDetectionService = intentDetectionService;
+        this.chatSessionManager     = chatSessionManager;
+        this.sessionStore           = sessionStore;
+        this.extractor              = extractor;
+        this.missingFieldsService   = missingFieldsService;
+        this.aiProviderClient       = aiProviderClient;
     }
 
-    // -------------------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────────────────
     // Public API
-    // -------------------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Kullanıcıdan gelen mesajı işler ve chatbot yanıtını döner.
-     *
-     * @param request Kullanıcı mesajı ve (opsiyonel) oturum kimliği
-     * @return Chatbot'un ürettiği {@link ChatResponse}
-     */
     public ChatResponse orchestrate(ChatRequest request) {
 
         // 1. Session yönetimi
         String sessionId = resolveSessionId(request.getSessionId());
-        ChatSessionManager.SessionState session = chatSessionManager.getOrCreateSession(sessionId);
+        ChatSessionManager.SessionState sessionState =
+                chatSessionManager.getOrCreateSession(sessionId);
 
-        log.debug("[Orchestration] sessionId={} provider={}", sessionId, aiProviderClient.providerName());
+        log.debug("[Orchestration] sessionId={}", sessionId);
 
         // 2. Oturum sonlandırılmışsa erken çık
-        if ("TERMINATED".equals(session.getChatStatus())) {
+        if ("TERMINATED".equals(sessionState.getChatStatus())) {
             return terminatedResponse(sessionId);
         }
 
         String userMessage = request.getMessage();
 
-        // 3. Intent tespiti
-        String intent = intentDetectionService.detectIntent(userMessage);
-        log.debug("[Orchestration] intent={}", intent);
+        // 3. Aktif arama session'ı var mı?
+        SearchCriteria existingCriteria = sessionStore.getOrCreate(sessionId);
+        boolean hasActiveSearch = existingCriteria.getSearchType() != null;
 
-        // 4. OUT_OF_SCOPE: kullanıcıyı uyar, 3. kez gelirse oturumu sonlandır
-        if ("OUT_OF_SCOPE".equals(intent)) {
-            session.incrementOutOfScopeCount();
-            String chatStatus = session.getChatStatus();
+        // 4. Intent tespiti
+        //    - Aktif bir search session varsa intent'i yeniden hesaplamaya gerek yok;
+        //      gelen mesaj doğrudan o session'a ait takip mesajıdır.
+        //    - Aktif session yoksa klasik intent detection devreye girer.
+        String intent;
 
-            String reply = "TERMINATED".equals(chatStatus)
-                    ? "Çok sayıda alakasız mesaj gönderdiğiniz için bu sohbet sonlandırılmıştır."
-                    : "Sadece otel arama, uçak bileti arama ve rezervasyon konularında yardımcı olabilirim.";
+        if (hasActiveSearch) {
+            // Takip mesajı: mevcut searchType'ı koru
+            intent = existingCriteria.getSearchType();
+            log.debug("[Orchestration] Takip mesajı — mevcut intent korunuyor: {}", intent);
+        } else {
+            intent = intentDetectionService.detectIntent(userMessage);
+            log.debug("[Orchestration] Yeni session — intent={}", intent);
 
-            return ChatResponse.builder()
-                    .reply(reply)
-                    .sessionId(sessionId)
-                    .searchType("OUT_OF_SCOPE")
-                    .missingFields(List.of())
-                    .chatStatus(chatStatus)
-                    .build();
+            // OUT_OF_SCOPE (sadece yeni session başlatırken kontrol edilir)
+            if ("OUT_OF_SCOPE".equals(intent)) {
+                sessionState.incrementOutOfScopeCount();
+                String chatStatus = sessionState.getChatStatus();
+                String reply = "TERMINATED".equals(chatStatus)
+                        ? "Çok sayıda alakasız mesaj gönderdiğiniz için bu sohbet sonlandırılmıştır."
+                        : "Sadece otel arama, uçak bileti arama ve rezervasyon konularında yardımcı olabilirim.";
+                return ChatResponse.builder()
+                        .reply(reply)
+                        .sessionId(sessionId)
+                        .searchType("OUT_OF_SCOPE")
+                        .missingFields(List.of())
+                        .chatStatus(chatStatus)
+                        .build();
+            }
+
+            // UNKNOWN: ne aradığını sor
+            if ("UNKNOWN".equals(intent)) {
+                return ChatResponse.builder()
+                        .reply("Otel mi aramak istiyorsunuz, yoksa uçak bileti mi?")
+                        .sessionId(sessionId)
+                        .searchType("UNKNOWN")
+                        .missingFields(List.of())
+                        .chatStatus("ACTIVE")
+                        .build();
+            }
         }
 
-        // 5. UNKNOWN: ne aradığını sor
-        if ("UNKNOWN".equals(intent)) {
-            return ChatResponse.builder()
-                    .reply("Otel mi aramak istiyorsunuz, yoksa uçak bileti mi?")
-                    .sessionId(sessionId)
-                    .searchType("UNKNOWN")
-                    .missingFields(List.of())
-                    .chatStatus("ACTIVE")
-                    .build();
-        }
+        // 5. Mesajdan arama kriterlerini çıkar
+        SearchCriteria incoming = extractor.extract(userMessage, intent);
 
-        // 6. Eksik parametre tespiti (HOTEL_SEARCH veya FLIGHT_SEARCH)
-        List<String> missingFields = missingParameterService.getMissingParameters(intent, userMessage);
+        // 6. Yeni kriterler önceki session kriterleri üzerine birleştir
+        existingCriteria.mergeWith(incoming);
+        sessionStore.save(sessionId, existingCriteria);
+
+        log.debug("[Orchestration] Birleştirilmiş kriterler: {}", existingCriteria);
+
+        // 7. Eksik alan kontrolü
+        List<String> missingFields = missingFieldsService.getMissingFields(existingCriteria);
 
         if (!missingFields.isEmpty()) {
-            // Çocuk yaşı özel mesajı
-            String replyText = missingFields.contains("childAges")
-                    ? "Çocukların yaşlarını belirtir misiniz?"
-                    : missingParameterService.generateMissingFieldsPrompt(missingFields);
-
+            String replyText = missingFieldsService.buildPrompt(missingFields);
             return ChatResponse.builder()
                     .reply(replyText)
                     .sessionId(sessionId)
@@ -124,12 +148,35 @@ public class ChatOrchestrationService {
                     .build();
         }
 
-        // 7. Tüm bilgiler tamam → AI ile yanıt üret
-        //    (İleride bu noktada hotel/flight search servisine yönlendirme yapılacak)
-        String aiReply = generateAIReply(intent, userMessage);
+        // 8. Tüm bilgiler tamam → arama servisine yönlendir
+        return readyToSearchResponse(sessionId, intent, existingCriteria);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Private helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Tüm kriterler tamamlandığında döner.
+     * TODO: Buraya HotelSearchService veya FlightSearchService çağrısı eklenecek.
+     */
+    private ChatResponse readyToSearchResponse(String sessionId,
+                                               String intent,
+                                               SearchCriteria criteria) {
+
+        String label = "HOTEL_SEARCH".equals(intent) ? "Otel" : "Uçak";
+
+        // TODO (Hotel): hotelSearchService.search(criteria.toHotelSearchRequest())
+        // TODO (Uçak) : flightSearchService.search(criteria.toFlightSearchRequest())
+
+        // Şimdilik session'ı temizleyebiliriz (aramanın gerçekten başladığı anlama gelir)
+        // sessionStore.remove(sessionId); // Arama servisi entegre edilince açılacak
+
+        String reply = label + " araması için gerekli tüm bilgiler tamamlandı. "
+                + "Arama servisine yönlendiriliyor.";
 
         return ChatResponse.builder()
-                .reply(aiReply)
+                .reply(reply)
                 .sessionId(sessionId)
                 .searchType(intent)
                 .missingFields(List.of())
@@ -137,14 +184,7 @@ public class ChatOrchestrationService {
                 .build();
     }
 
-    // -------------------------------------------------------------------------
-    // Private helpers
-    // -------------------------------------------------------------------------
-
-    /**
-     * SessionId gelmemişse UUID ile yeni bir tane üretir.
-     * Bu ID response içinde frontend'e dönülür; sonraki isteklerde kullanılır.
-     */
+    /** SessionId gelmemişse UUID üretir. */
     private String resolveSessionId(String sessionId) {
         if (sessionId == null || sessionId.isBlank()) {
             return UUID.randomUUID().toString();
@@ -161,19 +201,5 @@ public class ChatOrchestrationService {
                 .missingFields(List.of())
                 .chatStatus("TERMINATED")
                 .build();
-    }
-
-    /**
-     * Tüm arama parametreleri tamamlandığında AI'dan yardımcı bir yanıt üretir.
-     * Hotel veya Flight search servisine yönlendirme bu metodun hemen altına eklenecek.
-     */
-    private String generateAIReply(String intent, String userMessage) {
-        String searchLabel = "HOTEL_SEARCH".equals(intent) ? "otel" : "uçak";
-        String prompt = String.format(
-            "Kullanıcı %s araması yapmak istiyor. Mesaj: '%s'. "
-            + "Aramanın başlatıldığını belirten kısa ve samimi bir Türkçe cevap yaz.",
-            searchLabel, userMessage
-        );
-        return aiProviderClient.complete(prompt);
     }
 }
