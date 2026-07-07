@@ -3,29 +3,47 @@ package com.santsg.tourvisio.dto;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import java.time.LocalDate;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.time.LocalDate;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class HotelSearchRequest {
 
-    @NotBlank(message = "Location cannot be empty")
-    private String location;
+    @NotBlank(message = "locationOrHotelName is required")
+    private String locationOrHotelName;
 
-    @NotNull(message = "Check-in date cannot be null")
+    @NotNull(message = "checkInDate is required")
     private LocalDate checkInDate;
 
-    @NotNull(message = "Check-out date cannot be null")
+    @NotNull(message = "checkOutDate is required")
     private LocalDate checkOutDate;
 
-    @NotNull(message = "Adults count cannot be null")
-    @Min(value = 1, message = "Adults count must be at least 1")
-    private Integer adultsCount;
+    @NotNull(message = "adultCount is required")
+    @Min(value = 1, message = "adultCount must be at least 1")
+    private Integer adultCount;
 
-    @NotBlank(message = "Currency cannot be empty")
+    @NotBlank(message = "currency is required")
     private String currency;
+
+    // Additional optional filters
+    private String region;
+    private Double minPrice;
+    private Double maxPrice;
+    private Integer starCount;
+    private String pensionType; // e.g., "FULL", "HALF"
+    private Boolean sortByCheapest; // true to sort ascending by price
+
+    // Custom validation to ensure checkOutDate after checkInDate
+    @jakarta.validation.constraints.AssertTrue(message = "checkOutDate must be after checkInDate")
+    public boolean isCheckOutAfterCheckIn() {
+        if (checkInDate == null || checkOutDate == null) {
+            return true; // other @NotNull will handle null cases
+        }
+        return checkOutDate.isAfter(checkInDate);
+    }
 }

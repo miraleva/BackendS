@@ -43,9 +43,9 @@ public class TourVisioHotelApiClient {
             TourVisioHotelSearchRequest tvRequest = TourVisioHotelSearchRequest.builder()
                     .checkInDate(request.getCheckInDate().toString())
                     .checkOutDate(request.getCheckOutDate().toString())
-                    .destination(request.getLocation())
+                    .destination(request.getLocationOrHotelName())
                     .nationality("TR")
-                    .adultCount(request.getAdultsCount())
+                    .adultCount(request.getAdultCount())
                     .currency(request.getCurrency())
                     .build();
 
@@ -56,10 +56,10 @@ public class TourVisioHotelApiClient {
                     url,
                     HttpMethod.POST,
                     entity,
-                    TourVisioHotelSearchResponse.class
-            );
+                    TourVisioHotelSearchResponse.class);
 
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null && response.getBody().getHotels() != null) {
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null
+                    && response.getBody().getHotels() != null) {
                 return response.getBody().getHotels().stream()
                         .map(tvItem -> HotelSearchResponseItem.builder()
                                 .name(tvItem.getName())
@@ -83,16 +83,16 @@ public class TourVisioHotelApiClient {
 
     private List<HotelSearchResponseItem> generateMockHotels(HotelSearchRequest request) {
         List<HotelSearchResponseItem> hotels = new ArrayList<>();
-        String location = request.getLocation();
+        String location = request.getLocationOrHotelName();
         String currency = request.getCurrency();
-        int adults = request.getAdultsCount();
+        int adults = request.getAdultCount();
 
         String locationLower = location != null ? location.toLowerCase() : "";
 
-        if (locationLower.contains("antalya") || locationLower.contains("alanya") || 
-            locationLower.contains("bodrum") || locationLower.contains("marmaris") || 
-            locationLower.contains("fethiye") || locationLower.contains("izmir")) {
-            
+        if (locationLower.contains("antalya") || locationLower.contains("alanya") ||
+                locationLower.contains("bodrum") || locationLower.contains("marmaris") ||
+                locationLower.contains("fethiye") || locationLower.contains("izmir")) {
+
             hotels.add(HotelSearchResponseItem.builder()
                     .name("Rixos Premium Belek")
                     .region(location)
@@ -102,7 +102,7 @@ public class TourVisioHotelApiClient {
                     .pensionType("Ultra All Inclusive")
                     .available(true)
                     .build());
-            
+
             hotels.add(HotelSearchResponseItem.builder()
                     .name("Sheraton Grand Hotel")
                     .region(location)
@@ -112,7 +112,7 @@ public class TourVisioHotelApiClient {
                     .pensionType("All Inclusive")
                     .available(true)
                     .build());
-            
+
             hotels.add(HotelSearchResponseItem.builder()
                     .name("Sunpark Beach Resort")
                     .region(location)
@@ -132,7 +132,7 @@ public class TourVisioHotelApiClient {
                     .pensionType("Bed & Breakfast")
                     .available(true)
                     .build());
-            
+
             hotels.add(HotelSearchResponseItem.builder()
                     .name("Plaza Boutique Hotel")
                     .region(location)
@@ -142,7 +142,7 @@ public class TourVisioHotelApiClient {
                     .pensionType("Bed & Breakfast")
                     .available(true)
                     .build());
-            
+
             hotels.add(HotelSearchResponseItem.builder()
                     .name("Cozy Star Pension")
                     .region(location)

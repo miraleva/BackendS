@@ -31,14 +31,12 @@ class TourvisioBackendApplicationTests {
 
 	@Test
 	void testHotelSearchSuccess() throws Exception {
-		HotelSearchRequest request = new HotelSearchRequest(
-				"Antalya",
-				LocalDate.now().plusDays(5),
-				LocalDate.now().plusDays(12),
-				2,
-				"TRY"
-		);
-
+		HotelSearchRequest request = new HotelSearchRequest();
+		request.setLocationOrHotelName("Antalya");
+		request.setCheckInDate(LocalDate.now().plusDays(5));
+		request.setCheckOutDate(LocalDate.now().plusDays(12));
+		request.setAdultCount(2);
+		request.setCurrency("TRY");
 		mockMvc.perform(post("/api/hotels/search")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(request)))
@@ -51,13 +49,12 @@ class TourvisioBackendApplicationTests {
 
 	@Test
 	void testHotelSearchValidationError() throws Exception {
-		HotelSearchRequest request = new HotelSearchRequest(
-				"", // empty location
-				null, // check-in date null
-				LocalDate.now().plusDays(12),
-				0, // invalid adult count
-				"TRY"
-		);
+		HotelSearchRequest request = new HotelSearchRequest();
+		request.setLocationOrHotelName("");
+		request.setCheckInDate(null);
+		request.setCheckOutDate(LocalDate.now().plusDays(12));
+		request.setAdultCount(0);
+		request.setCurrency("TRY");
 
 		mockMvc.perform(post("/api/hotels/search")
 				.contentType(MediaType.APPLICATION_JSON)
@@ -76,8 +73,7 @@ class TourvisioBackendApplicationTests {
 				LocalDate.now().plusDays(5),
 				2,
 				"ONE_WAY",
-				"TRY"
-		);
+				"TRY");
 
 		mockMvc.perform(post("/api/flights/search")
 				.contentType(MediaType.APPLICATION_JSON)
@@ -95,8 +91,7 @@ class TourvisioBackendApplicationTests {
 				"Yilmaz",
 				"ahmet@gmail.com",
 				"+905555555555",
-				"12345678901"
-		);
+				"12345678901");
 
 		ReservationRequest request = new ReservationRequest(
 				"HOTEL",
@@ -106,8 +101,7 @@ class TourvisioBackendApplicationTests {
 				LocalDate.now().plusDays(12),
 				9000.0,
 				"TRY",
-				List.of(passenger)
-		);
+				List.of(passenger));
 
 		// 1. Create Reservation
 		String responseJson = mockMvc.perform(post("/api/reservations")
