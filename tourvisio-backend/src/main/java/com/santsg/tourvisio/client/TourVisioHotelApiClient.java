@@ -1,57 +1,93 @@
 package com.santsg.tourvisio.client;
 
+import com.santsg.tourvisio.config.TourVisioConfig;
 import com.santsg.tourvisio.dto.HotelSearchRequest;
 import com.santsg.tourvisio.dto.HotelSearchResponseItem;
 import com.santsg.tourvisio.dto.tourvisio.TourVisioHotelSearchRequest;
 import com.santsg.tourvisio.dto.tourvisio.TourVisioHotelSearchResponse;
-import org.springframework.beans.factory.annotation.Value;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
-import lombok.extern.slf4j.Slf4j;
 
+/**
+ * TourVisio otel arama API istemcisi.
+ *
+ * <p>Gerçek mod ({@code mockMode=false}) aktifken {@link TourVisioAuthService}
+ * üzerinden token alır ve TourVisio endpointine istek atar.
+ * Credential'lar eksikse veya mock mod açıksa sahte veri döner.</p>
+ *
+ * <p><strong>TODO:</strong> Gerçek otel arama endpoint path'i doküman gelince
+ * {@code HOTEL_SEARCH_PATH} sabitinde güncellenmelidir.</p>
+ */
 @Component
 @Slf4j
 public class TourVisioHotelApiClient {
 
-    @Value("${tourvisio.api.base-url}")
-    private String baseUrl;
+    /**
+     * TourVisio otel arama endpoint path'i.
+     * TODO: Doküman gelince doğru path buraya yazılacak.
+     *       Örnek: "/api/productservice/pricesearch"
+     */
+    private static final String HOTEL_SEARCH_PATH = "/api/productservice/pricesearch";
 
-    @Value("${tourvisio.api.token}")
-    private String token;
+    private final TourVisioConfig config;
+    private final TourVisioAuthService authService;
+    private final RestTemplate restTemplate;
 
-    @Value("${tourvisio.api.mock-mode:true}")
-    private boolean mockMode;
-
-    private final RestTemplate restTemplate = new RestTemplate();
+    public TourVisioHotelApiClient(TourVisioConfig config,
+                                   TourVisioAuthService authService) {
+        this.config = config;
+        this.authService = authService;
+        this.restTemplate = new RestTemplate();
+    }
 
     public List<HotelSearchResponseItem> searchHotels(HotelSearchRequest request) {
-        if (mockMode || baseUrl == null || baseUrl.trim().isEmpty() || token == null || token.trim().isEmpty()) {
-            log.info("TourVisio Hotel search API running in MOCK mode (or missing connection credentials).");
+        if (config.isMockMode() || !config.isConfigured()) {
+            log.info("[HotelApiClient] Mock mod aktif veya credential eksik — mock data dönülüyor.");
             return generateMockHotels(request);
         }
 
         try {
-            String url = baseUrl + "/api/v2/hotel/pricesearch";
+            String url = config.getBaseUrl() + HOTEL_SEARCH_PATH;
+            String token = authService.getToken();
+
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("Authorization", "Bearer " + token);
 
+            TourVisioHotelSearchRequest.LocationCriteria loc = TourVisioHotelSearchRequest.LocationCriteria.builder()
+                    .id("23494") // standard ID or dynamically resolved if mapping existed
+                    .type(2)
+                    .build();
+
+            TourVisioHotelSearchRequest.RoomCriteria room = TourVisioHotelSearchRequest.RoomCriteria.builder()
+                    .adult(request.getAdultCount())
+                    .childAges(new ArrayList<>())
+                    .build();
+
             TourVisioHotelSearchRequest tvRequest = TourVisioHotelSearchRequest.builder()
-                    .checkInDate(request.getCheckInDate().toString())
-                    .checkOutDate(request.getCheckOutDate().toString())
-                    .destination(request.getLocationOrHotelName())
-                    .nationality("TR")
-                    .adultCount(request.getAdultCount())
+                    .productType(2)
+                    .checkAllotment(true)
+                    .checkStopSale(true)
+                    .getOnlyDiscountedPrice(false)
+                    .getOnlyBestOffers(true)
+                    .arrivalLocations(List.of(loc))
+                    .roomCriteria(List.of(room))
+                    .checkIn(request.getCheckInDate().toString() + "T00:00:00")
+                    .checkOut(request.getCheckOutDate().toString() + "T00:00:00")
                     .currency(request.getCurrency())
+                    .culture("tr-TR")
+                    .nationality("TR")
                     .build();
 
             HttpEntity<TourVisioHotelSearchRequest> entity = new HttpEntity<>(tvRequest, headers);
 
-            log.info("Making TourVisio Hotel Search request to: {}", url);
+            log.info("[HotelApiClient] TourVisio otel arama isteği: {}", url);
             ResponseEntity<TourVisioHotelSearchResponse> response = restTemplate.exchange(
                     url,
                     HttpMethod.POST,
@@ -72,14 +108,22 @@ public class TourVisioHotelApiClient {
                                 .build())
                         .collect(Collectors.toList());
             } else {
-                log.warn("TourVisio Hotel API returned status code: {}", response.getStatusCode());
+                log.warn("[HotelApiClient] TourVisio API status: {} — mock'a düşülüyor.",
+                        response.getStatusCode());
                 return generateMockHotels(request);
             }
+        } catch (TourVisioAuthService.TourVisioAuthException e) {
+            log.error("[HotelApiClient] TourVisio auth hatası: {} — mock'a düşülüyor.", e.getMessage());
+            return generateMockHotels(request);
         } catch (Exception e) {
-            log.error("Error connecting to TourVisio Hotel API (falling back to mock data): {}", e.getMessage());
+            log.error("[HotelApiClient] TourVisio API hatası: {} — mock'a düşülüyor.", e.getMessage());
             return generateMockHotels(request);
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Mock data
+    // ─────────────────────────────────────────────────────────────────────────
 
     private List<HotelSearchResponseItem> generateMockHotels(HotelSearchRequest request) {
         List<HotelSearchResponseItem> hotels = new ArrayList<>();

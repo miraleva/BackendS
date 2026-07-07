@@ -1,57 +1,95 @@
 package com.santsg.tourvisio.client;
 
+import com.santsg.tourvisio.config.TourVisioConfig;
 import com.santsg.tourvisio.dto.FlightSearchRequest;
 import com.santsg.tourvisio.dto.FlightSearchResponseItem;
 import com.santsg.tourvisio.dto.tourvisio.TourVisioFlightSearchRequest;
 import com.santsg.tourvisio.dto.tourvisio.TourVisioFlightSearchResponse;
-import org.springframework.beans.factory.annotation.Value;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
-import lombok.extern.slf4j.Slf4j;
 
+/**
+ * TourVisio uçuş arama API istemcisi.
+ *
+ * <p>Gerçek mod ({@code mockMode=false}) aktifken {@link TourVisioAuthService}
+ * üzerinden token alır ve TourVisio endpointine istek atar.
+ * Credential'lar eksikse veya mock mod açıksa sahte veri döner.</p>
+ *
+ * <p><strong>TODO:</strong> Gerçek uçuş arama endpoint path'i doküman gelince
+ * {@code FLIGHT_SEARCH_PATH} sabitinde güncellenmelidir.</p>
+ */
 @Component
 @Slf4j
 public class TourVisioFlightApiClient {
 
-    @Value("${tourvisio.api.base-url}")
-    private String baseUrl;
+    /**
+     * TourVisio uçuş arama endpoint path'i.
+     * TODO: Doküman gelince doğru path buraya yazılacak.
+     *       Örnek: "/api/flightservice/search"
+     */
+    private static final String FLIGHT_SEARCH_PATH = "/api/flightservice/search";
 
-    @Value("${tourvisio.api.token}")
-    private String token;
+    private final TourVisioConfig config;
+    private final TourVisioAuthService authService;
+    private final RestTemplate restTemplate;
 
-    @Value("${tourvisio.api.mock-mode:true}")
-    private boolean mockMode;
-
-    private final RestTemplate restTemplate = new RestTemplate();
+    public TourVisioFlightApiClient(TourVisioConfig config,
+                                    TourVisioAuthService authService) {
+        this.config = config;
+        this.authService = authService;
+        this.restTemplate = new RestTemplate();
+    }
 
     public List<FlightSearchResponseItem> searchFlights(FlightSearchRequest request) {
-        if (mockMode || baseUrl == null || baseUrl.trim().isEmpty() || token == null || token.trim().isEmpty()) {
-            log.info("TourVisio Flight search API running in MOCK mode (or missing connection credentials).");
+        if (config.isMockMode() || !config.isConfigured()) {
+            log.info("[FlightApiClient] Mock mod aktif veya credential eksik — mock data dönülüyor.");
             return generateMockFlights(request);
         }
 
         try {
-            String url = baseUrl + "/api/v2/flight/pricesearch";
+            String url = config.getBaseUrl() + FLIGHT_SEARCH_PATH;
+            String token = authService.getToken();
+
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("Authorization", "Bearer " + token);
 
+            TourVisioFlightSearchRequest.LocationCriteria dep = TourVisioFlightSearchRequest.LocationCriteria.builder()
+                    .id("15184") // sample ESB/IST ID
+                    .type(2)
+                    .build();
+
+            TourVisioFlightSearchRequest.LocationCriteria arr = TourVisioFlightSearchRequest.LocationCriteria.builder()
+                    .id("22177") // sample AYT ID
+                    .type(2)
+                    .build();
+
+            TourVisioFlightSearchRequest.RoomCriteria room = TourVisioFlightSearchRequest.RoomCriteria.builder()
+                    .adult(request.getPassengerCount())
+                    .childAges(new ArrayList<>())
+                    .build();
+
             TourVisioFlightSearchRequest tvRequest = TourVisioFlightSearchRequest.builder()
-                    .departureLocation(request.getDepartureLocation())
-                    .arrivalLocation(request.getArrivalLocation())
-                    .departureDate(request.getDepartureDate().toString())
-                    .passengerCount(request.getPassengerCount())
-                    .tripType(request.getTripType())
+                    .productType(13)
+                    .departureLocations(List.of(dep))
+                    .arrivalLocations(List.of(arr))
+                    .checkIn(request.getDepartureDate().toString())
+                    .night(7)
                     .currency(request.getCurrency())
+                    .culture("tr-TR")
+                    .nationality("TR")
+                    .roomCriteria(List.of(room))
                     .build();
 
             HttpEntity<TourVisioFlightSearchRequest> entity = new HttpEntity<>(tvRequest, headers);
 
-            log.info("Making TourVisio Flight Search request to: {}", url);
+            log.info("[FlightApiClient] TourVisio uçuş arama isteği: {}", url);
             ResponseEntity<TourVisioFlightSearchResponse> response = restTemplate.exchange(
                     url,
                     HttpMethod.POST,
@@ -59,7 +97,8 @@ public class TourVisioFlightApiClient {
                     TourVisioFlightSearchResponse.class
             );
 
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null && response.getBody().getFlights() != null) {
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null
+                    && response.getBody().getFlights() != null) {
                 return response.getBody().getFlights().stream()
                         .map(tvItem -> FlightSearchResponseItem.builder()
                                 .airline(tvItem.getAirline())
@@ -72,14 +111,22 @@ public class TourVisioFlightApiClient {
                                 .build())
                         .collect(Collectors.toList());
             } else {
-                log.warn("TourVisio Flight API returned status code: {}", response.getStatusCode());
+                log.warn("[FlightApiClient] TourVisio API status: {} — mock'a düşülüyor.",
+                        response.getStatusCode());
                 return generateMockFlights(request);
             }
+        } catch (TourVisioAuthService.TourVisioAuthException e) {
+            log.error("[FlightApiClient] TourVisio auth hatası: {} — mock'a düşülüyor.", e.getMessage());
+            return generateMockFlights(request);
         } catch (Exception e) {
-            log.error("Error connecting to TourVisio Flight API (falling back to mock data): {}", e.getMessage());
+            log.error("[FlightApiClient] TourVisio API hatası: {} — mock'a düşülüyor.", e.getMessage());
             return generateMockFlights(request);
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Mock data
+    // ─────────────────────────────────────────────────────────────────────────
 
     private List<FlightSearchResponseItem> generateMockFlights(FlightSearchRequest request) {
         List<FlightSearchResponseItem> flights = new ArrayList<>();

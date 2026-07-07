@@ -1,50 +1,73 @@
 package com.santsg.tourvisio.config;
 
-import org.springframework.beans.factory.annotation.Value;
+import lombok.Getter;
+import lombok.Setter;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
- * Configuration for TourVisio integration.
- * Reads base URL and token from environment variables via application.properties.
- * Provides a RestTemplate bean that automatically adds the Authorization header.
- * The interceptor is a guard‑rail ensuring the token is never exposed in responses.
+ * TourVisio API yapılandırması.
+ *
+ * <p>Tüm değerler environment variable'lardan okunur
+ * ({@code application.properties}'te {@code ${TOURVISIO_*}} placeholder'ları ile).
+ * Hiçbir credential düz metin olarak properties dosyasına yazılmaz.</p>
+ *
+ * <h3>Gerekli env var'lar</h3>
+ * <ul>
+ *   <li>{@code TOURVISIO_BASE_URL} — ör. {@code https://test-service.tourvisio.com/v2}</li>
+ *   <li>{@code TOURVISIO_AGENCY}   — TourVisio agency kodu</li>
+ *   <li>{@code TOURVISIO_USER}     — Login kullanıcı adı</li>
+ *   <li>{@code TOURVISIO_PASSWORD} — Login şifresi</li>
+ *   <li>{@code TOURVISIO_MOCK_MODE} — {@code true} ise mock data kullanılır (varsayılan: true)</li>
+ * </ul>
  */
 @Configuration
+@ConfigurationProperties(prefix = "tourvisio.api")
+@Getter
+@Setter
 public class TourVisioConfig {
 
-    @Value("${tourvisio.api.base-url}")
+    /** TourVisio servis base URL'i (ör. https://test-service.tourvisio.com/v2) */
     private String baseUrl;
 
-    @Value("${tourvisio.api.token}")
-    private String apiToken;
+    /** TourVisio agency kodu */
+    private String agency;
 
-    public String getBaseUrl() {
-        return baseUrl;
-    }
+    /** Login kullanıcı adı */
+    private String username;
 
-    public String getApiToken() {
-        return apiToken;
+    /** Login şifresi */
+    private String password;
+
+    /** true ise gerçek API'ye bağlanmaz, mock data döner */
+    private boolean mockMode = true;
+
+    /**
+     * Gerçek TourVisio API'ye bağlanmak için gerekli bilgilerin
+     * tamamının mevcut olup olmadığını kontrol eder.
+     */
+    public boolean isConfigured() {
+        return !isBlank(baseUrl)
+                && !isBlank(agency)
+                && !isBlank(username)
+                && !isBlank(password);
     }
 
     /**
-     * RestTemplate configured with an interceptor that adds the Authorization header.
+     * TourVisio API çağrıları için kullanılacak RestTemplate.
+     * Authorization header'ı dinamik olarak {@link TourVisioAuthService}
+     * tarafından eklenir; burada sabit header konmaz.
      */
-    @Bean
+    @Bean("tourVisioRestTemplate")
     public RestTemplate tourVisioRestTemplate() {
-        RestTemplate restTemplate = new RestTemplate();
-        List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
-        interceptors.add((request, body, execution) -> {
-            request.getHeaders().add("Authorization", "Bearer " + apiToken);
-            request.getHeaders().add("Accept", "application/json");
-            return execution.execute(request, body);
-        });
-        restTemplate.setInterceptors(interceptors);
-        return restTemplate;
+        return new RestTemplate();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private boolean isBlank(String s) {
+        return s == null || s.isBlank();
     }
 }
