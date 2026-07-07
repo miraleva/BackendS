@@ -45,6 +45,9 @@ public class CriteriaMissingFieldsService {
             if (criteria.getDepartureDate()  == null)     missing.add("gidiş tarihi");
             if (criteria.getPassengerCount() == null)     missing.add("yolcu sayısı");
             if (isBlank(criteria.getTripType()))          missing.add("tek yön / gidiş-dönüş");
+            if ("ROUND_TRIP".equalsIgnoreCase(criteria.getTripType()) && criteria.getReturnDate() == null) {
+                missing.add("dönüş tarihi");
+            }
             if (isBlank(criteria.getCurrency()))          missing.add("para birimi");
         }
 

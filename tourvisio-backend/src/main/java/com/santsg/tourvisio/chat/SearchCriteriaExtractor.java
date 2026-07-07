@@ -157,10 +157,74 @@ public class SearchCriteriaExtractor {
 
         // Çocuk
         Matcher cm = CHILD_PATTERN.matcher(lower);
-        if (cm.find()) c.setChildCount(Integer.parseInt(cm.group(1)));
+        if (cm.find()) {
+            c.setChildCount(Integer.parseInt(cm.group(1)));
+        }
+
+        // Çocuk Yaşları
+        List<Integer> ages = extractChildAges(lower);
+        if (!ages.isEmpty()) {
+            c.setChildAges(ages);
+        }
+
+        // Uyruk (Nationality)
+        String nationality = extractNationality(lower);
+        if (nationality != null) {
+            c.setNationality(nationality);
+        }
+
+        // Oda Sayısı (Room Count)
+        Pattern roomPattern = Pattern.compile("(\\d+)\\s*(?:oda|room)");
+        Matcher rm = roomPattern.matcher(lower);
+        if (rm.find()) {
+            c.setRoomCount(Integer.parseInt(rm.group(1)));
+        }
 
         // Tarihler (giriş & çıkış)
         extractHotelDates(lower, c);
+    }
+
+    private List<Integer> extractChildAges(String lower) {
+        List<Integer> ages = new java.util.ArrayList<>();
+        Pattern agePattern = Pattern.compile("(?:yaş|yas|yaşlarında|yaslar|yaşında|yasinda|yaşlar)\\s*(?::)?\\s*(\\d+(?:\\s*[,\\s+ve\\s+&]\\s*\\d+)*)");
+        Matcher m = agePattern.matcher(lower);
+        if (m.find()) {
+            String numbersGroup = m.group(1);
+            Pattern numPat = Pattern.compile("\\d+");
+            Matcher numMat = numPat.matcher(numbersGroup);
+            while (numMat.find()) {
+                ages.add(Integer.parseInt(numMat.group()));
+            }
+        }
+        if (ages.isEmpty()) {
+            Pattern ageSuffixPattern = Pattern.compile("(\\d+(?:\\s*[,\\s+ve\\s+&]\\s*\\d+)*)\\s*(?:yaş|yas)");
+            Matcher m2 = ageSuffixPattern.matcher(lower);
+            if (m2.find()) {
+                String numbersGroup = m2.group(1);
+                Pattern numPat = Pattern.compile("\\d+");
+                Matcher numMat = numPat.matcher(numbersGroup);
+                while (numMat.find()) {
+                    ages.add(Integer.parseInt(numMat.group()));
+                }
+            }
+        }
+        return ages;
+    }
+
+    private String extractNationality(String lower) {
+        if (lower.contains("türk") || lower.contains("turk") || lower.contains("tc") || lower.contains("tr uyruklu") || lower.contains("türk uyruklu")) {
+            return "TR";
+        }
+        if (lower.contains("alman") || lower.contains("german") || lower.contains("de uyruklu")) {
+            return "DE";
+        }
+        if (lower.contains("ingiliz") || lower.contains("english") || lower.contains("gb uyruklu")) {
+            return "GB";
+        }
+        if (lower.contains("yabancı") || lower.contains("yabanci") || lower.contains("foreign")) {
+            return "FOREIGN";
+        }
+        return null;
     }
 
     /**

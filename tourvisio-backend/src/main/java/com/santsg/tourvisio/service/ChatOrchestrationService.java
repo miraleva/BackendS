@@ -7,6 +7,7 @@ import com.santsg.tourvisio.chat.SearchCriteriaExtractor;
 import com.santsg.tourvisio.client.AIProviderClient;
 import com.santsg.tourvisio.dto.ChatRequest;
 import com.santsg.tourvisio.dto.ChatResponse;
+import com.santsg.tourvisio.dto.FlightSearchRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -42,6 +43,8 @@ public class ChatOrchestrationService {
     private final SearchCriteriaExtractor extractor;
     private final CriteriaMissingFieldsService missingFieldsService;
     private final AIProviderClient aiProviderClient;
+    private final HotelSearchService hotelSearchService;
+    private final FlightSearchService flightSearchService;
 
     public ChatOrchestrationService(
             IntentDetectionService intentDetectionService,
@@ -49,7 +52,9 @@ public class ChatOrchestrationService {
             ChatSessionStore sessionStore,
             SearchCriteriaExtractor extractor,
             CriteriaMissingFieldsService missingFieldsService,
-            AIProviderClient aiProviderClient) {
+            AIProviderClient aiProviderClient,
+            HotelSearchService hotelSearchService,
+            FlightSearchService flightSearchService) {
 
         this.intentDetectionService = intentDetectionService;
         this.chatSessionManager     = chatSessionManager;
@@ -57,6 +62,8 @@ public class ChatOrchestrationService {
         this.extractor              = extractor;
         this.missingFieldsService   = missingFieldsService;
         this.aiProviderClient       = aiProviderClient;
+        this.hotelSearchService     = hotelSearchService;
+        this.flightSearchService    = flightSearchService;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -158,22 +165,26 @@ public class ChatOrchestrationService {
 
     /**
      * Tüm kriterler tamamlandığında döner.
-     * TODO: Buraya HotelSearchService veya FlightSearchService çağrısı eklenecek.
      */
     private ChatResponse readyToSearchResponse(String sessionId,
                                                String intent,
                                                SearchCriteria criteria) {
 
         String label = "HOTEL_SEARCH".equals(intent) ? "Otel" : "Uçak";
+        String reply;
 
-        // TODO (Hotel): hotelSearchService.search(criteria.toHotelSearchRequest())
-        // TODO (Uçak) : flightSearchService.search(criteria.toFlightSearchRequest())
+        if ("HOTEL_SEARCH".equals(intent)) {
+            com.santsg.tourvisio.dto.hotel.HotelSearchRequest hotelRequest = criteria.toHotelSearchRequestDto();
+            log.info("[Orchestration] HotelSearchRequest oluşturuldu ve hazırlandı: {}", hotelRequest);
+            reply = "Otel araması için gerekli bilgiler tamamlandı. Arama servisine yönlendiriliyor. HotelSearchRequest hazırlandı.";
+        } else {
+            FlightSearchRequest flightRequest = criteria.toFlightSearchRequest();
+            log.info("[Orchestration] FlightSearchRequest oluşturuldu ve hazırlandı: {}", flightRequest);
+            reply = "Uçak araması için gerekli bilgiler tamamlandı. Arama servisine yönlendiriliyor. FlightSearchRequest hazırlandı.";
+        }
 
-        // Şimdilik session'ı temizleyebiliriz (aramanın gerçekten başladığı anlama gelir)
-        // sessionStore.remove(sessionId); // Arama servisi entegre edilince açılacak
-
-        String reply = label + " araması için gerekli tüm bilgiler tamamlandı. "
-                + "Arama servisine yönlendiriliyor.";
+        // Aramanın gerçekten başladığı anlama gelir
+        sessionStore.remove(sessionId);
 
         return ChatResponse.builder()
                 .reply(reply)

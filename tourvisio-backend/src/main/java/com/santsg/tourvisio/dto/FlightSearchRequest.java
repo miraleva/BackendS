@@ -13,10 +13,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class FlightSearchRequest {
 
-    @NotBlank(message = "Departure location cannot be empty")
     private String departureLocation;
 
-    @NotBlank(message = "Arrival location cannot be empty")
     private String arrivalLocation;
 
     @NotNull(message = "Departure date cannot be null")
@@ -31,4 +29,23 @@ public class FlightSearchRequest {
 
     @NotBlank(message = "Currency cannot be empty")
     private String currency;
+
+    // New fields requested by user
+    private String departureAirport;
+    private String arrivalAirport;
+    private LocalDate returnDate;
+
+    // Custom constructor for backward compatibility with 6-arg usage in tests/controllers
+    public FlightSearchRequest(String departureLocation, String arrivalLocation, LocalDate departureDate,
+                               Integer passengerCount, String tripType, String currency) {
+        this.departureLocation = departureLocation;
+        this.arrivalLocation = arrivalLocation;
+        this.departureDate = departureDate;
+        this.passengerCount = passengerCount;
+        this.tripType = tripType;
+        this.currency = currency;
+        // Map departureLocation to departureAirport and vice versa as a fallback
+        this.departureAirport = departureLocation;
+        this.arrivalAirport = arrivalLocation;
+    }
 }

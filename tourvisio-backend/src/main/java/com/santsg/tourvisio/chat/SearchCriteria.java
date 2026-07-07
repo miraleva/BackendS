@@ -19,7 +19,7 @@ import java.util.List;
  *
  * <p>
  * Şimdilik bellek içinde tutulur ({@link ChatSessionStore}).
- * İlerde {@code ChatSession} JPA entity'siyle database'e taşınabilir.
+ * İleride {@code ChatSession} JPA entity'siyle database'e taşınabilir.
  * </p>
  */
 @Data
@@ -38,10 +38,10 @@ public class SearchCriteria {
     private LocalDate checkInDate;
     private LocalDate checkOutDate;
     private Integer adultCount;
-    private Integer childCount;
+    private Integer childCount = 0;
     private List<Integer> childAges = new ArrayList<>();
-    private String nationality;
-    private Integer roomCount;
+    private String nationality = "TR";
+    private Integer roomCount = 1;
 
     // ── Uçak ─────────────────────────────────────────────────────────────────
     private String departureLocation;
@@ -80,10 +80,12 @@ public class SearchCriteria {
             this.checkOutDate = incoming.getCheckOutDate();
         if (incoming.getAdultCount() != null)
             this.adultCount = incoming.getAdultCount();
-        if (incoming.getChildCount() != null)
+        if (incoming.getChildCount() != null) {
             this.childCount = incoming.getChildCount();
-        if (!incoming.getChildAges().isEmpty())
+        }
+        if (incoming.getChildAges() != null && !incoming.getChildAges().isEmpty()) {
             this.childAges = incoming.getChildAges();
+        }
         if (incoming.getNationality() != null)
             this.nationality = incoming.getNationality();
         if (incoming.getRoomCount() != null)
@@ -111,8 +113,6 @@ public class SearchCriteria {
     /**
      * Tüm otel alanları doluysa {@link HotelSearchRequest} döner; aksi hâlde
      * {@code null}.
-     * TODO: HotelSearchService çağrısına geçildiğinde buradaki null kontrolü
-     * kaldırılabilir.
      */
     public HotelSearchRequest toHotelSearchRequest() {
         if (locationOrHotelName == null || checkInDate == null
@@ -129,10 +129,29 @@ public class SearchCriteria {
     }
 
     /**
+     * Backend 1'in yeni detaylı HotelSearchRequest DTO'sunu oluşturur.
+     */
+    public com.santsg.tourvisio.dto.hotel.HotelSearchRequest toHotelSearchRequestDto() {
+        if (locationOrHotelName == null || checkInDate == null
+                || checkOutDate == null || adultCount == null || currency == null) {
+            return null;
+        }
+        return com.santsg.tourvisio.dto.hotel.HotelSearchRequest.builder()
+                .locationOrHotelName(locationOrHotelName)
+                .checkInDate(checkInDate)
+                .checkOutDate(checkOutDate)
+                .adultCount(adultCount)
+                .childCount(childCount != null ? childCount : 0)
+                .childAges(childAges != null ? childAges : new ArrayList<>())
+                .nationality(nationality != null ? nationality : "TR")
+                .currency(currency)
+                .roomCount(roomCount != null ? roomCount : 1)
+                .build();
+    }
+
+    /**
      * Tüm uçak alanları doluysa {@link FlightSearchRequest} döner; aksi hâlde
      * {@code null}.
-     * TODO: FlightSearchService çağrısına geçildiğinde buradaki null kontrolü
-     * kaldırılabilir.
      */
     public FlightSearchRequest toFlightSearchRequest() {
         if (departureLocation == null || arrivalLocation == null
@@ -147,6 +166,10 @@ public class SearchCriteria {
         req.setPassengerCount(passengerCount);
         req.setTripType(tripType);
         req.setCurrency(currency);
+        // Set new fields
+        req.setDepartureAirport(departureLocation);
+        req.setArrivalAirport(arrivalLocation);
+        req.setReturnDate(returnDate);
         return req;
     }
 }
