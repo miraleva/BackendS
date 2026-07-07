@@ -23,7 +23,7 @@ public class TourVisioFlightApiClient {
     @Value("${tourvisio.api.token}")
     private String token;
 
-    @Value("${tourvisio.api.mock-mode}")
+    @Value("${tourvisio.api.mock-mode:true}")
     private boolean mockMode;
 
     private final RestTemplate restTemplate = new RestTemplate();
