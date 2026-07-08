@@ -17,6 +17,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@org.springframework.test.context.TestPropertySource(properties = {
+		"tourvisio.api.mock-mode=true",
+		"ai.openai.api-key="
+})
 class TourvisioBackendApplicationTests {
 
 	@Autowired
@@ -155,7 +159,7 @@ class TourvisioBackendApplicationTests {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.searchType", equalTo("HOTEL_SEARCH")))
 				.andExpect(jsonPath("$.missingFields", hasSize(0)))
-				.andExpect(jsonPath("$.reply", containsString("HotelSearchRequest hazırlandı")))
+				.andExpect(jsonPath("$.reply", containsString("otel bulundu")))
 				.andExpect(jsonPath("$.chatStatus", equalTo("ACTIVE")));
 	}
 
@@ -180,7 +184,7 @@ class TourvisioBackendApplicationTests {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.searchType", equalTo("FLIGHT_SEARCH")))
 				.andExpect(jsonPath("$.missingFields", hasSize(0)))
-				.andExpect(jsonPath("$.reply", containsString("FlightSearchRequest hazırlandı")))
+				.andExpect(jsonPath("$.reply", containsString("uçuşlar bulundu")))
 				.andExpect(jsonPath("$.chatStatus", equalTo("ACTIVE")));
 	}
 }

@@ -42,8 +42,8 @@ class ChatOrchestrationServiceTest {
         void orchestrate_shouldUseHotelSearchServiceWhenCriteriaAreComplete() {
                 ChatSessionManager chatSessionManager = new ChatSessionManager();
                 ChatSessionStore sessionStore = new ChatSessionStore();
-                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor();
-                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService();
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor(aiProviderClient);
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService(aiProviderClient);
 
                 ChatOrchestrationService service = new ChatOrchestrationService(
                                 intentDetectionService,

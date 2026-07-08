@@ -184,8 +184,38 @@ public class ChatOrchestrationService {
                     .build();
         }
 
+        String finalReply = searchResponse.getReply();
+
+        // AI ile arama sonuçlarını özetleme (API key tanımlıysa ve sonuç bulunduysa)
+        if (searchResponse.isSuccess() && searchResponse.getResults() != null && !searchResponse.getResults().isEmpty()) {
+            try {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                String resultsJson = mapper.writeValueAsString(
+                        searchResponse.getResults().subList(0, Math.min(5, searchResponse.getResults().size()))
+                );
+
+                String prompt = """
+                        Kullanıcının seyahat araması başarıyla tamamlandı ve şu sonuçlar bulundu:
+                        Arama Türü: %s
+                        Bulunan Sonuçlar:
+                        %s
+                        
+                        Kullanıcıya bu sonuçları özetleyen, en uygun/cazip olan seçenekleri kibarca listeleyen ve seyahat detaylarını (fiyat, havayolu, yıldız, pansiyon türü vb.) vurgulayan Türkçe bir asistan cevabı yaz.
+                        Cevabında gerçekçi ve TourVisio API'den dönen gerçek fiyat/bilgileri kullan.
+                        Sadece asistanın söyleyeceği metni dön (başka hiçbir açıklayıcı metin ekleme).
+                        Asistan Yanıtı:""".formatted(intent, resultsJson);
+
+                String aiSummary = aiProviderClient.complete(prompt);
+                if (aiSummary != null && !aiSummary.trim().startsWith("[MOCK]")) {
+                    finalReply = aiSummary.trim();
+                }
+            } catch (Exception e) {
+                log.warn("[Orchestration] Arama sonuçları AI ile özetlenemedi, varsayılan cevaba dönülüyor: {}", e.getMessage());
+            }
+        }
+
         return ChatResponse.builder()
-                .reply(searchResponse.getReply())
+                .reply(finalReply)
                 .sessionId(sessionId)
                 .searchType(intent)
                 .missingFields(List.of())

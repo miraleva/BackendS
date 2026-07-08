@@ -126,6 +126,9 @@ public class SearchCriteria {
         req.setAdultCount(adultCount);
         req.setChildCount(childCount);
         req.setCurrency(currency);
+        req.setChildAges(childAges);
+        req.setRoomCount(roomCount);
+        req.setNationality(nationality);
         return req;
     }
 
