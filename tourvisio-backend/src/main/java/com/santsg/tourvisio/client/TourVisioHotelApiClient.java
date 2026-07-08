@@ -3,8 +3,10 @@ package com.santsg.tourvisio.client;
 import com.santsg.tourvisio.config.TourVisioConfig;
 import com.santsg.tourvisio.dto.HotelSearchRequest;
 import com.santsg.tourvisio.dto.HotelSearchResponseItem;
+import com.santsg.tourvisio.dto.ArrivalAutocompleteResponse;
 import com.santsg.tourvisio.dto.tourvisio.*;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -37,10 +39,11 @@ public class TourVisioHotelApiClient {
     private final RestTemplate restTemplate;
 
     public TourVisioHotelApiClient(TourVisioConfig config,
-                                   TourVisioAuthService authService) {
+                                   TourVisioAuthService authService,
+                                   @Qualifier("tourVisioRestTemplate") RestTemplate restTemplate) {
         this.config = config;
         this.authService = authService;
-        this.restTemplate = new RestTemplate();
+        this.restTemplate = restTemplate;
     }
 
     public List<HotelSearchResponseItem> searchHotels(HotelSearchRequest request) {
@@ -198,5 +201,126 @@ public class TourVisioHotelApiClient {
                     .build());
         }
         return hotels;
+    }
+
+    public List<ArrivalAutocompleteResponse> getArrivalAutocomplete(String query) {
+        if (config.isMockMode() || !config.isConfigured()) {
+            log.info("[HotelApiClient] Mock mod aktif veya credential eksik — mock autocomplete verisi dönülüyor.");
+            return generateMockAutocomplete(query);
+        }
+
+        try {
+            TourVisioAutocompleteRequest autocompleteReq = TourVisioAutocompleteRequest.builder()
+                    .productType(2)
+                    .query(query)
+                    .masterProductTypes(List.of(2))
+                    .culture("tr-TR")
+                    .build();
+
+            String url = buildUrl(AUTOCOMPLETE_PATH);
+            log.info("[HotelApiClient] Calling GetArrivalAutocomplete: {}", url);
+
+            HttpEntity<TourVisioAutocompleteRequest> entity = new HttpEntity<>(autocompleteReq);
+
+            ResponseEntity<TourVisioAutocompleteResponse> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.POST,
+                    entity,
+                    TourVisioAutocompleteResponse.class
+            );
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null
+                    && response.getBody().getBody() != null
+                    && response.getBody().getBody().getItems() != null) {
+
+                return response.getBody().getBody().getItems().stream()
+                        .map(item -> {
+                            String id = null;
+                            String name = null;
+
+                            if (item.getHotel() != null) {
+                                id = item.getHotel().getId();
+                                name = item.getHotel().getName();
+                            } else if (item.getCity() != null) {
+                                id = item.getCity().getId();
+                                name = item.getCity().getName();
+                            }
+
+                            String countryName = item.getCountry() != null ? item.getCountry().getName() : null;
+                            String cityName = item.getCity() != null ? item.getCity().getName() : null;
+
+                            return ArrivalAutocompleteResponse.builder()
+                                    .id(id)
+                                    .name(name)
+                                    .type(item.getType())
+                                    .country(countryName)
+                                    .city(cityName)
+                                    .build();
+                        })
+                        .collect(Collectors.toList());
+            } else {
+                log.warn("[HotelApiClient] Autocomplete API error (status={}) — falling back to mock autocomplete.", response.getStatusCode());
+                return generateMockAutocomplete(query);
+            }
+        } catch (Exception e) {
+            log.error("[HotelApiClient] Autocomplete integration exception — falling back to mock: {}", e.getMessage(), e);
+            return generateMockAutocomplete(query);
+        }
+    }
+
+    private List<ArrivalAutocompleteResponse> generateMockAutocomplete(String query) {
+        List<ArrivalAutocompleteResponse> results = new ArrayList<>();
+        String queryLower = query != null ? query.toLowerCase() : "";
+
+        if (queryLower.contains("ant") || queryLower.contains("aly")) {
+            results.add(ArrivalAutocompleteResponse.builder()
+                    .id("23494")
+                    .name("Antalya")
+                    .type(1)
+                    .country("Turkey")
+                    .city("Antalya")
+                    .build());
+            results.add(ArrivalAutocompleteResponse.builder()
+                    .id("1269469")
+                    .name("Rixos Premium Belek")
+                    .type(2)
+                    .country("Turkey")
+                    .city("Antalya")
+                    .build());
+        } else if (queryLower.contains("ist") || queryLower.contains("tan")) {
+            results.add(ArrivalAutocompleteResponse.builder()
+                    .id("IST")
+                    .name("Istanbul")
+                    .type(1)
+                    .country("Turkey")
+                    .city("Istanbul")
+                    .build());
+        } else {
+            results.add(ArrivalAutocompleteResponse.builder()
+                    .id("1000")
+                    .name(query)
+                    .type(1)
+                    .country("Turkey")
+                    .city(query)
+                    .build());
+        }
+        return results;
+    }
+
+    private String buildUrl(String path) {
+        String baseUrl = config.getBaseUrl();
+        if (baseUrl == null) {
+            baseUrl = "";
+        }
+        if (!baseUrl.endsWith("/")) {
+            baseUrl += "/";
+        }
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        if (baseUrl.endsWith("/api/") && path.startsWith("api/")) {
+            path = path.substring(4);
+        }
+        return baseUrl + path;
     }
 }

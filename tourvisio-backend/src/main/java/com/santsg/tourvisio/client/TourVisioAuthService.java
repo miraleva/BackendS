@@ -29,12 +29,7 @@ import java.util.Map;
 @Slf4j
 public class TourVisioAuthService {
 
-    /**
-     * TourVisio login endpoint path'i.
-     * TODO: Doküman gelince doğru path buraya yazılacak.
-     *       Örnek: "/api/authenticationservice/login"
-     */
-    private static final String LOGIN_PATH = "/api/authenticationservice/login";
+    private static final String LOGIN_PATH = "/authenticationservice/login";
 
     /** Token'ın geçerlilik süresi (güvenlik marjıyla). Varsayılan 55 dakika. */
     private static final long TOKEN_TTL_SECONDS = 55 * 60;
@@ -87,8 +82,25 @@ public class TourVisioAuthService {
     /**
      * TourVisio login endpointine istek atar, dönen token'ı cache'ler.
      */
+    private String buildUrl(String path) {
+        String baseUrl = config.getBaseUrl();
+        if (baseUrl == null) {
+            baseUrl = "";
+        }
+        if (!baseUrl.endsWith("/")) {
+            baseUrl += "/";
+        }
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        if (baseUrl.endsWith("/api/") && path.startsWith("api/")) {
+            path = path.substring(4);
+        }
+        return baseUrl + path;
+    }
+
     private String login() {
-        String url = config.getBaseUrl() + LOGIN_PATH;
+        String url = buildUrl(LOGIN_PATH);
 
         log.info("[TourVisioAuth] Logging in to TourVisio: {}", url);
 
@@ -142,26 +154,23 @@ public class TourVisioAuthService {
      */
     @SuppressWarnings("unchecked")
     private Object extractToken(Map<String, Object> responseBody) {
-        // Düz seviye: { "Token": "abc..." }
-        if (responseBody.containsKey("Token")) {
-            return responseBody.get("Token");
-        }
-        // Nested: { "Body": { "Token": "abc..." } }
-        Object bodyObj = responseBody.get("Body");
-        if (bodyObj instanceof Map) {
-            Map<String, Object> bodyMap = (Map<String, Object>) bodyObj;
-            if (bodyMap.containsKey("Token")) {
-                return bodyMap.get("Token");
+        // Try case-insensitive nested paths first (e.g. body.token, Body.Token)
+        for (String bodyKey : java.util.List.of("body", "Body", "BODY")) {
+            Object bodyObj = responseBody.get(bodyKey);
+            if (bodyObj instanceof Map) {
+                Map<String, Object> bodyMap = (Map<String, Object>) bodyObj;
+                for (String tokenKey : java.util.List.of("token", "Token", "TOKEN")) {
+                    if (bodyMap.containsKey(tokenKey)) {
+                        return bodyMap.get(tokenKey);
+                    }
+                }
             }
         }
-        // Küçük harfli alternatifler
-        if (responseBody.containsKey("token")) {
-            return responseBody.get("token");
-        }
-        Object bodyLower = responseBody.get("body");
-        if (bodyLower instanceof Map) {
-            Map<String, Object> bodyMap = (Map<String, Object>) bodyLower;
-            return bodyMap.get("token");
+        // Try flat paths (e.g. Token, token)
+        for (String tokenKey : java.util.List.of("token", "Token", "TOKEN")) {
+            if (responseBody.containsKey(tokenKey)) {
+                return responseBody.get(tokenKey);
+            }
         }
         return null;
     }

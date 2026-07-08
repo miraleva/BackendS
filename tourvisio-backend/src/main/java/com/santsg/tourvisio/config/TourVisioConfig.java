@@ -1,5 +1,6 @@
 package com.santsg.tourvisio.config;
 
+import com.santsg.tourvisio.client.TourVisioAuthService;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -61,8 +62,10 @@ public class TourVisioConfig {
      * tarafından eklenir; burada sabit header konmaz.
      */
     @Bean("tourVisioRestTemplate")
-    public RestTemplate tourVisioRestTemplate() {
-        return new RestTemplate();
+    public RestTemplate tourVisioRestTemplate(@org.springframework.context.annotation.Lazy TourVisioAuthService authService) {
+        RestTemplate restTemplate = new RestTemplate();
+        restTemplate.getInterceptors().add(new TourVisioAuthInterceptor(authService));
+        return restTemplate;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

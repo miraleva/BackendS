@@ -1,5 +1,7 @@
 package com.santsg.tourvisio.dto.tourvisio;
 
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -10,6 +12,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
 public class TourVisioAutocompleteResponse {
     private Header header;
     private Body body;
@@ -18,6 +21,7 @@ public class TourVisioAutocompleteResponse {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
+    @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
     public static class Header {
         private String requestId;
         private boolean success;
@@ -27,6 +31,7 @@ public class TourVisioAutocompleteResponse {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
+    @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
     public static class Body {
         private List<AutocompleteItem> items;
     }
@@ -35,15 +40,18 @@ public class TourVisioAutocompleteResponse {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
+    @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
     public static class AutocompleteItem {
         private int type;
         private City city;
         private Hotel hotel;
+        private Country country;
 
         @Data
         @Builder
         @NoArgsConstructor
         @AllArgsConstructor
+        @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
         public static class City {
             private String id;
             private String name;
@@ -53,7 +61,18 @@ public class TourVisioAutocompleteResponse {
         @Builder
         @NoArgsConstructor
         @AllArgsConstructor
+        @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
         public static class Hotel {
+            private String id;
+            private String name;
+        }
+
+        @Data
+        @Builder
+        @NoArgsConstructor
+        @AllArgsConstructor
+        @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
+        public static class Country {
             private String id;
             private String name;
         }
