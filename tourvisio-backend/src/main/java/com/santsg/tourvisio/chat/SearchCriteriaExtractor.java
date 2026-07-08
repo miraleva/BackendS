@@ -14,19 +14,22 @@ import java.util.regex.Pattern;
 /**
  * Kullanıcı mesajından {@link SearchCriteria} alanlarını çıkaran servis.
  *
- * <p>Kural tabanlı (rule-based) bir parse yaklaşımı kullanır.
+ * <p>
+ * Kural tabanlı (rule-based) bir parse yaklaşımı kullanır.
  * Türkçe doğal dil ifadelerini tanır:
  * <ul>
- *   <li>Şehir adları</li>
- *   <li>"15 Temmuz", "20 temmuz çıkış", "5 gece" gibi tarih ifadeleri</li>
- *   <li>"2 yetişkin", "1 çocuk" gibi kişi sayıları</li>
- *   <li>TL, EUR, USD gibi para birimleri</li>
- *   <li>Kalkış/varış noktaları, tek yön/gidiş-dönüş bilgisi</li>
+ * <li>Şehir adları</li>
+ * <li>"15 Temmuz", "20 temmuz çıkış", "5 gece" gibi tarih ifadeleri</li>
+ * <li>"2 yetişkin", "1 çocuk" gibi kişi sayıları</li>
+ * <li>TL, EUR, USD gibi para birimleri</li>
+ * <li>Kalkış/varış noktaları, tek yön/gidiş-dönüş bilgisi</li>
  * </ul>
  * </p>
  *
- * <p><strong>Genişletme:</strong> İleride bu sınıfı bir NLP/LLM katmanıyla
- * değiştirmek için arayüz çıkarılabilir.</p>
+ * <p>
+ * <strong>Genişletme:</strong> İleride bu sınıfı bir NLP/LLM katmanıyla
+ * değiştirmek için arayüz çıkarılabilir.
+ * </p>
  */
 @Service
 public class SearchCriteriaExtractor {
@@ -35,34 +38,49 @@ public class SearchCriteriaExtractor {
     private static final Locale TR = Locale.forLanguageTag("tr-TR");
     private static final int CURRENT_YEAR = LocalDate.now().getYear();
 
+<<<<<<< HEAD
     // ── Türkçe ay adları ──────────────────────────────────────────────────────
     private static final List<String> MONTHS_TR = List.of(
             "ocak", "şubat", "mart", "nisan", "mayıs", "haziran",
             "temmuz", "ağustos", "eylül", "ekim", "kasım", "aralık"
     );
+=======
+    // ── Ay adları ──────────────────────────────────────────────────────────
+    private static final Map<String, Integer> MONTHS_BY_NAME = Map.ofEntries(
+            Map.entry("ocak", 1), Map.entry("january", 1),
+            Map.entry("şubat", 2), Map.entry("february", 2),
+            Map.entry("mart", 3), Map.entry("march", 3),
+            Map.entry("nisan", 4), Map.entry("april", 4),
+            Map.entry("mayıs", 5), Map.entry("may", 5),
+            Map.entry("haziran", 6), Map.entry("june", 6),
+            Map.entry("temmuz", 7), Map.entry("july", 7),
+            Map.entry("ağustos", 8), Map.entry("august", 8),
+            Map.entry("eylül", 9), Map.entry("september", 9),
+            Map.entry("ekim", 10), Map.entry("october", 10),
+            Map.entry("kasım", 11), Map.entry("november", 11),
+            Map.entry("aralık", 12), Map.entry("december", 12));
+>>>>>>> 34740d24e8d256b34bad26dc32a4569e2b91c759
 
     // ── Şehirler ──────────────────────────────────────────────────────────────
     private static final List<String> HOTEL_CITIES = List.of(
             "antalya", "istanbul", "izmir", "ankara", "bodrum", "marmaris",
             "fethiye", "alanya", "kapadokya", "bursa", "trabzon", "erzurum",
             "kemer", "side", "belek", "paris", "londra", "roma", "barselona",
-            "berlin", "amsterdam", "dubai", "new york", "prag", "viyana"
-    );
+            "berlin", "amsterdam", "dubai", "new york", "prag", "viyana");
 
     private static final List<String> FLIGHT_CITIES = List.of(
             "istanbul", "ankara", "izmir", "antalya", "bursa", "trabzon",
             "erzurum", "kayseri", "adana", "diyarbakır", "gaziantep", "konya",
             "paris", "londra", "berlin", "amsterdam", "roma", "barselona",
-            "dubai", "new york", "prag", "viyana", "münih", "zurich"
-    );
+            "dubai", "new york", "prag", "viyana", "münih", "zurich");
 
     // ── Para birimi ───────────────────────────────────────────────────────────
     private static final Pattern CURRENCY_PATTERN = Pattern.compile(
-            "\\b(tl|try|türk lirası|turk lirasi|lira|eur|euro|usd|dolar|gbp|sterlin)\\b"
-    );
+            "\\b(tl|try|türk lirası|turk lirasi|lira|eur|euro|usd|dolar|gbp|sterlin)\\b");
 
     // ── Sayı + kişi ifadeleri ─────────────────────────────────────────────────
     private static final Pattern ADULT_PATTERN = Pattern.compile(
+<<<<<<< HEAD
             "(\\d+)\\s*(?:yetişkin|yetiskin|adult|kişi|kisi)"
     );
     private static final Pattern CHILD_PATTERN = Pattern.compile(
@@ -71,13 +89,20 @@ public class SearchCriteriaExtractor {
     private static final Pattern PASSENGER_PATTERN = Pattern.compile(
             "(\\d+)\\s*(?:yolcu|kişi|kisi|passenger|kişilik|kisilik)"
     );
+=======
+            "(\\d+)\\s*(?:yetişkin|yetiskin|adult|adults|kişi|kisi|kişi|kisiler)");
+    private static final Pattern CHILD_PATTERN = Pattern.compile(
+            "(\\d+)\\s*(?:çocuk|cocuk|child|children|kids)");
+    private static final Pattern PASSENGER_PATTERN = Pattern.compile(
+            "(\\d+)\\s*(?:yolcu|kişi|kisi|passenger|passengers|kişilik|kisilik)");
+>>>>>>> 34740d24e8d256b34bad26dc32a4569e2b91c759
 
     // ── Gece sayısı ───────────────────────────────────────────────────────────
     private static final Pattern NIGHT_PATTERN = Pattern.compile(
-            "(\\d+)\\s*(?:gece|night)"
-    );
+            "(\\d+)\\s*(?:gece|night)");
 
     // ── Tarih: "15 Temmuz", "15 temmuz girişli", "20 temmuz çıkış" ──────────
+<<<<<<< HEAD
     private static final Pattern DATE_WITH_LABEL_PATTERN = Pattern.compile(
             "(\\d{1,2})\\s+(" + String.join("|", MONTHS_TR) + ")"
             + "(?:\\s+\\d{4})?"               // opsiyonel yıl
@@ -93,18 +118,28 @@ public class SearchCriteriaExtractor {
             + "(?:\\s*(?:gidiş|gidis|kalkış|kalkis|hareket))?",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
+=======
+    private static final String MONTH_PATTERN = String.join("|", MONTHS_BY_NAME.keySet());
+
+    private static final Pattern DATE_PATTERN = Pattern.compile(
+            "(?:(\\d{1,2})\\s+((?:" + MONTH_PATTERN + "))|((?:" + MONTH_PATTERN + "))\\s+(\\d{1,2}))",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+
+    // ── Gidiş tarihi için "X tarihinde", "X'de git" ──────────────────────────
+    private static final Pattern DEPARTURE_DATE_PATTERN = Pattern.compile(
+            "(?:(\\d{1,2})\\s+((?:" + MONTH_PATTERN + "))|((?:" + MONTH_PATTERN + "))\\s+(\\d{1,2}))",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+>>>>>>> 34740d24e8d256b34bad26dc32a4569e2b91c759
 
     // ── Kalkış: "İstanbul'dan", "İstanbul dan" ───────────────────────────────
     private static final Pattern DEPARTURE_CITY_PATTERN = Pattern.compile(
             "\\b(\\w+)(?:'?(?:dan|den|tan|ten))\\b",
-            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
-    );
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     // ── Varış: "Antalya'ya", "Antalya ya" ────────────────────────────────────
     private static final Pattern ARRIVAL_CITY_PATTERN = Pattern.compile(
             "\\b(\\w+)(?:'?(?:ya|ye|a|e))\\b",
-            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
-    );
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     // ─────────────────────────────────────────────────────────────────────────
     // Public API
@@ -114,11 +149,13 @@ public class SearchCriteriaExtractor {
      * Tek bir kullanıcı mesajından çıkarılabilen alanları {@link SearchCriteria}
      * olarak döner. Çıkarılamayan alanlar {@code null} kalır (merge için).
      *
-     * @param message  Ham kullanıcı mesajı
-     * @param intent   IntentDetectionService'in ürettiği intent (HOTEL_SEARCH / FLIGHT_SEARCH)
+     * @param message Ham kullanıcı mesajı
+     * @param intent  IntentDetectionService'in ürettiği intent (HOTEL_SEARCH /
+     *                FLIGHT_SEARCH)
      */
     public SearchCriteria extract(String message, String intent) {
-        if (message == null || message.isBlank()) return new SearchCriteria();
+        if (message == null || message.isBlank())
+            return new SearchCriteria();
 
         String lower = message.toLowerCase(TR);
         SearchCriteria c = new SearchCriteria();
@@ -153,7 +190,8 @@ public class SearchCriteriaExtractor {
 
         // Yetişkin
         Matcher am = ADULT_PATTERN.matcher(lower);
-        if (am.find()) c.setAdultCount(Integer.parseInt(am.group(1)));
+        if (am.find())
+            c.setAdultCount(Integer.parseInt(am.group(1)));
 
         // Çocuk
         Matcher cm = CHILD_PATTERN.matcher(lower);
@@ -186,7 +224,8 @@ public class SearchCriteriaExtractor {
 
     private List<Integer> extractChildAges(String lower) {
         List<Integer> ages = new java.util.ArrayList<>();
-        Pattern agePattern = Pattern.compile("(?:yaş|yas|yaşlarında|yaslar|yaşında|yasinda|yaşlar)\\s*(?::)?\\s*(\\d+(?:\\s*[,\\s+ve\\s+&]\\s*\\d+)*)");
+        Pattern agePattern = Pattern.compile(
+                "(?:yaş|yas|yaşlarında|yaslar|yaşında|yasinda|yaşlar)\\s*(?::)?\\s*(\\d+(?:\\s*[,\\s+ve\\s+&]\\s*\\d+)*)");
         Matcher m = agePattern.matcher(lower);
         if (m.find()) {
             String numbersGroup = m.group(1);
@@ -212,7 +251,8 @@ public class SearchCriteriaExtractor {
     }
 
     private String extractNationality(String lower) {
-        if (lower.contains("türk") || lower.contains("turk") || lower.contains("tc") || lower.contains("tr uyruklu") || lower.contains("türk uyruklu")) {
+        if (lower.contains("türk") || lower.contains("turk") || lower.contains("tc") || lower.contains("tr uyruklu")
+                || lower.contains("türk uyruklu")) {
             return "TR";
         }
         if (lower.contains("alman") || lower.contains("german") || lower.contains("de uyruklu")) {
@@ -234,25 +274,33 @@ public class SearchCriteriaExtractor {
     private void extractHotelDates(String lower, SearchCriteria c) {
         Matcher m = DATE_WITH_LABEL_PATTERN.matcher(lower);
 
+<<<<<<< HEAD
         LocalDate firstDate      = null;
         LocalDate secondDate     = null;
         boolean firstIsCheckIn   = false;
         boolean firstIsCheckOut  = false;
+=======
+        LocalDate firstDate = null;
+        LocalDate secondDate = null;
+        boolean firstIsCheckIn = false;
+        boolean firstIsCheckOut = false;
+>>>>>>> 34740d24e8d256b34bad26dc32a4569e2b91c759
 
         while (m.find()) {
-            int day      = Integer.parseInt(m.group(1));
+            int day = Integer.parseInt(m.group(1));
             String month = m.group(2).toLowerCase(TR);
             String label = m.group(3) != null ? m.group(3).toLowerCase(TR) : "";
 
             LocalDate date = buildDate(day, month);
-            if (date == null) continue;
+            if (date == null)
+                continue;
 
-            boolean isCheckIn  = label.matches("giriş|giris|checkin|başlangıç|baslangic");
+            boolean isCheckIn = label.matches("giriş|giris|checkin|başlangıç|baslangic");
             boolean isCheckOut = label.matches("çıkış|cikis|checkout|bitiş|bitis");
 
             if (firstDate == null) {
-                firstDate       = date;
-                firstIsCheckIn  = isCheckIn;
+                firstDate = date;
+                firstIsCheckIn = isCheckIn;
                 firstIsCheckOut = isCheckOut;
             } else {
                 secondDate = date;
@@ -265,7 +313,8 @@ public class SearchCriteriaExtractor {
                 }
 
                 // BUG FIX: İkinci tarih işlenince firstDate'yi de ata
-                // "15 Temmuz giriş 20 Temmuz çıkış" → firstDate=15Tem(checkIn), secondDate=20Tem(checkOut)
+                // "15 Temmuz giriş 20 Temmuz çıkış" → firstDate=15Tem(checkIn),
+                // secondDate=20Tem(checkOut)
                 // Döngüde checkOutDate set edilir ama checkInDate hâlâ null kalır;
                 // sonraki guard'lar checkOutDate dolu olduğu için çalışmaz.
                 if (c.getCheckInDate() == null && firstIsCheckIn) {
@@ -278,7 +327,7 @@ public class SearchCriteriaExtractor {
 
         // ── Tek tarih senaryoları ──────────────────────────────────────────────
 
-        // Tek tarih + "5 gece" kombinasyonu  (ör. "15 Temmuz girişli 5 gece")
+        // Tek tarih + "5 gece" kombinasyonu (ör. "15 Temmuz girişli 5 gece")
         if (firstDate != null && c.getCheckInDate() == null && c.getCheckOutDate() == null) {
             if (firstIsCheckOut) {
                 c.setCheckOutDate(firstDate);
@@ -328,7 +377,8 @@ public class SearchCriteriaExtractor {
 
         // Yolcu sayısı
         Matcher pm = PASSENGER_PATTERN.matcher(lower);
-        if (pm.find()) c.setPassengerCount(Integer.parseInt(pm.group(1)));
+        if (pm.find())
+            c.setPassengerCount(Integer.parseInt(pm.group(1)));
 
         // Trip type
         if (lower.contains("tek yön") || lower.contains("tek yon")
@@ -340,7 +390,7 @@ public class SearchCriteriaExtractor {
             c.setTripType("ROUND_TRIP");
         }
 
-        // Kalkış şehri  ("İstanbul'dan" → Istanbul)
+        // Kalkış şehri ("İstanbul'dan" → Istanbul)
         Matcher depM = DEPARTURE_CITY_PATTERN.matcher(lower);
         while (depM.find()) {
             String candidate = depM.group(1);
@@ -350,15 +400,16 @@ public class SearchCriteriaExtractor {
             }
         }
 
-        // Varış şehri  ("Antalya'ya" → Antalya)
+        // Varış şehri ("Antalya'ya" → Antalya)
         Matcher arrM = ARRIVAL_CITY_PATTERN.matcher(lower);
         while (arrM.find()) {
             String candidate = arrM.group(1);
-            String cLower    = candidate.toLowerCase(TR);
+            String cLower = candidate.toLowerCase(TR);
             if (FLIGHT_CITIES.contains(cLower)
                     && !cLower.equals(
-                        c.getDepartureLocation() != null
-                            ? c.getDepartureLocation().toLowerCase(TR) : "")) {
+                            c.getDepartureLocation() != null
+                                    ? c.getDepartureLocation().toLowerCase(TR)
+                                    : "")) {
                 c.setArrivalLocation(capitalize(candidate));
                 break;
             }
@@ -381,8 +432,14 @@ public class SearchCriteriaExtractor {
         // Gidiş tarihi
         Matcher datM = DEPARTURE_DATE_PATTERN.matcher(lower);
         if (datM.find()) {
+<<<<<<< HEAD
             LocalDate d = buildDate(Integer.parseInt(datM.group(1)), datM.group(2).toLowerCase(TR));
             if (d != null) c.setDepartureDate(d);
+=======
+            LocalDate d = parseDateFromMatcher(datM);
+            if (d != null)
+                c.setDepartureDate(d);
+>>>>>>> 34740d24e8d256b34bad26dc32a4569e2b91c759
         }
 
         // Dönüş tarihi (gidiş-dönüş ise ikinci tarih)
@@ -401,19 +458,27 @@ public class SearchCriteriaExtractor {
 
     private String extractCurrency(String lower) {
         Matcher m = CURRENCY_PATTERN.matcher(lower);
-        if (!m.find()) return null;
+        if (!m.find())
+            return null;
         return switch (m.group(1).toLowerCase(TR)) {
             case "tl", "try", "türk lirası", "turk lirasi", "lira" -> "TRY";
-            case "eur", "euro"                                       -> "EUR";
-            case "usd", "dolar"                                      -> "USD";
-            case "gbp", "sterlin"                                    -> "GBP";
-            default                                                  -> m.group(1).toUpperCase();
+            case "eur", "euro" -> "EUR";
+            case "usd", "dolar" -> "USD";
+            case "gbp", "sterlin" -> "GBP";
+            default -> m.group(1).toUpperCase();
         };
     }
 
+<<<<<<< HEAD
     private LocalDate buildDate(int day, String monthTr) {
         int monthIdx = MONTHS_TR.indexOf(monthTr.toLowerCase(TR));
         if (monthIdx < 0) return null;
+=======
+    private LocalDate buildDate(int day, String monthName) {
+        Integer monthNumber = MONTHS_BY_NAME.get(monthName.toLowerCase(TR));
+        if (monthNumber == null)
+            return null;
+>>>>>>> 34740d24e8d256b34bad26dc32a4569e2b91c759
         try {
             return LocalDate.of(CURRENT_YEAR, Month.of(monthIdx + 1), day);
         } catch (Exception e) {
@@ -426,17 +491,24 @@ public class SearchCriteriaExtractor {
         Matcher m = DATE_WITH_LABEL_PATTERN.matcher(lower);
         List<LocalDate> dates = new java.util.ArrayList<>();
         while (m.find()) {
+<<<<<<< HEAD
             LocalDate d = buildDate(
                     Integer.parseInt(m.group(1)),
                     m.group(2).toLowerCase(TR)
             );
             if (d != null) dates.add(d);
+=======
+            LocalDate d = parseDateFromMatcher(m);
+            if (d != null)
+                dates.add(d);
+>>>>>>> 34740d24e8d256b34bad26dc32a4569e2b91c759
         }
         return dates;
     }
 
     private String capitalize(String s) {
-        if (s == null || s.isBlank()) return s;
+        if (s == null || s.isBlank())
+            return s;
         return Character.toUpperCase(s.charAt(0)) + s.substring(1).toLowerCase(TR);
     }
 }
