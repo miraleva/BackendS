@@ -7,7 +7,7 @@ import com.santsg.tourvisio.chat.SearchCriteriaExtractor;
 import com.santsg.tourvisio.client.AIProviderClient;
 import com.santsg.tourvisio.dto.ChatRequest;
 import com.santsg.tourvisio.dto.ChatResponse;
-import com.santsg.tourvisio.dto.FlightSearchRequest;
+import com.santsg.tourvisio.dto.ChatSearchResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -164,34 +164,34 @@ public class ChatOrchestrationService {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * Tüm kriterler tamamlandığında döner.
+     * Tüm kriterler tamamlandığında ilgili arama servisini çağırır.
      */
     private ChatResponse readyToSearchResponse(String sessionId,
                                                String intent,
                                                SearchCriteria criteria) {
 
-        String label = "HOTEL_SEARCH".equals(intent) ? "Otel" : "Uçak";
-        String reply;
-
+        ChatSearchResponse searchResponse;
         if ("HOTEL_SEARCH".equals(intent)) {
-            com.santsg.tourvisio.dto.hotel.HotelSearchRequest hotelRequest = criteria.toHotelSearchRequestDto();
-            log.info("[Orchestration] HotelSearchRequest oluşturuldu ve hazırlandı: {}", hotelRequest);
-            reply = "Otel araması için gerekli bilgiler tamamlandı. Arama servisine yönlendiriliyor. HotelSearchRequest hazırlandı.";
+            searchResponse = hotelSearchService.searchFromCriteria(criteria);
+        } else if ("FLIGHT_SEARCH".equals(intent)) {
+            searchResponse = flightSearchService.searchFromCriteria(criteria);
         } else {
-            FlightSearchRequest flightRequest = criteria.toFlightSearchRequest();
-            log.info("[Orchestration] FlightSearchRequest oluşturuldu ve hazırlandı: {}", flightRequest);
-            reply = "Uçak araması için gerekli bilgiler tamamlandı. Arama servisine yönlendiriliyor. FlightSearchRequest hazırlandı.";
+            searchResponse = ChatSearchResponse.builder()
+                    .reply("Arama türü tanımlanamadı.")
+                    .searchType(intent)
+                    .success(false)
+                    .results(List.of())
+                    .build();
         }
 
-        // Aramanın gerçekten başladığı anlama gelir
-        sessionStore.remove(sessionId);
-
         return ChatResponse.builder()
-                .reply(reply)
+                .reply(searchResponse.getReply())
                 .sessionId(sessionId)
                 .searchType(intent)
                 .missingFields(List.of())
                 .chatStatus("ACTIVE")
+                .success(searchResponse.isSuccess())
+                .results(searchResponse.getResults())
                 .build();
     }
 

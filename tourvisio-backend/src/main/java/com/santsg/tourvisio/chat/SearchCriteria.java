@@ -124,6 +124,7 @@ public class SearchCriteria {
         req.setCheckInDate(checkInDate);
         req.setCheckOutDate(checkOutDate);
         req.setAdultCount(adultCount);
+        req.setChildCount(childCount);
         req.setCurrency(currency);
         return req;
     }

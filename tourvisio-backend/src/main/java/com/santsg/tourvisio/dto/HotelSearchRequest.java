@@ -8,7 +8,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
-import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -31,11 +30,7 @@ public class HotelSearchRequest {
     @NotBlank(message = "currency is required")
     private String currency;
 
-    // TourVisio ek alanlar (opsiyonel)
     private Integer childCount;
-    private List<Integer> childAges;
-    private Integer roomCount;
-    private String nationality;  // e.g., "TR", "DE"
 
     // Additional optional filters
     private String region;
