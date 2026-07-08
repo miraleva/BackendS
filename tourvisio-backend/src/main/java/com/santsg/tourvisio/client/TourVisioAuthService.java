@@ -103,8 +103,25 @@ public class TourVisioAuthService {
      * @return yeni token string'i
      * @throws TourVisioAuthException login başarısız olursa
      */
+    private String buildUrl(String path) {
+        String baseUrl = config.getBaseUrl();
+        if (baseUrl == null) {
+            baseUrl = "";
+        }
+        if (!baseUrl.endsWith("/")) {
+            baseUrl += "/";
+        }
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        if (baseUrl.endsWith("/api/") && path.startsWith("api/")) {
+            path = path.substring(4);
+        }
+        return baseUrl + path;
+    }
+
     private String login() {
-        String url = config.getBaseUrl() + LOGIN_PATH;
+        String url = buildUrl(LOGIN_PATH);
 
         log.info("[TourVisioAuth] TourVisio login isteği gönderiliyor: POST {}", url);
 

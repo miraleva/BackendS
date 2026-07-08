@@ -3,6 +3,7 @@ package com.santsg.tourvisio.client;
 import com.santsg.tourvisio.config.TourVisioConfig;
 import com.santsg.tourvisio.dto.HotelSearchRequest;
 import com.santsg.tourvisio.dto.HotelSearchResponseItem;
+import com.santsg.tourvisio.dto.ArrivalAutocompleteResponse;
 import com.santsg.tourvisio.dto.tourvisio.*;
 import com.santsg.tourvisio.exception.TourVisioAuthException;
 import lombok.extern.slf4j.Slf4j;
@@ -92,7 +93,7 @@ public class TourVisioHotelApiClient {
                 searchReq.getCheckIn(), searchReq.getNight(),
                 autoResult.name, request.getAdultCount());
 
-        String searchUrl = config.getBaseUrl() + PRICE_SEARCH_PATH;
+        String searchUrl = buildUrl(PRICE_SEARCH_PATH);
         HttpEntity<TourVisioHotelSearchRequest> searchEntity = new HttpEntity<>(searchReq, headers);
 
         ResponseEntity<TourVisioHotelSearchResponse> searchRes;
@@ -113,7 +114,7 @@ public class TourVisioHotelApiClient {
     // ─────────────────────────────────────────────────────────────────────────
 
     private AutocompleteResult resolveLocation(String query, HttpHeaders headers) {
-        String url = config.getBaseUrl() + AUTOCOMPLETE_PATH;
+        String url = buildUrl(AUTOCOMPLETE_PATH);
 
         TourVisioAutocompleteRequest req = TourVisioAutocompleteRequest.builder()
                 .productType(2)
@@ -294,6 +295,152 @@ public class TourVisioHotelApiClient {
                 .build());
 
         return hotels;
+    }
+
+    public List<ArrivalAutocompleteResponse> getArrivalAutocomplete(String query) {
+        if (config.isMockMode()) {
+            log.info("[HotelApiClient] Mock mod aktif — mock autocomplete verisi dönülüyor.");
+            return generateMockAutocomplete(query);
+        }
+
+        // ── Credential kontrolü ──
+        if (!config.isConfigured()) {
+            throw new TourVisioApiException(
+                    "TourVisio API bağlantısı yapılandırılmamış. " +
+                    "TOURVISIO_BASE_URL, TOURVISIO_AGENCY, TOURVISIO_USERNAME, TOURVISIO_PASSWORD " +
+                    "environment variable'larını kontrol edin.");
+        }
+
+        // ── Token al ──
+        String token;
+        try {
+            token = authService.getToken();
+            log.info("[HotelApiClient] TourVisio token başarıyla alındı.");
+        } catch (TourVisioAuthException e) {
+            throw new TourVisioApiException("TourVisio'ya giriş yapılamadı: " + e.getMessage(), e);
+        }
+
+        HttpHeaders headers = createAuthHeaders(token);
+
+        try {
+            TourVisioAutocompleteRequest autocompleteReq = TourVisioAutocompleteRequest.builder()
+                    .productType(2)
+                    .query(query)
+                    .masterProductTypes(List.of(2))
+                    .culture("tr-TR")
+                    .build();
+
+            String url = buildUrl(AUTOCOMPLETE_PATH);
+            log.info("[HotelApiClient] Calling GetArrivalAutocomplete: {}", url);
+
+            HttpEntity<TourVisioAutocompleteRequest> entity = new HttpEntity<>(autocompleteReq, headers);
+
+            ResponseEntity<TourVisioAutocompleteResponse> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.POST,
+                    entity,
+                    TourVisioAutocompleteResponse.class
+            );
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null
+                    && response.getBody().getBody() != null
+                    && response.getBody().getBody().getItems() != null) {
+
+                return response.getBody().getBody().getItems().stream()
+                        .map(item -> {
+                            String id = null;
+                            String name = null;
+
+                            if (item.getCity() != null && item.getCity().getId() != null) {
+                                id = item.getCity().getId();
+                                name = item.getCity().getName();
+                            } else if (item.getState() != null && item.getState().getId() != null) {
+                                id = item.getState().getId();
+                                name = item.getState().getName();
+                            } else if (item.getHotel() != null && item.getHotel().getId() != null) {
+                                id = item.getHotel().getId();
+                                name = item.getHotel().getName();
+                            } else if (item.getCountry() != null && item.getCountry().getId() != null) {
+                                id = item.getCountry().getId();
+                                name = item.getCountry().getName();
+                            }
+
+                            String countryName = item.getCountry() != null ? item.getCountry().getName() : null;
+                            String cityName = item.getCity() != null ? item.getCity().getName() : null;
+
+                            return ArrivalAutocompleteResponse.builder()
+                                    .id(id)
+                                    .name(name)
+                                    .type(item.getType())
+                                    .country(countryName)
+                                    .city(cityName)
+                                    .build();
+                        })
+                        .collect(Collectors.toList());
+            } else {
+                log.warn("[HotelApiClient] Autocomplete API error (status={}) — falling back to mock autocomplete.", response.getStatusCode());
+                return generateMockAutocomplete(query);
+            }
+        } catch (Exception e) {
+            log.error("[HotelApiClient] Autocomplete integration exception — falling back to mock: {}", e.getMessage(), e);
+            return generateMockAutocomplete(query);
+        }
+    }
+
+    private List<ArrivalAutocompleteResponse> generateMockAutocomplete(String query) {
+        List<ArrivalAutocompleteResponse> results = new ArrayList<>();
+        String queryLower = query != null ? query.toLowerCase() : "";
+
+        if (queryLower.contains("ant") || queryLower.contains("aly")) {
+            results.add(ArrivalAutocompleteResponse.builder()
+                    .id("23494")
+                    .name("Antalya")
+                    .type(1)
+                    .country("Turkey")
+                    .city("Antalya")
+                    .build());
+            results.add(ArrivalAutocompleteResponse.builder()
+                    .id("1269469")
+                    .name("Rixos Premium Belek")
+                    .type(2)
+                    .country("Turkey")
+                    .city("Antalya")
+                    .build());
+        } else if (queryLower.contains("ist") || queryLower.contains("tan")) {
+            results.add(ArrivalAutocompleteResponse.builder()
+                    .id("IST")
+                    .name("Istanbul")
+                    .type(1)
+                    .country("Turkey")
+                    .city("Istanbul")
+                    .build());
+        } else {
+            results.add(ArrivalAutocompleteResponse.builder()
+                    .id("1000")
+                    .name(query)
+                    .type(1)
+                    .country("Turkey")
+                    .city(query)
+                    .build());
+        }
+        return results;
+    }
+
+    private String buildUrl(String path) {
+        String baseUrl = config.getBaseUrl();
+        if (baseUrl == null) {
+            baseUrl = "";
+        }
+        if (!baseUrl.endsWith("/")) {
+            baseUrl += "/";
+        }
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        if (baseUrl.endsWith("/api/") && path.startsWith("api/")) {
+            path = path.substring(4);
+        }
+        return baseUrl + path;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

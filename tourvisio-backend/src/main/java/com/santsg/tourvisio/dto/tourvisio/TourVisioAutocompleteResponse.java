@@ -1,6 +1,8 @@
 package com.santsg.tourvisio.dto.tourvisio;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -9,31 +11,13 @@ import java.util.List;
 
 /**
  * TourVisio GetArrivalAutocomplete response yapısı.
- *
- * <p>Gerçek API response'u:
- * <pre>
- * {
- *   "header": { "requestId": "...", "success": true },
- *   "body": {
- *     "items": [
- *       {
- *         "type": 1,
- *         "geolocation": { "longitude": "30.70838", "latitude": "36.87536" },
- *         "country": { "id": "TR", "name": "Turkey" },
- *         "state": { "id": "10828", "name": "Turkish Riviera" },
- *         "city": { "id": "23494", "name": "Antalya" },
- *         "provider": 2
- *       }
- *     ]
- *   }
- * }
- * </pre>
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
+@JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
 public class TourVisioAutocompleteResponse {
     private Header header;
     private Body body;
@@ -43,6 +27,7 @@ public class TourVisioAutocompleteResponse {
     @NoArgsConstructor
     @AllArgsConstructor
     @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
     public static class Header {
         private String requestId;
         private boolean success;
@@ -53,6 +38,7 @@ public class TourVisioAutocompleteResponse {
     @NoArgsConstructor
     @AllArgsConstructor
     @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
     public static class Body {
         private List<AutocompleteItem> items;
     }
@@ -62,12 +48,13 @@ public class TourVisioAutocompleteResponse {
     @NoArgsConstructor
     @AllArgsConstructor
     @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
     public static class AutocompleteItem {
         private int type;
-        private IdName city;
-        private IdName state;
-        private IdName country;
-        private IdName hotel;
+        private City city;
+        private State state;
+        private Hotel hotel;
+        private Country country;
         private int provider;
 
         @Data
@@ -75,7 +62,41 @@ public class TourVisioAutocompleteResponse {
         @NoArgsConstructor
         @AllArgsConstructor
         @JsonIgnoreProperties(ignoreUnknown = true)
-        public static class IdName {
+        @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
+        public static class City {
+            private String id;
+            private String name;
+        }
+
+        @Data
+        @Builder
+        @NoArgsConstructor
+        @AllArgsConstructor
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
+        public static class State {
+            private String id;
+            private String name;
+        }
+
+        @Data
+        @Builder
+        @NoArgsConstructor
+        @AllArgsConstructor
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
+        public static class Hotel {
+            private String id;
+            private String name;
+        }
+
+        @Data
+        @Builder
+        @NoArgsConstructor
+        @AllArgsConstructor
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        @JsonNaming(PropertyNamingStrategies.UpperCamelCaseStrategy.class)
+        public static class Country {
             private String id;
             private String name;
         }

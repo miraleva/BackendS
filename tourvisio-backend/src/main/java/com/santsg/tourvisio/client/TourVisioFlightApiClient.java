@@ -56,7 +56,7 @@ public class TourVisioFlightApiClient {
         }
 
         try {
-            String url = config.getBaseUrl() + FLIGHT_SEARCH_PATH;
+            String url = buildUrl(FLIGHT_SEARCH_PATH);
             String token = authService.getToken();
 
             HttpHeaders headers = new HttpHeaders();
@@ -167,5 +167,22 @@ public class TourVisioFlightApiClient {
                 .build());
 
         return flights;
+    }
+
+    private String buildUrl(String path) {
+        String baseUrl = config.getBaseUrl();
+        if (baseUrl == null) {
+            baseUrl = "";
+        }
+        if (!baseUrl.endsWith("/")) {
+            baseUrl += "/";
+        }
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        if (baseUrl.endsWith("/api/") && path.startsWith("api/")) {
+            path = path.substring(4);
+        }
+        return baseUrl + path;
     }
 }
