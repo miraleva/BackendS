@@ -7,7 +7,7 @@ import com.santsg.tourvisio.chat.SearchCriteriaExtractor;
 import com.santsg.tourvisio.client.AIProviderClient;
 import com.santsg.tourvisio.dto.ChatRequest;
 import com.santsg.tourvisio.dto.ChatResponse;
-import com.santsg.tourvisio.dto.ChatSearchResponse;
+import com.santsg.tourvisio.dto.FlightSearchRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -164,34 +164,34 @@ public class ChatOrchestrationService {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * Tüm kriterler tamamlandığında ilgili arama servisini çağırır.
+     * Tüm kriterler tamamlandığında döner.
      */
     private ChatResponse readyToSearchResponse(String sessionId,
                                                String intent,
                                                SearchCriteria criteria) {
 
-        ChatSearchResponse searchResponse;
+        String label = "HOTEL_SEARCH".equals(intent) ? "Otel" : "Uçak";
+        String reply;
+
         if ("HOTEL_SEARCH".equals(intent)) {
-            searchResponse = hotelSearchService.searchFromCriteria(criteria);
-        } else if ("FLIGHT_SEARCH".equals(intent)) {
-            searchResponse = flightSearchService.searchFromCriteria(criteria);
+            com.santsg.tourvisio.dto.hotel.HotelSearchRequest hotelRequest = criteria.toHotelSearchRequestDto();
+            log.info("[Orchestration] HotelSearchRequest oluşturuldu ve hazırlandı: {}", hotelRequest);
+            reply = "Otel araması için gerekli bilgiler tamamlandı. Arama servisine yönlendiriliyor. HotelSearchRequest hazırlandı.";
         } else {
-            searchResponse = ChatSearchResponse.builder()
-                    .reply("Arama türü tanımlanamadı.")
-                    .searchType(intent)
-                    .success(false)
-                    .results(List.of())
-                    .build();
+            FlightSearchRequest flightRequest = criteria.toFlightSearchRequest();
+            log.info("[Orchestration] FlightSearchRequest oluşturuldu ve hazırlandı: {}", flightRequest);
+            reply = "Uçak araması için gerekli bilgiler tamamlandı. Arama servisine yönlendiriliyor. FlightSearchRequest hazırlandı.";
         }
 
+        // Aramanın gerçekten başladığı anlama gelir
+        sessionStore.remove(sessionId);
+
         return ChatResponse.builder()
-                .reply(searchResponse.getReply())
+                .reply(reply)
                 .sessionId(sessionId)
                 .searchType(intent)
                 .missingFields(List.of())
                 .chatStatus("ACTIVE")
-                .success(searchResponse.isSuccess())
-                .results(searchResponse.getResults())
                 .build();
     }
 

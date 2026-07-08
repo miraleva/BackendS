@@ -134,4 +134,53 @@ class TourvisioBackendApplicationTests {
 				.andExpect(jsonPath("$.status", equalTo(404)))
 				.andExpect(jsonPath("$.message", containsString("not found")));
 	}
+
+	@Test
+	void testHotelSearchMultiTurnChatWorkflow() throws Exception {
+		// Turn 1: Initial query
+		ChatRequest request1 = new ChatRequest("Antalya'da 2 yetişkin için 15 Temmuz girişli 5 gece otel bakıyorum", "hotel-session-123");
+		mockMvc.perform(post("/api/chat/message")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(request1)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.searchType", equalTo("HOTEL_SEARCH")))
+				.andExpect(jsonPath("$.missingFields", hasItem("para birimi")))
+				.andExpect(jsonPath("$.chatStatus", equalTo("ACTIVE")));
+
+		// Turn 2: Follow up with missing fields
+		ChatRequest request2 = new ChatRequest("20 Temmuz çıkış olsun, para birimi TL", "hotel-session-123");
+		mockMvc.perform(post("/api/chat/message")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(request2)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.searchType", equalTo("HOTEL_SEARCH")))
+				.andExpect(jsonPath("$.missingFields", hasSize(0)))
+				.andExpect(jsonPath("$.reply", containsString("HotelSearchRequest hazırlandı")))
+				.andExpect(jsonPath("$.chatStatus", equalTo("ACTIVE")));
+	}
+
+	@Test
+	void testFlightSearchMultiTurnChatWorkflow() throws Exception {
+		// Turn 1: Initial query
+		ChatRequest request1 = new ChatRequest("İstanbul'dan Ankara'ya 15 Temmuz'da uçak bakıyorum", "flight-session-123");
+		mockMvc.perform(post("/api/chat/message")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(request1)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.searchType", equalTo("FLIGHT_SEARCH")))
+				.andExpect(jsonPath("$.missingFields", hasItem("para birimi")))
+				.andExpect(jsonPath("$.missingFields", hasItem("yolcu sayısı")))
+				.andExpect(jsonPath("$.chatStatus", equalTo("ACTIVE")));
+
+		// Turn 2: Follow up
+		ChatRequest request2 = new ChatRequest("Tek yön olsun, 2 yolcu, para birimi TL", "flight-session-123");
+		mockMvc.perform(post("/api/chat/message")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(request2)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.searchType", equalTo("FLIGHT_SEARCH")))
+				.andExpect(jsonPath("$.missingFields", hasSize(0)))
+				.andExpect(jsonPath("$.reply", containsString("FlightSearchRequest hazırlandı")))
+				.andExpect(jsonPath("$.chatStatus", equalTo("ACTIVE")));
+	}
 }
