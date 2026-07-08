@@ -35,11 +35,7 @@ public class HotelSearchRequest {
     private Integer childCount;
     private List<Integer> childAges;
     private Integer roomCount;
-<<<<<<< HEAD
-    private String nationality;  // e.g., "TR", "DE"
-=======
     private String nationality; // e.g., "TR", "DE"
->>>>>>> 34740d24e8d256b34bad26dc32a4569e2b91c759
 
     // Additional optional filters
     private String region;
