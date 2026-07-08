@@ -4,7 +4,9 @@ import com.santsg.tourvisio.config.TourVisioConfig;
 import com.santsg.tourvisio.dto.HotelSearchRequest;
 import com.santsg.tourvisio.dto.HotelSearchResponseItem;
 import com.santsg.tourvisio.dto.tourvisio.*;
+import com.santsg.tourvisio.exception.TourVisioAuthException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -19,111 +21,241 @@ import java.util.stream.Collectors;
  * <p>Entegrasyon Akışı:</p>
  * <ol>
  *   <li>{@link TourVisioAuthService} ile bearer token alınır.</li>
- *   <li>Kullanıcının locationOrHotelName bilgisi /api/productservice/getarrivalautocomplete endpointine gönderilir.</li>
- *   <li>Autocomplete yanıtı içinden şehir/otel ID'si çözümlenir.</li>
+ *   <li>locationOrHotelName ile /api/productservice/getarrivalautocomplete endpointine POST atılır.</li>
+ *   <li>Autocomplete yanıtından location ID ve type çözümlenir.</li>
  *   <li>Çözümlenen ID ile /api/productservice/pricesearch endpointine istek atılır.</li>
  *   <li>Dönen TourVisio response'u {@link HotelSearchResponseItem} DTO'suna normalize edilir.</li>
  * </ol>
+ *
+ * <p><strong>Mock mode false iken asla mock data dönmez.</strong>
+ * Hata durumlarında anlaşılır exception fırlatılır.</p>
  */
 @Component
 @Slf4j
 public class TourVisioHotelApiClient {
 
     private static final String AUTOCOMPLETE_PATH = "/api/productservice/getarrivalautocomplete";
-    private static final String HOTEL_SEARCH_PATH = "/api/productservice/pricesearch";
+    private static final String PRICE_SEARCH_PATH = "/api/productservice/pricesearch";
 
     private final TourVisioConfig config;
     private final TourVisioAuthService authService;
     private final RestTemplate restTemplate;
 
     public TourVisioHotelApiClient(TourVisioConfig config,
-                                   TourVisioAuthService authService) {
+                                   TourVisioAuthService authService,
+                                   @Qualifier("tourVisioRestTemplate") RestTemplate restTemplate) {
         this.config = config;
         this.authService = authService;
-        this.restTemplate = new RestTemplate();
+        this.restTemplate = restTemplate;
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Ana arama metodu
+    // ─────────────────────────────────────────────────────────────────────────
+
     public List<HotelSearchResponseItem> searchHotels(HotelSearchRequest request) {
-        if (config.isMockMode() || !config.isConfigured()) {
-            log.info("[HotelApiClient] Mock mod aktif veya credential eksik — mock data dönülüyor.");
+        // ── Mock mod ──
+        if (config.isMockMode()) {
+            log.info("[HotelApiClient] Mock mod aktif — mock data dönülüyor.");
             return generateMockHotels(request);
         }
 
+        // ── Credential kontrolü ──
+        if (!config.isConfigured()) {
+            throw new TourVisioApiException(
+                    "TourVisio API bağlantısı yapılandırılmamış. " +
+                    "TOURVISIO_BASE_URL, TOURVISIO_AGENCY, TOURVISIO_USERNAME, TOURVISIO_PASSWORD " +
+                    "environment variable'larını kontrol edin.");
+        }
+
+        // ── Token al ──
+        String token;
         try {
-            String token = authService.getToken();
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("Authorization", "Bearer " + token);
+            token = authService.getToken();
+            log.info("[HotelApiClient] TourVisio token başarıyla alındı.");
+        } catch (TourVisioAuthException e) {
+            throw new TourVisioApiException("TourVisio'ya giriş yapılamadı: " + e.getMessage(), e);
+        }
 
-            // 1. GetArrivalAutocomplete
-            String autocompleteUrl = config.getBaseUrl() + AUTOCOMPLETE_PATH;
-            TourVisioAutocompleteRequest autocompleteReq = TourVisioRequestMapper.toAutocompleteRequest(request);
-            HttpEntity<TourVisioAutocompleteRequest> autocompleteEntity = new HttpEntity<>(autocompleteReq, headers);
+        HttpHeaders headers = createAuthHeaders(token);
 
-            log.info("[HotelApiClient] Autocomplete isteği gönderiliyor: {}", autocompleteUrl);
-            ResponseEntity<TourVisioAutocompleteResponse> autocompleteRes = restTemplate.exchange(
-                    autocompleteUrl,
-                    HttpMethod.POST,
-                    autocompleteEntity,
-                    TourVisioAutocompleteResponse.class
-            );
+        // ── 1. Autocomplete — location ID çözümle ──
+        AutocompleteResult autoResult = resolveLocation(request.getLocationOrHotelName(), headers);
+        log.info("[HotelApiClient] Autocomplete sonucu: id={}, type={}, name={}",
+                autoResult.id, autoResult.type, autoResult.name);
 
-            String resolvedId = null;
-            if (autocompleteRes.getStatusCode().is2xxSuccessful() && autocompleteRes.getBody() != null
-                    && autocompleteRes.getBody().getBody() != null
-                    && autocompleteRes.getBody().getBody().getItems() != null
-                    && !autocompleteRes.getBody().getBody().getItems().isEmpty()) {
+        // ── 2. PriceSearch — otel fiyat araması ──
+        TourVisioHotelSearchRequest searchReq =
+                TourVisioRequestMapper.toHotelSearchRequest(request, autoResult.id, autoResult.type);
 
-                // Get first matched city or hotel ID
-                TourVisioAutocompleteResponse.AutocompleteItem firstItem = autocompleteRes.getBody().getBody().getItems().get(0);
-                if (firstItem.getCity() != null) {
-                    resolvedId = firstItem.getCity().getId();
-                    log.info("[HotelApiClient] Bulunan City ID: {}", resolvedId);
-                } else if (firstItem.getHotel() != null) {
-                    resolvedId = firstItem.getHotel().getId();
-                    log.info("[HotelApiClient] Bulunan Hotel ID: {}", resolvedId);
+        log.info("[HotelApiClient] PriceSearch isteği gönderiliyor: checkIn={}, night={}, location={}, adults={}",
+                searchReq.getCheckIn(), searchReq.getNight(),
+                autoResult.name, request.getAdultCount());
+
+        String searchUrl = config.getBaseUrl() + PRICE_SEARCH_PATH;
+        HttpEntity<TourVisioHotelSearchRequest> searchEntity = new HttpEntity<>(searchReq, headers);
+
+        ResponseEntity<TourVisioHotelSearchResponse> searchRes;
+        try {
+            searchRes = restTemplate.exchange(
+                    searchUrl, HttpMethod.POST, searchEntity, TourVisioHotelSearchResponse.class);
+        } catch (Exception e) {
+            throw new TourVisioApiException(
+                    "TourVisio PriceSearch isteği başarısız: " + e.getMessage(), e);
+        }
+
+        // ── 3. Response'u normalize et ──
+        return normalizeResponse(searchRes, request.getCurrency());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Autocomplete
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private AutocompleteResult resolveLocation(String query, HttpHeaders headers) {
+        String url = config.getBaseUrl() + AUTOCOMPLETE_PATH;
+
+        TourVisioAutocompleteRequest req = TourVisioAutocompleteRequest.builder()
+                .productType(2)
+                .query(query)
+                .culture("tr-TR")
+                .build();
+
+        HttpEntity<TourVisioAutocompleteRequest> entity = new HttpEntity<>(req, headers);
+
+        log.info("[HotelApiClient] Autocomplete isteği: query='{}', url={}", query, url);
+
+        ResponseEntity<TourVisioAutocompleteResponse> res;
+        try {
+            res = restTemplate.exchange(url, HttpMethod.POST, entity, TourVisioAutocompleteResponse.class);
+        } catch (Exception e) {
+            throw new TourVisioApiException(
+                    "TourVisio Autocomplete isteği başarısız (query='" + query + "'): " + e.getMessage(), e);
+        }
+
+        if (!res.getStatusCode().is2xxSuccessful() || res.getBody() == null) {
+            throw new TourVisioApiException(
+                    "TourVisio Autocomplete yanıtı başarısız. Status: " + res.getStatusCode());
+        }
+
+        TourVisioAutocompleteResponse.Body body = res.getBody().getBody();
+        if (body == null || body.getItems() == null || body.getItems().isEmpty()) {
+            throw new TourVisioApiException(
+                    "'" + query + "' için TourVisio Autocomplete'de sonuç bulunamadı. " +
+                    "Lütfen geçerli bir şehir veya otel adı girin.");
+        }
+
+        // İlk sonuçtan ID çöz
+        TourVisioAutocompleteResponse.AutocompleteItem item = body.getItems().get(0);
+        int itemType = item.getType();
+
+        // City ID'si varsa onu kullan, yoksa state, en son country
+        if (item.getCity() != null && item.getCity().getId() != null) {
+            return new AutocompleteResult(item.getCity().getId(), itemType, item.getCity().getName());
+        }
+        if (item.getState() != null && item.getState().getId() != null) {
+            return new AutocompleteResult(item.getState().getId(), itemType, item.getState().getName());
+        }
+        if (item.getHotel() != null && item.getHotel().getId() != null) {
+            return new AutocompleteResult(item.getHotel().getId(), itemType, item.getHotel().getName());
+        }
+        if (item.getCountry() != null && item.getCountry().getId() != null) {
+            return new AutocompleteResult(item.getCountry().getId(), itemType, item.getCountry().getName());
+        }
+
+        throw new TourVisioApiException(
+                "'" + query + "' için Autocomplete sonucu alındı ama ID çözümlenemedi.");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Response normalization
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private List<HotelSearchResponseItem> normalizeResponse(
+            ResponseEntity<TourVisioHotelSearchResponse> searchRes, String fallbackCurrency) {
+
+        if (!searchRes.getStatusCode().is2xxSuccessful() || searchRes.getBody() == null) {
+            throw new TourVisioApiException(
+                    "TourVisio PriceSearch yanıtı başarısız. Status: " + searchRes.getStatusCode());
+        }
+
+        TourVisioHotelSearchResponse.Body body = searchRes.getBody().getBody();
+        if (body == null || body.getHotels() == null || body.getHotels().isEmpty()) {
+            log.info("[HotelApiClient] TourVisio PriceSearch sonuç döndü ama otel bulunamadı.");
+            return new ArrayList<>();
+        }
+
+        log.info("[HotelApiClient] TourVisio {} otel sonucu döndü.", body.getHotels().size());
+
+        return body.getHotels().stream()
+                .map(hotel -> mapHotelItem(hotel, fallbackCurrency))
+                .collect(Collectors.toList());
+    }
+
+    private HotelSearchResponseItem mapHotelItem(
+            TourVisioHotelSearchResponse.HotelItem hotel, String fallbackCurrency) {
+
+        // Region: city > town > address
+        String region = "";
+        if (hotel.getCity() != null && hotel.getCity().getName() != null) {
+            region = hotel.getCity().getName();
+        } else if (hotel.getTown() != null && hotel.getTown().getName() != null) {
+            region = hotel.getTown().getName();
+        } else if (hotel.getAddress() != null) {
+            region = hotel.getAddress();
+        }
+
+        // Offer bilgileri (en iyi teklif = ilk offer)
+        double price = 0.0;
+        String currency = fallbackCurrency != null ? fallbackCurrency : "TRY";
+        String pensionType = "";
+        boolean available = false;
+
+        if (hotel.getOffers() != null && !hotel.getOffers().isEmpty()) {
+            TourVisioHotelSearchResponse.Offer firstOffer = hotel.getOffers().get(0);
+            available = true; // Offer varsa müsait demektir
+
+            if (firstOffer.getPrice() != null) {
+                price = firstOffer.getPrice().getAmount();
+                if (firstOffer.getPrice().getCurrency() != null) {
+                    currency = firstOffer.getPrice().getCurrency();
                 }
             }
 
-            // 2. PriceSearch
-            String searchUrl = config.getBaseUrl() + HOTEL_SEARCH_PATH;
-            TourVisioHotelSearchRequest searchReq = TourVisioRequestMapper.toHotelSearchRequest(request, resolvedId);
-            HttpEntity<TourVisioHotelSearchRequest> searchEntity = new HttpEntity<>(searchReq, headers);
-
-            log.info("[HotelApiClient] Otel arama isteği gönderiliyor (resolvedId={}): {}", searchUrl, resolvedId);
-            ResponseEntity<TourVisioHotelSearchResponse> searchRes = restTemplate.exchange(
-                    searchUrl,
-                    HttpMethod.POST,
-                    searchEntity,
-                    TourVisioHotelSearchResponse.class
-            );
-
-            if (searchRes.getStatusCode().is2xxSuccessful() && searchRes.getBody() != null
-                    && searchRes.getBody().getHotels() != null) {
-                return searchRes.getBody().getHotels().stream()
-                        .map(tvItem -> HotelSearchResponseItem.builder()
-                                .name(tvItem.getName())
-                                .region(tvItem.getRegion())
-                                .stars(tvItem.getStars())
-                                .price(tvItem.getPrice())
-                                .currency(tvItem.getCurrency())
-                                .pensionType(tvItem.getPensionType())
-                                .available(tvItem.isAvailable())
-                                .build())
-                        .collect(Collectors.toList());
-            } else {
-                log.warn("[HotelApiClient] Otel arama başarısız (status={}) — mock veriye düşülüyor.", searchRes.getStatusCode());
-                return generateMockHotels(request);
+            // Board (pansiyon) bilgisi — rooms[0].boardName
+            if (firstOffer.getRooms() != null && !firstOffer.getRooms().isEmpty()) {
+                TourVisioHotelSearchResponse.Room firstRoom = firstOffer.getRooms().get(0);
+                if (firstRoom.getBoardName() != null) {
+                    pensionType = firstRoom.getBoardName();
+                }
             }
-
-        } catch (TourVisioAuthService.TourVisioAuthException e) {
-            log.error("[HotelApiClient] TourVisio auth hatası — mock veriye düşülüyor: {}", e.getMessage());
-            return generateMockHotels(request);
-        } catch (Exception e) {
-            log.error("[HotelApiClient] TourVisio API entegrasyon hatası — mock veriye düşülüyor: {}", e.getMessage());
-            return generateMockHotels(request);
         }
+
+        return HotelSearchResponseItem.builder()
+                .name(hotel.getName())
+                .region(region)
+                .stars(hotel.getStars())
+                .price(price)
+                .currency(currency)
+                .pensionType(pensionType)
+                .available(available)
+                .build();
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private HttpHeaders createAuthHeaders(String token) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("Authorization", "Bearer " + token);
+        return headers;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Mock data (yalnızca mock-mode=true iken)
+    // ─────────────────────────────────────────────────────────────────────────
 
     private List<HotelSearchResponseItem> generateMockHotels(HotelSearchRequest request) {
         List<HotelSearchResponseItem> hotels = new ArrayList<>();
@@ -131,72 +263,67 @@ public class TourVisioHotelApiClient {
         String currency = request.getCurrency();
         int adults = request.getAdultCount();
 
-        String locationLower = location != null ? location.toLowerCase() : "";
+        hotels.add(HotelSearchResponseItem.builder()
+                .name("Rixos Premium Belek (MOCK)")
+                .region(location)
+                .stars(5)
+                .price(4500.0 * adults)
+                .currency(currency)
+                .pensionType("Ultra All Inclusive")
+                .available(true)
+                .build());
 
-        if (locationLower.contains("antalya") || locationLower.contains("alanya") ||
-                locationLower.contains("bodrum") || locationLower.contains("marmaris") ||
-                locationLower.contains("fethiye") || locationLower.contains("izmir")) {
+        hotels.add(HotelSearchResponseItem.builder()
+                .name("Sheraton Grand Hotel (MOCK)")
+                .region(location)
+                .stars(5)
+                .price(3200.0 * adults)
+                .currency(currency)
+                .pensionType("All Inclusive")
+                .available(true)
+                .build());
 
-            hotels.add(HotelSearchResponseItem.builder()
-                    .name("Rixos Premium Belek")
-                    .region(location)
-                    .stars(5)
-                    .price(4500.0 * adults)
-                    .currency(currency)
-                    .pensionType("Ultra All Inclusive")
-                    .available(true)
-                    .build());
+        hotels.add(HotelSearchResponseItem.builder()
+                .name("Sunpark Beach Resort (MOCK)")
+                .region(location)
+                .stars(4)
+                .price(1800.0 * adults)
+                .currency(currency)
+                .pensionType("Half Board")
+                .available(true)
+                .build());
 
-            hotels.add(HotelSearchResponseItem.builder()
-                    .name("Sheraton Grand Hotel")
-                    .region(location)
-                    .stars(5)
-                    .price(3200.0 * adults)
-                    .currency(currency)
-                    .pensionType("All Inclusive")
-                    .available(true)
-                    .build());
-
-            hotels.add(HotelSearchResponseItem.builder()
-                    .name("Sunpark Beach Resort")
-                    .region(location)
-                    .stars(4)
-                    .price(1800.0 * adults)
-                    .currency(currency)
-                    .pensionType("Half Board")
-                    .available(true)
-                    .build());
-        } else {
-            hotels.add(HotelSearchResponseItem.builder()
-                    .name("Grand Central Hotel")
-                    .region(location)
-                    .stars(4)
-                    .price(2500.0 * adults)
-                    .currency(currency)
-                    .pensionType("Bed & Breakfast")
-                    .available(true)
-                    .build());
-
-            hotels.add(HotelSearchResponseItem.builder()
-                    .name("Plaza Boutique Hotel")
-                    .region(location)
-                    .stars(5)
-                    .price(3800.0 * adults)
-                    .currency(currency)
-                    .pensionType("Bed & Breakfast")
-                    .available(true)
-                    .build());
-
-            hotels.add(HotelSearchResponseItem.builder()
-                    .name("Cozy Star Pension")
-                    .region(location)
-                    .stars(3)
-                    .price(950.0 * adults)
-                    .currency(currency)
-                    .pensionType("Room Only")
-                    .available(false)
-                    .build());
-        }
         return hotels;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Yardımcı sınıflar
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Autocomplete çözümleme sonucu */
+    private static class AutocompleteResult {
+        final String id;
+        final int type;
+        final String name;
+
+        AutocompleteResult(String id, int type, String name) {
+            this.id = id;
+            this.type = type;
+            this.name = name;
+        }
+    }
+
+    /**
+     * TourVisio API hata sınıfı.
+     * Mock mod false iken hata olursa bu exception fırlatılır.
+     */
+    public static class TourVisioApiException extends RuntimeException {
+        public TourVisioApiException(String message) {
+            super(message);
+        }
+
+        public TourVisioApiException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 }

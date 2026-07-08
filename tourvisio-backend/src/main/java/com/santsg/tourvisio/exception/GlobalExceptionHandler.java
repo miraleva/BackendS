@@ -1,6 +1,7 @@
 package com.santsg.tourvisio.exception;
 
 import com.santsg.tourvisio.dto.ErrorResponse;
+import com.santsg.tourvisio.exception.TourVisioAuthException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -22,6 +23,17 @@ public class GlobalExceptionHandler {
                 .message(ex.getMessage())
                 .build();
         return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
+    }
+
+    @ExceptionHandler(TourVisioAuthException.class)
+    public ResponseEntity<ErrorResponse> handleTourVisioAuth(TourVisioAuthException ex) {
+        ErrorResponse response = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.SERVICE_UNAVAILABLE.value())
+                .error(HttpStatus.SERVICE_UNAVAILABLE.getReasonPhrase())
+                .message("TourVisio API kimlik doğrulaması başarısız: " + ex.getMessage())
+                .build();
+        return new ResponseEntity<>(response, HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

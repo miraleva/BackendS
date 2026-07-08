@@ -234,15 +234,15 @@ public class SearchCriteriaExtractor {
     private void extractHotelDates(String lower, SearchCriteria c) {
         Matcher m = DATE_WITH_LABEL_PATTERN.matcher(lower);
 
-        LocalDate firstDate  = null;
-        LocalDate secondDate = null;
-        boolean firstIsCheckIn  = false;
-        boolean firstIsCheckOut = false;
+        LocalDate firstDate      = null;
+        LocalDate secondDate     = null;
+        boolean firstIsCheckIn   = false;
+        boolean firstIsCheckOut  = false;
 
         while (m.find()) {
-            int day       = Integer.parseInt(m.group(1));
-            String month  = m.group(2).toLowerCase(TR);
-            String label  = m.group(3) != null ? m.group(3).toLowerCase(TR) : "";
+            int day      = Integer.parseInt(m.group(1));
+            String month = m.group(2).toLowerCase(TR);
+            String label = m.group(3) != null ? m.group(3).toLowerCase(TR) : "";
 
             LocalDate date = buildDate(day, month);
             if (date == null) continue;
@@ -251,21 +251,34 @@ public class SearchCriteriaExtractor {
             boolean isCheckOut = label.matches("çıkış|cikis|checkout|bitiş|bitis");
 
             if (firstDate == null) {
-                firstDate      = date;
+                firstDate       = date;
                 firstIsCheckIn  = isCheckIn;
                 firstIsCheckOut = isCheckOut;
             } else {
                 secondDate = date;
-                // İkinci tarihin label'ına göre ata
+
+                // İkinci tarihi label'ına göre ata
                 if (isCheckOut || (!isCheckIn && firstIsCheckIn)) {
                     c.setCheckOutDate(date);
                 } else if (isCheckIn) {
                     c.setCheckInDate(date);
                 }
+
+                // BUG FIX: İkinci tarih işlenince firstDate'yi de ata
+                // "15 Temmuz giriş 20 Temmuz çıkış" → firstDate=15Tem(checkIn), secondDate=20Tem(checkOut)
+                // Döngüde checkOutDate set edilir ama checkInDate hâlâ null kalır;
+                // sonraki guard'lar checkOutDate dolu olduğu için çalışmaz.
+                if (c.getCheckInDate() == null && firstIsCheckIn) {
+                    c.setCheckInDate(firstDate);
+                } else if (c.getCheckOutDate() == null && firstIsCheckOut) {
+                    c.setCheckOutDate(firstDate);
+                }
             }
         }
 
-        // Tek tarih + "5 gece" kombinasyonu
+        // ── Tek tarih senaryoları ──────────────────────────────────────────────
+
+        // Tek tarih + "5 gece" kombinasyonu  (ör. "15 Temmuz girişli 5 gece")
         if (firstDate != null && c.getCheckInDate() == null && c.getCheckOutDate() == null) {
             if (firstIsCheckOut) {
                 c.setCheckOutDate(firstDate);
@@ -275,22 +288,34 @@ public class SearchCriteriaExtractor {
 
                 // Gece sayısı varsa checkOut hesapla
                 Matcher nm = NIGHT_PATTERN.matcher(lower);
-                if (nm.find() && c.getCheckOutDate() == null) {
+                if (nm.find()) {
                     int nights = Integer.parseInt(nm.group(1));
                     c.setCheckOutDate(firstDate.plusDays(nights));
                 }
             }
         }
 
-        // İki tarih bulundu ama label kontrolü yapılmamış
+        // ── İki tarih bulundu ama ikisi de label'sız ─────────────────────────
         if (firstDate != null && secondDate != null
                 && c.getCheckInDate() == null && c.getCheckOutDate() == null) {
             c.setCheckInDate(firstDate.isBefore(secondDate) ? firstDate : secondDate);
             c.setCheckOutDate(firstDate.isBefore(secondDate) ? secondDate : firstDate);
         }
 
-        // Sadece ilk tarih, sadece label ile atandıysa
-        if (firstDate != null && c.getCheckInDate() == null && c.getCheckOutDate() == null) {
+        // ── İki tarihten sadece biri label'lıydı; diğeri kalan slot'a gider ──
+        if (firstDate != null && secondDate != null) {
+            if (c.getCheckInDate() == null && c.getCheckOutDate() != null) {
+                // checkOut doldu ama checkIn boş — firstDate muhtemelen giriş
+                c.setCheckInDate(firstDate.isBefore(c.getCheckOutDate()) ? firstDate : secondDate);
+            } else if (c.getCheckOutDate() == null && c.getCheckInDate() != null) {
+                // checkIn doldu ama checkOut boş — secondDate muhtemelen çıkış
+                c.setCheckOutDate(secondDate.isAfter(c.getCheckInDate()) ? secondDate : firstDate);
+            }
+        }
+
+        // ── Tek tarih, label verilmemişse checkIn varsayılan ─────────────────
+        if (firstDate != null && secondDate == null
+                && c.getCheckInDate() == null && c.getCheckOutDate() == null) {
             c.setCheckInDate(firstDate);
         }
     }

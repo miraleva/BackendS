@@ -1,56 +1,65 @@
 package com.santsg.tourvisio.client;
 
 import com.santsg.tourvisio.config.TourVisioConfig;
+import com.santsg.tourvisio.dto.tourvisio.TourVisioLoginRequest;
+import com.santsg.tourvisio.dto.tourvisio.TourVisioLoginResponse;
+import com.santsg.tourvisio.exception.TourVisioAuthException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Instant;
-import java.util.Map;
 
 /**
  * TourVisio authentication servisi.
  *
- * <p>TourVisio API'si her isteğe Bearer token ister. Token, login endpointinden
- * agency/kullanıcı/şifre bilgileriyle alınır ve süresi dolana kadar cache'lenir.</p>
- *
  * <h3>Akış</h3>
  * <ol>
  *   <li>{@link #getToken()} çağrılır.</li>
- *   <li>Geçerli ve süresi dolmamış bir token varsa direkt döner.</li>
- *   <li>Yoksa {@link #login()} ile yeni token alınır.</li>
+ *   <li>Geçerli ve süresi dolmamış bir token cache'de varsa direkt döner.</li>
+ *   <li>Yoksa {@link #login()} ile POST /api/authenticationservice/login çağrılır.</li>
+ *   <li>Response'daki {@code body.token} değeri cache'lenir ve döner.</li>
  * </ol>
  *
- * <p><strong>TODO:</strong> Gerçek TourVisio login endpoint path'i dokümandan
- * doğrulanınca {@code LOGIN_PATH} sabiti güncellenmelidir.</p>
+ * <h3>Token yenileme</h3>
+ * <p>Token süresi dolduğunda (varsayılan 55 dakika) bir sonraki {@link #getToken()}
+ * çağrısında otomatik olarak yeniden login yapılır.
+ * 401 alan client'lar {@link #invalidateToken()} çağırarak erkenden yenileyebilir.</p>
+ *
+ * <h3>Thread safety</h3>
+ * <p>{@link #getToken()} ve {@link #invalidateToken()} {@code synchronized} olduğundan
+ * birden fazla thread aynı anda login yapmaz.</p>
  */
 @Service
 @Slf4j
 public class TourVisioAuthService {
 
-    /**
-     * TourVisio login endpoint path'i.
-     * TODO: Doküman gelince doğru path buraya yazılacak.
-     *       Örnek: "/api/authenticationservice/login"
-     */
+    /** TourVisio login endpoint path'i — TourVisio dokümantasyonuna göre. */
     private static final String LOGIN_PATH = "/api/authenticationservice/login";
 
-    /** Token'ın geçerlilik süresi (güvenlik marjıyla). Varsayılan 55 dakika. */
-    private static final long TOKEN_TTL_SECONDS = 55 * 60;
+    /**
+     * Token'ın geçerlilik süresi — güvenlik marjı olarak 55 dakika kullanılır
+     * (TourVisio token'ı genellikle 60 dakika geçerlidir).
+     */
+    private static final long TOKEN_TTL_SECONDS = 55 * 60L;
 
     private final TourVisioConfig config;
     private final RestTemplate restTemplate;
 
-    /** Cache'lenmiş token */
+    /** Cache'lenmiş token (null ise henüz alınmamış veya süresi dolmuş) */
     private volatile String cachedToken;
 
     /** Token'ın alındığı an (epoch second) */
     private volatile long tokenObtainedAt;
 
-    public TourVisioAuthService(TourVisioConfig config) {
+    public TourVisioAuthService(TourVisioConfig config,
+                                @Qualifier("tourVisioRestTemplate") RestTemplate restTemplate) {
         this.config = config;
-        this.restTemplate = new RestTemplate();
+        this.restTemplate = restTemplate;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -60,22 +69,26 @@ public class TourVisioAuthService {
     /**
      * Geçerli bir Bearer token döner. Süresi dolmuşsa otomatik yeniler.
      *
-     * @return Bearer token string'i (başında "Bearer " yok)
+     * @return Bearer token string'i (başında "Bearer " prefix'i yok)
      * @throws TourVisioAuthException login başarısız olursa
      */
     public synchronized String getToken() {
         if (cachedToken != null && !isExpired()) {
+            log.debug("[TourVisioAuth] Cache'den geçerli token döndürülüyor.");
             return cachedToken;
         }
+        log.info("[TourVisioAuth] Token yok veya süresi dolmuş — yeniden login yapılıyor.");
         return login();
     }
 
     /**
      * Cache'lenmiş token'ı siler; bir sonraki {@link #getToken()} çağrısında
      * yeniden login yapılmasını zorlar.
+     *
+     * <p>Kullanım: API'den 401 Unauthorized alındığında çağrılır.</p>
      */
     public synchronized void invalidateToken() {
-        log.info("[TourVisioAuth] Token invalidated — next call will re-login.");
+        log.info("[TourVisioAuth] Token geçersiz kılındı — bir sonraki çağrıda yeniden login yapılacak.");
         cachedToken = null;
         tokenObtainedAt = 0;
     }
@@ -85,85 +98,67 @@ public class TourVisioAuthService {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * TourVisio login endpointine istek atar, dönen token'ı cache'ler.
+     * TourVisio login endpointine POST atar, dönen {@code body.token} değerini cache'ler.
+     *
+     * @return yeni token string'i
+     * @throws TourVisioAuthException login başarısız olursa
      */
     private String login() {
         String url = config.getBaseUrl() + LOGIN_PATH;
 
-        log.info("[TourVisioAuth] Logging in to TourVisio: {}", url);
+        log.info("[TourVisioAuth] TourVisio login isteği gönderiliyor: POST {}", url);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        // TourVisio login body
-        Map<String, String> body = Map.of(
-                "Agency", config.getAgency(),
-                "User",   config.getUsername(),
-                "Password", config.getPassword()
-        );
+        TourVisioLoginRequest loginRequest = TourVisioLoginRequest.builder()
+                .agency(config.getAgency())
+                .user(config.getUsername())
+                .password(config.getPassword())
+                .build();
 
-        HttpEntity<Map<String, String>> entity = new HttpEntity<>(body, headers);
+        HttpEntity<TourVisioLoginRequest> entity = new HttpEntity<>(loginRequest, headers);
 
         try {
-            ResponseEntity<Map> response = restTemplate.exchange(
+            ResponseEntity<TourVisioLoginResponse> response = restTemplate.exchange(
                     url,
                     HttpMethod.POST,
                     entity,
-                    Map.class
+                    TourVisioLoginResponse.class
             );
 
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
                 throw new TourVisioAuthException(
-                        "Login failed with status: " + response.getStatusCode());
+                        "TourVisio login başarısız — HTTP status: " + response.getStatusCode());
             }
 
-            Object tokenObj = extractToken(response.getBody());
-            if (tokenObj == null) {
+            String token = response.getBody().extractToken();
+            if (token == null) {
                 throw new TourVisioAuthException(
-                        "Login response does not contain a token field. Body: " + response.getBody());
+                        "TourVisio login yanıtı body.token içermiyor. " +
+                        "Response body: " + response.getBody());
             }
 
-            cachedToken = tokenObj.toString();
+            cachedToken = token;
             tokenObtainedAt = Instant.now().getEpochSecond();
-            log.info("[TourVisioAuth] Login successful — token cached (TTL={}s).", TOKEN_TTL_SECONDS);
+            log.info("[TourVisioAuth] Login başarılı — token cache'lendi (TTL={}s).", TOKEN_TTL_SECONDS);
 
             return cachedToken;
 
         } catch (TourVisioAuthException e) {
             throw e;
+        } catch (HttpClientErrorException e) {
+            throw new TourVisioAuthException(
+                    "TourVisio login 4xx hatası (status=" + e.getStatusCode() +
+                    "): " + e.getResponseBodyAsString(), e);
+        } catch (HttpServerErrorException e) {
+            throw new TourVisioAuthException(
+                    "TourVisio login 5xx hatası (status=" + e.getStatusCode() +
+                    "): " + e.getResponseBodyAsString(), e);
         } catch (Exception e) {
-            throw new TourVisioAuthException("TourVisio login failed: " + e.getMessage(), e);
+            throw new TourVisioAuthException(
+                    "TourVisio login sırasında beklenmedik hata: " + e.getMessage(), e);
         }
-    }
-
-    /**
-     * Login response map'inden token değerini çıkarır.
-     * TourVisio farklı format döndürebilir; bilinen yapılar denenir.
-     */
-    @SuppressWarnings("unchecked")
-    private Object extractToken(Map<String, Object> responseBody) {
-        // Düz seviye: { "Token": "abc..." }
-        if (responseBody.containsKey("Token")) {
-            return responseBody.get("Token");
-        }
-        // Nested: { "Body": { "Token": "abc..." } }
-        Object bodyObj = responseBody.get("Body");
-        if (bodyObj instanceof Map) {
-            Map<String, Object> bodyMap = (Map<String, Object>) bodyObj;
-            if (bodyMap.containsKey("Token")) {
-                return bodyMap.get("Token");
-            }
-        }
-        // Küçük harfli alternatifler
-        if (responseBody.containsKey("token")) {
-            return responseBody.get("token");
-        }
-        Object bodyLower = responseBody.get("body");
-        if (bodyLower instanceof Map) {
-            Map<String, Object> bodyMap = (Map<String, Object>) bodyLower;
-            return bodyMap.get("token");
-        }
-        return null;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -172,22 +167,5 @@ public class TourVisioAuthService {
 
     private boolean isExpired() {
         return (Instant.now().getEpochSecond() - tokenObtainedAt) > TOKEN_TTL_SECONDS;
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Custom exception
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * TourVisio login hatası.
-     */
-    public static class TourVisioAuthException extends RuntimeException {
-        public TourVisioAuthException(String message) {
-            super(message);
-        }
-
-        public TourVisioAuthException(String message, Throwable cause) {
-            super(message, cause);
-        }
     }
 }

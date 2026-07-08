@@ -5,7 +5,9 @@ import com.santsg.tourvisio.dto.FlightSearchRequest;
 import com.santsg.tourvisio.dto.FlightSearchResponseItem;
 import com.santsg.tourvisio.dto.tourvisio.TourVisioFlightSearchRequest;
 import com.santsg.tourvisio.dto.tourvisio.TourVisioFlightSearchResponse;
+import com.santsg.tourvisio.exception.TourVisioAuthException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -40,10 +42,11 @@ public class TourVisioFlightApiClient {
     private final RestTemplate restTemplate;
 
     public TourVisioFlightApiClient(TourVisioConfig config,
-                                    TourVisioAuthService authService) {
+                                    TourVisioAuthService authService,
+                                    @Qualifier("tourVisioRestTemplate") RestTemplate restTemplate) {
         this.config = config;
         this.authService = authService;
-        this.restTemplate = new RestTemplate();
+        this.restTemplate = restTemplate;
     }
 
     public List<FlightSearchResponseItem> searchFlights(FlightSearchRequest request) {
@@ -115,7 +118,7 @@ public class TourVisioFlightApiClient {
                         response.getStatusCode());
                 return generateMockFlights(request);
             }
-        } catch (TourVisioAuthService.TourVisioAuthException e) {
+        } catch (TourVisioAuthException e) {
             log.error("[FlightApiClient] TourVisio auth hatası: {} — mock'a düşülüyor.", e.getMessage());
             return generateMockFlights(request);
         } catch (Exception e) {
