@@ -30,6 +30,8 @@ public class HotelSearchRequest {
     @NotBlank(message = "currency is required")
     private String currency;
 
+    private Integer childCount;
+
     // Additional optional filters
     private String region;
     private Double minPrice;

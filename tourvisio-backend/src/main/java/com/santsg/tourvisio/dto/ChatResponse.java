@@ -15,6 +15,8 @@ import java.util.List;
  *   <li>{@code sessionId}    – Oturum kimliği (yeni oluşturulduysa buradan okunur)</li>
  *   <li>{@code searchType}   – Algılanan arama türü: HOTEL_SEARCH | FLIGHT_SEARCH | UNKNOWN | OUT_OF_SCOPE</li>
  *   <li>{@code missingFields} – Aramayı tamamlamak için eksik olan parametreler</li>
+ *   <li>{@code success}      – Arama sonucu başarılı mı (sadece arama yapıldığında)</li>
+ *   <li>{@code results}      – Bulunan sonuçlar (otel veya uçak listesi)</li>
  * </ul>
  */
 @Data
@@ -42,4 +44,11 @@ public class ChatResponse {
 
     @Schema(description = "Oturum durumu: ACTIVE veya TERMINATED", example = "ACTIVE")
     private String chatStatus;
+
+    @Schema(description = "Arama başarılı mı? Sadece arama yapıldığında dolu gelir.", example = "true")
+    private Boolean success;
+
+    @Schema(description = "Bulunan sonuçların listesi (otel veya uçak)")
+    private List<?> results;
 }
+
