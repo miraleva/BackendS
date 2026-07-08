@@ -12,9 +12,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 /**
- * Guard‑rail that ensures the TourVisio API token never leaks in a response payload.
- * It inspects the serialized JSON and removes any field named "apiToken" or "token".
- * If such a field is found, a warning is logged and the field is stripped before the
+ * Guard‑rail that ensures the TourVisio API token never leaks in a response
+ * payload.
+ * It inspects the serialized JSON and removes any field named "apiToken" or
+ * "token".
+ * If such a field is found, a warning is logged and the field is stripped
+ * before the
  * response is sent to the client.
  */
 @Component
@@ -31,7 +34,7 @@ public class TokenLeakGuardAdvice implements ResponseBodyAdvice<Object> {
 
     @Override
     public Object beforeBodyWrite(Object body, MethodParameter returnType, MediaType selectedContentType,
-                                  Class selectedConverterType, ServerHttpRequest request, ServerHttpResponse response) {
+            Class selectedConverterType, ServerHttpRequest request, ServerHttpResponse response) {
         if (body == null) {
             return null;
         }
@@ -48,7 +51,8 @@ public class TokenLeakGuardAdvice implements ResponseBodyAdvice<Object> {
                 modified = true;
             }
             if (modified) {
-                logger.warn("Potential token field removed from response to prevent leakage: {} {}", request.getURI(), body.getClass().getSimpleName());
+                logger.warn("Potential token field removed from response to prevent leakage: {} {}", request.getURI(),
+                        body.getClass().getSimpleName());
                 return mapper.treeToValue(node, body.getClass());
             }
         } catch (Exception e) {
