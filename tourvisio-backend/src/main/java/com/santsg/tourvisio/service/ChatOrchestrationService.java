@@ -7,7 +7,7 @@ import com.santsg.tourvisio.chat.SearchCriteriaExtractor;
 import com.santsg.tourvisio.client.AIProviderClient;
 import com.santsg.tourvisio.dto.ChatRequest;
 import com.santsg.tourvisio.dto.ChatResponse;
-import com.santsg.tourvisio.dto.ChatSearchResponse;
+import com.santsg.tourvisio.dto.FlightSearchRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -20,16 +20,18 @@ import java.util.UUID;
  *
  * <h3>Çok-turlu konuşma akışı</h3>
  * <ol>
- *   <li>Session al / oluştur ({@link ChatSessionStore})</li>
- *   <li>Oturum sonlandırılmışsa erken çık</li>
- *   <li>Intent tespiti — <strong>aktif bir search session varsa intent atlanır</strong>;
- *       gelen mesaj takip yanıtı olarak işlenir</li>
- *   <li>OUT_OF_SCOPE yönetimi (aktif session yokken)</li>
- *   <li>UNKNOWN: kullanıcıya otel mi uçak mı sorusu</li>
- *   <li>Mesajdan arama kriterleri çıkar ({@link SearchCriteriaExtractor})</li>
- *   <li>Yeni kriterler önceki session kriterleri üzerine birleştir (merge)</li>
- *   <li>Eksik alan kontrolü ({@link CriteriaMissingFieldsService})</li>
- *   <li>Eksik varsa → kullanıcıya soru; tamamsa → arama servisine yönlendir (TODO)</li>
+ * <li>Session al / oluştur ({@link ChatSessionStore})</li>
+ * <li>Oturum sonlandırılmışsa erken çık</li>
+ * <li>Intent tespiti — <strong>aktif bir search session varsa intent
+ * atlanır</strong>;
+ * gelen mesaj takip yanıtı olarak işlenir</li>
+ * <li>OUT_OF_SCOPE yönetimi (aktif session yokken)</li>
+ * <li>UNKNOWN: kullanıcıya otel mi uçak mı sorusu</li>
+ * <li>Mesajdan arama kriterleri çıkar ({@link SearchCriteriaExtractor})</li>
+ * <li>Yeni kriterler önceki session kriterleri üzerine birleştir (merge)</li>
+ * <li>Eksik alan kontrolü ({@link CriteriaMissingFieldsService})</li>
+ * <li>Eksik varsa → kullanıcıya soru; tamamsa → arama servisine yönlendir
+ * (TODO)</li>
  * </ol>
  */
 @Service
@@ -57,13 +59,13 @@ public class ChatOrchestrationService {
             FlightSearchService flightSearchService) {
 
         this.intentDetectionService = intentDetectionService;
-        this.chatSessionManager     = chatSessionManager;
-        this.sessionStore           = sessionStore;
-        this.extractor              = extractor;
-        this.missingFieldsService   = missingFieldsService;
-        this.aiProviderClient       = aiProviderClient;
-        this.hotelSearchService     = hotelSearchService;
-        this.flightSearchService    = flightSearchService;
+        this.chatSessionManager = chatSessionManager;
+        this.sessionStore = sessionStore;
+        this.extractor = extractor;
+        this.missingFieldsService = missingFieldsService;
+        this.aiProviderClient = aiProviderClient;
+        this.hotelSearchService = hotelSearchService;
+        this.flightSearchService = flightSearchService;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -74,8 +76,7 @@ public class ChatOrchestrationService {
 
         // 1. Session yönetimi
         String sessionId = resolveSessionId(request.getSessionId());
-        ChatSessionManager.SessionState sessionState =
-                chatSessionManager.getOrCreateSession(sessionId);
+        ChatSessionManager.SessionState sessionState = chatSessionManager.getOrCreateSession(sessionId);
 
         log.debug("[Orchestration] sessionId={}", sessionId);
 
@@ -91,9 +92,9 @@ public class ChatOrchestrationService {
         boolean hasActiveSearch = existingCriteria.getSearchType() != null;
 
         // 4. Intent tespiti
-        //    - Aktif bir search session varsa intent'i yeniden hesaplamaya gerek yok;
-        //      gelen mesaj doğrudan o session'a ait takip mesajıdır.
-        //    - Aktif session yoksa klasik intent detection devreye girer.
+        // - Aktif bir search session varsa intent'i yeniden hesaplamaya gerek yok;
+        // gelen mesaj doğrudan o session'a ait takip mesajıdır.
+        // - Aktif session yoksa klasik intent detection devreye girer.
         String intent;
 
         if (hasActiveSearch) {
@@ -164,25 +165,27 @@ public class ChatOrchestrationService {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * Tüm kriterler tamamlandığında ilgili arama servisini çağırır.
+     * Tüm kriterler tamamlandığında döner.
      */
     private ChatResponse readyToSearchResponse(String sessionId,
-                                               String intent,
-                                               SearchCriteria criteria) {
+            String intent,
+            SearchCriteria criteria) {
 
-        ChatSearchResponse searchResponse;
+        String label = "HOTEL_SEARCH".equals(intent) ? "Otel" : "Uçak";
+        String reply;
+
         if ("HOTEL_SEARCH".equals(intent)) {
-            searchResponse = hotelSearchService.searchFromCriteria(criteria);
-        } else if ("FLIGHT_SEARCH".equals(intent)) {
-            searchResponse = flightSearchService.searchFromCriteria(criteria);
+            com.santsg.tourvisio.dto.hotel.HotelSearchRequest hotelRequest = criteria.toHotelSearchRequestDto();
+            log.info("[Orchestration] HotelSearchRequest oluşturuldu ve hazırlandı: {}", hotelRequest);
+            reply = "Otel araması için gerekli bilgiler tamamlandı. Arama servisine yönlendiriliyor. HotelSearchRequest hazırlandı.";
         } else {
-            searchResponse = ChatSearchResponse.builder()
-                    .reply("Arama türü tanımlanamadı.")
-                    .searchType(intent)
-                    .success(false)
-                    .results(List.of())
-                    .build();
+            FlightSearchRequest flightRequest = criteria.toFlightSearchRequest();
+            log.info("[Orchestration] FlightSearchRequest oluşturuldu ve hazırlandı: {}", flightRequest);
+            reply = "Uçak araması için gerekli bilgiler tamamlandı. Arama servisine yönlendiriliyor. FlightSearchRequest hazırlandı.";
         }
+
+        // Aramanın gerçekten başladığı anlama gelir
+        sessionStore.remove(sessionId);
 
         return ChatResponse.builder()
                 .reply(searchResponse.getReply())
