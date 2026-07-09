@@ -531,7 +531,11 @@ public class TourVisioHotelApiClient {
     private List<ArrivalAutocompleteResponse> generateMockAutocomplete(String query) {
         List<ArrivalAutocompleteResponse> results = new ArrayList<>();
         String queryLower = query != null ? query.toLowerCase() : "";
-
+ 
+        if (queryLower.contains("invalid") || queryLower.contains("unrecognized")) {
+            return results;
+        }
+ 
         if (queryLower.contains("ant") || queryLower.contains("aly")) {
             results.add(ArrivalAutocompleteResponse.builder()
                     .id("23494")

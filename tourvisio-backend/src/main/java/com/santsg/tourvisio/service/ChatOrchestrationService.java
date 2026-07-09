@@ -73,16 +73,41 @@ public class ChatOrchestrationService {
     // ─────────────────────────────────────────────────────────────────────────
 
     public ChatResponse orchestrate(ChatRequest request) {
-
         // 1. Session yönetimi
         String sessionId = resolveSessionId(request.getSessionId());
         ChatSessionManager.SessionState sessionState = chatSessionManager.getOrCreateSession(sessionId);
-
+ 
         log.debug("[Orchestration] sessionId={}", sessionId);
-
+ 
+        // Record User Message
+        String userMessage = request.getMessage();
+        if (userMessage != null && !userMessage.isBlank()) {
+            sessionState.getMessages().add(new ChatSessionManager.MessageHistoryItem("user", userMessage, java.time.Instant.now()));
+            sessionState.setLastMessageTimestamp(java.time.Instant.now());
+            if ("New Chat Session".equals(sessionState.getTitle())) {
+                String title = userMessage;
+                if (title.length() > 45) {
+                    title = title.substring(0, 42) + "...";
+                }
+                sessionState.setTitle(title);
+            }
+        }
+ 
+        ChatResponse response = doOrchestrate(request, sessionId, sessionState);
+ 
+        // Record Bot Response
+        if (response != null && response.getReply() != null) {
+            sessionState.getMessages().add(new ChatSessionManager.MessageHistoryItem("bot", response.getReply(), java.time.Instant.now()));
+            sessionState.setLastMessageTimestamp(java.time.Instant.now());
+        }
+ 
+        return response;
+    }
+ 
+    private ChatResponse doOrchestrate(ChatRequest request, String sessionId, ChatSessionManager.SessionState sessionState) {
         // Retrieve search criteria
         SearchCriteria existingCriteria = sessionStore.getOrCreate(sessionId);
-
+ 
         // Update multi-language preferences from request if present
         if (request.getCountry() != null && !request.getCountry().isBlank()) {
             existingCriteria.setCountry(request.getCountry());
@@ -94,7 +119,7 @@ public class ChatOrchestrationService {
             existingCriteria.setPreferredLanguage(request.getCountry());
         }
         sessionStore.save(sessionId, existingCriteria);
-
+ 
         // 2. Oturum sonlandırılmışsa erken çık
         if ("TERMINATED".equals(sessionState.getChatStatus())) {
             return ChatResponse.builder()
@@ -107,15 +132,15 @@ public class ChatOrchestrationService {
                     .chatStatus("TERMINATED")
                     .build();
         }
-
+ 
         String userMessage = request.getMessage();
-
+ 
         // 3. Aktif arama session'ı var mı?
         boolean hasActiveSearch = existingCriteria.getSearchType() != null;
-
+ 
         // 4. Intent tespiti
         String intent;
-
+ 
         if (hasActiveSearch) {
             // Takip mesajı: mevcut searchType'ı koru
             intent = existingCriteria.getSearchType();
@@ -123,7 +148,7 @@ public class ChatOrchestrationService {
         } else {
             intent = intentDetectionService.detectIntent(userMessage);
             log.debug("[Orchestration] Yeni session — intent={}", intent);
-
+ 
             // OUT_OF_SCOPE (sadece yeni session başlatırken kontrol edilir)
             if ("OUT_OF_SCOPE".equals(intent)) {
                 sessionState.incrementOutOfScopeCount();
@@ -139,7 +164,7 @@ public class ChatOrchestrationService {
                         .chatStatus(chatStatus)
                         .build();
             }
-
+ 
             // UNKNOWN: ne aradığını sor
             if ("UNKNOWN".equals(intent)) {
                 return ChatResponse.builder()
@@ -152,19 +177,19 @@ public class ChatOrchestrationService {
                         .build();
             }
         }
-
+ 
         // 5. Mesajdan arama kriterlerini çıkar
         SearchCriteria incoming = extractor.extract(userMessage, intent);
-
+ 
         // 6. Yeni kriterler önceki session kriterleri üzerine birleştir
         existingCriteria.mergeWith(incoming);
         sessionStore.save(sessionId, existingCriteria);
-
+ 
         log.debug("[Orchestration] Birleştirilmiş kriterler: {}", existingCriteria);
-
+ 
         // 7. Eksik alan kontrolü
         List<String> missingFields = missingFieldsService.getMissingFields(existingCriteria);
-
+ 
         if (!missingFields.isEmpty()) {
             String replyText = missingFieldsService.buildPrompt(missingFields, existingCriteria);
             return ChatResponse.builder()
@@ -175,7 +200,7 @@ public class ChatOrchestrationService {
                     .chatStatus("ACTIVE")
                     .build();
         }
-
+ 
         // 8. Tüm bilgiler tamam → arama servisine yönlendir
         return readyToSearchResponse(sessionId, intent, existingCriteria);
     }

@@ -27,11 +27,12 @@ public class GeminiClient implements AIProviderClient {
 
     private final RestTemplate restTemplate;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public GeminiClient(RestTemplateBuilder builder) {
         this(builder.build());
     }
 
-    public GeminiClient(RestTemplate restTemplate) {
+    GeminiClient(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
     }
 

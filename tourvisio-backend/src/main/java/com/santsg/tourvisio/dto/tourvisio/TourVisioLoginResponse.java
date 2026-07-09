@@ -25,7 +25,7 @@ import lombok.NoArgsConstructor;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class TourVisioLoginResponse {
 
-    @JsonProperty("Body")
+    @JsonProperty("body")
     private Body body;
 
     /**

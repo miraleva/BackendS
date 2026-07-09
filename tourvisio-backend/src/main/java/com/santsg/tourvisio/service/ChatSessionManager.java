@@ -1,48 +1,116 @@
 package com.santsg.tourvisio.service;
-
+ 
 import org.springframework.stereotype.Service;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-
+ 
 @Service
 public class ChatSessionManager {
-
+ 
+    @lombok.Data
+    @lombok.AllArgsConstructor
+    @lombok.NoArgsConstructor
+    @lombok.Builder
+    public static class SessionSummaryResponse {
+        private String id;
+        private String title;
+        private java.time.Instant lastMessageTimestamp;
+    }
+ 
+    @lombok.Data
+    @lombok.AllArgsConstructor
+    @lombok.NoArgsConstructor
+    @lombok.Builder
+    public static class MessageHistoryItem {
+        private String sender; // "user" or "bot"
+        private String text;
+        private java.time.Instant timestamp;
+    }
+ 
     public static class SessionState {
+        private String id;
+        private String title = "New Chat Session";
+        private java.time.Instant lastMessageTimestamp = java.time.Instant.now();
         private int outOfScopeCount = 0;
         private String chatStatus = "ACTIVE";
-
+        private final java.util.List<MessageHistoryItem> messages = new java.util.concurrent.CopyOnWriteArrayList<>();
+ 
+        public String getId() {
+            return id;
+        }
+ 
+        public void setId(String id) {
+            this.id = id;
+        }
+ 
+        public String getTitle() {
+            return title;
+        }
+ 
+        public void setTitle(String title) {
+            this.title = title;
+        }
+ 
+        public java.time.Instant getLastMessageTimestamp() {
+            return lastMessageTimestamp;
+        }
+ 
+        public void setLastMessageTimestamp(java.time.Instant lastMessageTimestamp) {
+            this.lastMessageTimestamp = lastMessageTimestamp;
+        }
+ 
         public int getOutOfScopeCount() {
             return outOfScopeCount;
         }
-
+ 
         public void incrementOutOfScopeCount() {
             this.outOfScopeCount++;
             if (this.outOfScopeCount >= 3) {
                 this.chatStatus = "TERMINATED";
             }
         }
-
+ 
         public String getChatStatus() {
             return chatStatus;
         }
-
+ 
         public void setChatStatus(String chatStatus) {
             this.chatStatus = chatStatus;
         }
+ 
+        public java.util.List<MessageHistoryItem> getMessages() {
+            return messages;
+        }
     }
-
+ 
     private final Map<String, SessionState> sessions = new ConcurrentHashMap<>();
-
+ 
     public SessionState getOrCreateSession(String sessionId) {
         if (sessionId == null || sessionId.trim().isEmpty()) {
             sessionId = "default-session";
         }
-        return sessions.computeIfAbsent(sessionId, k -> new SessionState());
+        final String finalSessionId = sessionId;
+        return sessions.computeIfAbsent(sessionId, k -> {
+            SessionState state = new SessionState();
+            state.setId(finalSessionId);
+            return state;
+        });
     }
-
+ 
     public void removeSession(String sessionId) {
         if (sessionId != null) {
             sessions.remove(sessionId);
         }
+    }
+ 
+    public SessionState getSessionState(String sessionId) {
+        return sessions.get(sessionId);
+    }
+ 
+    public java.util.List<SessionSummaryResponse> getAllSessionSummaries() {
+        return sessions.values().stream()
+                .map(s -> new SessionSummaryResponse(s.getId(), s.getTitle(), s.getLastMessageTimestamp()))
+                .sorted((s1, s2) -> s2.getLastMessageTimestamp().compareTo(s1.getLastMessageTimestamp()))
+                .collect(java.util.stream.Collectors.toList());
     }
 }
