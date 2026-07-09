@@ -33,6 +33,9 @@ public class SearchCriteria {
     /** TL, EUR, USD … */
     private String currency;
 
+    private String preferredLanguage;
+    private String country;
+
     // ── Otel ─────────────────────────────────────────────────────────────────
     private String locationOrHotelName;
     private LocalDate checkInDate;
@@ -70,6 +73,10 @@ public class SearchCriteria {
             this.searchType = incoming.getSearchType();
         if (incoming.getCurrency() != null)
             this.currency = incoming.getCurrency();
+        if (incoming.getPreferredLanguage() != null)
+            this.preferredLanguage = incoming.getPreferredLanguage();
+        if (incoming.getCountry() != null)
+            this.country = incoming.getCountry();
 
         // Otel
         if (incoming.getLocationOrHotelName() != null)

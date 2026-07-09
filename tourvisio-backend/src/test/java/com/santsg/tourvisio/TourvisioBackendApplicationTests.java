@@ -19,6 +19,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @org.springframework.test.context.TestPropertySource(properties = {
 		"tourvisio.api.mock-mode=true",
+		"tourvisio.api.test-mode=true",
 		"ai.openai.api-key="
 })
 class TourvisioBackendApplicationTests {

@@ -24,4 +24,18 @@ public class ChatRequest {
 
     @Schema(description = "Oturum kimliği. Boş gönderilirse yeni oturum başlatılır.", example = "session-abc-123")
     private String sessionId;
+
+    @Schema(description = "Seçilen ülke veya bölge", example = "Turkey")
+    private String country;
+
+    @Schema(description = "Seçilen para birimi adı", example = "Turkish Lira")
+    private String currencyName;
+
+    @Schema(description = "Seçilen para birimi sembolü (ISO 4217)", example = "TRY")
+    private String currencySymbol;
+
+    public ChatRequest(String message, String sessionId) {
+        this.message = message;
+        this.sessionId = sessionId;
+    }
 }

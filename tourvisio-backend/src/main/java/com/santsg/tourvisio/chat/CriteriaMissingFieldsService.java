@@ -65,17 +65,27 @@ public class CriteriaMissingFieldsService {
      * Eksik alanları kullanıcıya gösterilecek tek bir Türkçe soruya dönüştürür.
      */
     public String buildPrompt(List<String> missingFields) {
+        return buildPrompt(missingFields, null);
+    }
+
+    /**
+     * Eksik alanları kullanıcıya gösterilecek tek bir soruya dönüştürür.
+     */
+    public String buildPrompt(List<String> missingFields, SearchCriteria criteria) {
         if (missingFields.isEmpty()) return "";
+
+        String lang = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "Turkish";
+        String country = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "Turkey";
 
         // AI ile soru sorma (API key tanımlıysa)
         try {
-            String prompt = """
-                    Kullanıcının otel veya uçak araması yapabilmesi için şu zorunlu bilgileri vermesi gerekiyor:
-                    Zorunlu Eksik Bilgiler: %s
-                    
-                    Kullanıcıya bu eksik bilgileri nazikçe, doğal dilde ve Türkçe olarak soran kısa ve kibar bir soru cümlesi yaz.
-                    Sadece soru cümlesini dön (başka hiçbir açıklayıcı metin ekleme).
-                    Soru:""".formatted(String.join(", ", missingFields));
+            String prompt = String.format(
+                    "The user needs to supply the following missing information for their travel search: %s.\n\n" +
+                    "Write a short, polite and natural question in the official/most common language of %s (%s) asking the user to provide this missing information.\n" +
+                    "Return ONLY the question itself, no explanations.\n" +
+                    "Question:",
+                    String.join(", ", missingFields), country, lang
+            );
 
             String response = aiProviderClient.complete(prompt);
             if (response != null && !response.trim().startsWith("[MOCK]")) {
@@ -83,6 +93,13 @@ public class CriteriaMissingFieldsService {
             }
         } catch (Exception e) {
             // Hata durumunda fallback
+        }
+
+        if ("English".equalsIgnoreCase(lang) || "en".equalsIgnoreCase(lang)) {
+            if (missingFields.size() == 1) {
+                return "Could you specify the " + missingFields.get(0) + " to perform the search?";
+            }
+            return "Could you specify the following missing information: " + String.join(", ", missingFields) + "?";
         }
 
         if (missingFields.size() == 1) {

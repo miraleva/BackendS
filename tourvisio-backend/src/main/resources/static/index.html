@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TourVisio AI - Multilingual Travel Assistant</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: rgba(22, 28, 45, 0.4);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-glow: rgba(99, 102, 241, 0.15);
+            --primary: #6366f1;
+            --primary-glow: rgba(99, 102, 241, 0.5);
+            --primary-hover: #4f46e5;
+            --secondary: #10b981;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --glass-blur: blur(16px);
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-image: 
+                radial-gradient(at 10% 20%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+                radial-gradient(at 90% 80%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
+        }
+
+        /* Ambient animated particles in background */
+        .ambient-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: -1;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.3;
+            animation: float 20s infinite alternate ease-in-out;
+        }
+
+        .orb-1 {
+            width: 400px;
+            height: 400px;
+            background: var(--primary);
+            top: -100px;
+            left: -100px;
+        }
+
+        .orb-2 {
+            width: 300px;
+            height: 300px;
+            background: var(--secondary);
+            bottom: -50px;
+            right: -50px;
+            animation-delay: -5s;
+        }
+
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(50px, 30px) scale(1.1); }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Glass Container Wrapper */
+        .app-container {
+            width: 90%;
+            max-width: 1200px;
+            height: 85vh;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+            transition: var(--transition);
+        }
+
+        /* LOGIN SCREEN */
+        .login-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(11, 15, 25, 0.85);
+            backdrop-filter: var(--glass-blur);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+
+        .login-card {
+            background: rgba(22, 28, 45, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 40px;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+            text-align: center;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .login-logo {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff 30%, var(--primary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+
+        .login-subtitle {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .input-field-wrapper {
+            position: relative;
+        }
+
+        .input-field-wrapper i {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 14px 15px 14px 45px;
+            background: rgba(11, 15, 25, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: #fff;
+            font-size: 0.95rem;
+            outline: none;
+            transition: var(--transition);
+        }
+
+        .input-field:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 15px var(--border-glow);
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: var(--transition);
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+            margin-top: 10px;
+        }
+
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.6);
+        }
+
+        .login-error {
+            color: #ef4444;
+            font-size: 0.85rem;
+            margin-top: 15px;
+            display: none;
+        }
+
+        /* MAIN APP HEADER */
+        .app-header {
+            padding: 20px 30px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(11, 15, 25, 0.2);
+        }
+
+        .app-title-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .app-logo {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.6rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff 40%, var(--primary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .badge-live {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid var(--secondary);
+            color: var(--secondary);
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .controls-section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .selector-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .custom-select-wrapper {
+            position: relative;
+            width: 250px;
+        }
+
+        .custom-select-wrapper i.globe-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--primary);
+            pointer-events: none;
+        }
+
+        .country-select {
+            width: 100%;
+            background: rgba(11, 15, 25, 0.7);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 10px 10px 10px 35px;
+            color: #fff;
+            outline: none;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: var(--transition);
+            appearance: none;
+            -webkit-appearance: none;
+        }
+
+        .country-select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 10px var(--border-glow);
+        }
+
+        .logout-btn {
+            background: transparent;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            color: #ef4444;
+            padding: 10px 15px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: var(--transition);
+        }
+
+        .logout-btn:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: #ef4444;
+        }
+
+        /* CHAT VIEWPORT */
+        .chat-viewport {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Chat Bubbles */
+        .message-row {
+            display: flex;
+            width: 100%;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        .message-row.user-row {
+            justify-content: flex-end;
+        }
+
+        .message-row.assistant-row {
+            justify-content: flex-start;
+        }
+
+        .bubble-wrapper {
+            display: flex;
+            gap: 12px;
+            max-width: 75%;
+        }
+
+        .user-row .bubble-wrapper {
+            flex-direction: row-reverse;
+        }
+
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
+            flex-shrink: 0;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .avatar.assistant-avatar {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .avatar.user-avatar {
+            background: #374151;
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .message-bubble {
+            padding: 14px 18px;
+            border-radius: 18px;
+            line-height: 1.5;
+            font-size: 0.95rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .user-row .message-bubble {
+            background: var(--primary);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .assistant-row .message-bubble {
+            background: rgba(30, 41, 59, 0.7);
+            color: var(--text-main);
+            border-bottom-left-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        /* Search Output Cards formatting */
+        .results-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+            width: 100%;
+        }
+
+        .card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.25);
+            transition: var(--transition);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(99, 102, 241, 0.3);
+            box-shadow: 0 8px 25px rgba(99, 102, 241, 0.15);
+        }
+
+        .card-header-img {
+            height: 130px;
+            background-size: cover;
+            background-position: center;
+            position: relative;
+        }
+
+        .hotel-tag, .flight-tag {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(15, 23, 42, 0.85);
+            color: #fff;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 4px 8px;
+            border-radius: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border: 1px solid var(--border-color);
+        }
+
+        .card-body {
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        .card-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: #fff;
+        }
+
+        .card-meta {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .stars {
+            color: #fbbf24;
+            font-size: 0.75rem;
+        }
+
+        .price-section {
+            margin-top: auto;
+            border-top: 1px solid var(--border-color);
+            padding-top: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .price-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .price-value {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--secondary);
+            font-family: 'Outfit', sans-serif;
+        }
+
+        /* Flight details */
+        .flight-path {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .airport-code {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .flight-connector {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            padding: 0 10px;
+        }
+
+        .flight-connector .line {
+            width: 100%;
+            height: 1px;
+            background: var(--border-color);
+            position: relative;
+        }
+
+        .flight-connector i {
+            position: absolute;
+            top: -7px;
+            font-size: 0.8rem;
+            color: var(--primary);
+        }
+
+        .flight-connector .duration {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* INPUT CONTROL SECTION */
+        .input-control-section {
+            padding: 20px 30px;
+            border-top: 1px solid var(--border-color);
+            background: rgba(11, 15, 25, 0.3);
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .message-input-wrapper {
+            flex: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .message-input {
+            width: 100%;
+            background: rgba(11, 15, 25, 0.7);
+            border: 1px solid var(--border-color);
+            border-radius: 15px;
+            padding: 16px 20px;
+            color: #fff;
+            font-size: 0.95rem;
+            outline: none;
+            transition: var(--transition);
+        }
+
+        .message-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 15px var(--border-glow);
+        }
+
+        .send-btn {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+            border: none;
+            color: white;
+            width: 50px;
+            height: 50px;
+            border-radius: 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            transition: var(--transition);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+            flex-shrink: 0;
+        }
+
+        .send-btn:hover {
+            transform: translateY(-2px) scale(1.05);
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.5);
+        }
+
+        /* Typing Indicator Animation */
+        .typing-bubble {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 14px 20px;
+        }
+
+        .typing-dot {
+            width: 7px;
+            height: 7px;
+            background-color: var(--text-muted);
+            border-radius: 50%;
+            animation: bounce 1.3s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.15s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+        @keyframes bounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-6px); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 768px) {
+            .app-container {
+                width: 95%;
+                height: 90vh;
+            }
+            .app-header {
+                flex-direction: column;
+                gap: 15px;
+                padding: 15px;
+            }
+            .custom-select-wrapper {
+                width: 100%;
+            }
+            .bubble-wrapper {
+                max-width: 90%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Ambient background glows -->
+    <div class="ambient-bg">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+    </div>
+
+    <!-- Login Screen -->
+    <div class="login-screen" id="loginScreen">
+        <div class="login-card">
+            <h1 class="login-logo">TourVisio AI</h1>
+            <p class="login-subtitle">Multilingual Hotel & Flight Booking Chatbot</p>
+            
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="input-group">
+                    <label>Agency Code</label>
+                    <div class="input-field-wrapper">
+                        <i class="fa-solid fa-hotel"></i>
+                        <input type="text" class="input-field" id="agencyCode" value="B2B" required>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>User Code</label>
+                    <div class="input-field-wrapper">
+                        <i class="fa-solid fa-user"></i>
+                        <input type="text" class="input-field" id="userCode" value="B2B" required>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Password</label>
+                    <div class="input-field-wrapper">
+                        <i class="fa-solid fa-key"></i>
+                        <input type="password" class="input-field" id="password" value="123456" required>
+                    </div>
+                </div>
+
+                <button type="submit" class="login-btn">Authenticate & Start</button>
+                <div class="login-error" id="loginError">Authentication failed. Please verify credentials.</div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Application Dashboard Window -->
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="app-title-section">
+                <span class="app-logo">TourVisio AI</span>
+                <span class="badge-live"><i class="fa-solid fa-circle-dot"></i> Agentic</span>
+            </div>
+            
+            <div class="controls-section">
+                <span class="selector-label">Language & Region:</span>
+                <div class="custom-select-wrapper">
+                    <i class="fa-solid fa-earth-americas globe-icon"></i>
+                    <select class="country-select" id="countryDropdown" onchange="changeLanguage()">
+                        <!-- Dynamic Countries populated below -->
+                    </select>
+                </div>
+                <button class="logout-btn" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i></button>
+            </div>
+        </header>
+
+        <!-- Chat Viewport -->
+        <main class="chat-viewport" id="chatViewport">
+            <!-- Assistant Greetings -->
+            <div class="message-row assistant-row">
+                <div class="bubble-wrapper">
+                    <div class="avatar assistant-avatar"><i class="fa-solid fa-robot"></i></div>
+                    <div class="message-bubble">
+                        Welcome to TourVisio AI Travel Assistant! I can help you search for hotels, flight tickets, or make reservations.
+                        <br><br>
+                        Please choose your language/region in the top menu. I will respond in your chosen language!
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer Input -->
+        <footer class="input-control-section">
+            <div class="message-input-wrapper">
+                <input type="text" class="message-input" id="messageInput" placeholder="Write your message here... (e.g. Find hotels in Antalya for 3 nights from 15 July)" onkeydown="if(event.key === 'Enter') sendMessage()">
+            </div>
+            <button class="send-btn" onclick="sendMessage()">
+                <i class="fa-solid fa-paper-plane"></i>
+            </button>
+        </footer>
+    </div>
+
+    <script>
+        // Array of 111 Countries/Regions provided in the prompt
+        const countriesList = [
+            { country: "Turkey", currency: "Turkish Lira", symbol: "TRY" },
+            { country: "United States", currency: "US Dollar", symbol: "USD" },
+            { country: "United Kingdom", currency: "UK Pound Sterling", symbol: "GBP" },
+            { country: "Germany", currency: "Euro", symbol: "EUR" },
+            { country: "France", currency: "Euro", symbol: "EUR" },
+            { country: "Italy", currency: "Euro", symbol: "EUR" },
+            { country: "Spain", currency: "Euro", symbol: "EUR" },
+            { country: "Japan", currency: "Japanese Yen", symbol: "JPY" },
+            { country: "Canada", currency: "Canadian Dollar", symbol: "CAD" },
+            { country: "Australia", currency: "Australian Dollar", symbol: "AUD" },
+            { country: "Albania", currency: "Albanian Lek", symbol: "ALL" },
+            { country: "Algeria", currency: "Algerian Dinar", symbol: "DZD" },
+            { country: "Argentina", currency: "Argentine Peso", symbol: "ARS" },
+            { country: "Armenia", currency: "Armenian Dram", symbol: "AMD" },
+            { country: "Austria", currency: "Euro", symbol: "EUR" },
+            { country: "Azerbaijan", currency: "Azerbaijanian Manat", symbol: "AZN" },
+            { country: "Bahrain", currency: "Bahraini Dinar", symbol: "BHD" },
+            { country: "Belarus", currency: "Belarussian Ruble", symbol: "BYR" },
+            { country: "Belgium", currency: "Euro", symbol: "EUR" },
+            { country: "Belize", currency: "Belize Dollar", symbol: "BZD" },
+            { country: "Bolivarian Republic of Venezuela", currency: "Venezuelan Bolivar", symbol: "VEF" },
+            { country: "Bolivia", currency: "Boliviano", symbol: "BOB" },
+            { country: "Brazil", currency: "Real", symbol: "BRL" },
+            { country: "Brunei", currency: "Brunei Dollar", symbol: "BND" },
+            { country: "Bulgaria", currency: "Euro", symbol: "EUR" },
+            { country: "Caribbean", currency: "US Dollar", symbol: "USD" },
+            { country: "Chile", currency: "Chilean Peso", symbol: "CLP" },
+            { country: "Colombia", currency: "Colombian Peso", symbol: "COP" },
+            { country: "Costa Rica", currency: "Costa Rican Colon", symbol: "CRC" },
+            { country: "Croatia", currency: "Croatian Kuna", symbol: "HRK" },
+            { country: "Czech Republic", currency: "Czech Koruna", symbol: "CZK" },
+            { country: "Denmark", currency: "Danish Krone", symbol: "DKK" },
+            { country: "Dominican Republic", currency: "Dominican Peso", symbol: "DOP" },
+            { country: "Ecuador", currency: "US Dollar", symbol: "USD" },
+            { country: "Egypt", currency: "Egyptian Pound", symbol: "EGP" },
+            { country: "El Salvador", currency: "U.S. Dollar", symbol: "USD" },
+            { country: "Estonia", currency: "Estonian Kroon", symbol: "EEK" },
+            { country: "Ethiopia", currency: "Ethiopian Birr", symbol: "ETB" },
+            { country: "Faroe Islands", currency: "Danish Krone", symbol: "DKK" },
+            { country: "Finland", currency: "Euro", symbol: "EUR" },
+            { country: "Georgia", currency: "Lari", symbol: "GEL" },
+            { country: "Greece", currency: "Euro", symbol: "EUR" },
+            { country: "Guatemala", currency: "Guatemalan Quetzal", symbol: "GTQ" },
+            { country: "Honduras", currency: "Honduran Lempira", symbol: "HNL" },
+            { country: "Hong Kong SAR", currency: "Hong Kong Dollar", symbol: "HKD" },
+            { country: "Hungary", currency: "Hungarian Forint", symbol: "HUF" },
+            { country: "Iceland", currency: "Icelandic Krona", symbol: "ISK" },
+            { country: "India", currency: "Indian Rupee", symbol: "INR" },
+            { country: "Indonesia", currency: "Indonesian Rupiah", symbol: "IDR" },
+            { country: "Iran", currency: "Iranian Rial", symbol: "IRR" },
+            { country: "Iraq", currency: "Iraqi Dinar", symbol: "IQD" },
+            { country: "Ireland", currency: "Euro", symbol: "EUR" },
+            { country: "Islamic Republic of Pakistan", currency: "Pakistan Rupee", symbol: "PKR" },
+            { country: "Israel", currency: "Israeli New Shekel", symbol: "ILS" },
+            { country: "Jamaica", currency: "Jamaican Dollar", symbol: "JMD" },
+            { country: "Jordan", currency: "Jordanian Dinar", symbol: "JOD" },
+            { country: "Kazakhstan", currency: "Tenge", symbol: "KZT" },
+            { country: "Kenya", currency: "Kenyan Shilling", symbol: "KES" },
+            { country: "Korea", currency: "Korean Won", symbol: "KRW" },
+            { country: "Kuwait", currency: "Kuwaiti Dinar", symbol: "KWD" },
+            { country: "Kyrgyzstan", currency: "som", symbol: "KGS" },
+            { country: "Latvia", currency: "Latvian Lats", symbol: "LVL" },
+            { country: "Lebanon", currency: "Lebanese Pound", symbol: "LBP" },
+            { country: "Libya", currency: "Libyan Dinar", symbol: "LYD" },
+            { country: "Liechtenstein", currency: "Swiss Franc", symbol: "CHF" },
+            { country: "Lithuania", currency: "Lithuanian Litas", symbol: "LTL" },
+            { country: "Luxembourg", currency: "Euro", symbol: "EUR" },
+            { country: "Macao SAR", currency: "Macao Pataca", symbol: "MOP" },
+            { country: "North Macedonia", currency: "Macedonian Denar", symbol: "MKD" },
+            { country: "Malaysia", currency: "Malaysian Ringgit", symbol: "MYR" },
+            { country: "Maldives", currency: "Rufiyaa", symbol: "MVR" },
+            { country: "Mexico", currency: "Mexican Peso", symbol: "MXN" },
+            { country: "Mongolia", currency: "Tugrik", symbol: "MNT" },
+            { country: "Morocco", currency: "Moroccan Dirham", symbol: "MAD" },
+            { country: "Netherlands", currency: "Euro", symbol: "EUR" },
+            { country: "New Zealand", currency: "New Zealand Dollar", symbol: "NZD" },
+            { country: "Nicaragua", currency: "Nicaraguan Cordoba Oro", symbol: "NIO" },
+            { country: "Norway", currency: "Norwegian Krone", symbol: "NOK" },
+            { country: "Oman", currency: "Omani Rial", symbol: "OMR" },
+            { country: "Panama", currency: "Panamanian Balboa", symbol: "PAB" },
+            { country: "Paraguay", currency: "Paraguay Guarani", symbol: "PYG" },
+            { country: "People's Republic of China", currency: "PRC Renminbi", symbol: "CNY" },
+            { country: "Peru", currency: "Peruvian Nuevo Sol", symbol: "PEN" },
+            { country: "Philippines", currency: "Philippine Peso", symbol: "PHP" },
+            { country: "Poland", currency: "Polish Zloty", symbol: "PLN" },
+            { country: "Portugal", currency: "Euro", symbol: "EUR" },
+            { country: "Principality of Monaco", currency: "Euro", symbol: "EUR" },
+            { country: "Puerto Rico", currency: "US Dollar", symbol: "USD" },
+            { country: "Qatar", currency: "Qatari Rial", symbol: "QAR" },
+            { country: "Romania", currency: "Romanian Leu", symbol: "RON" },
+            { country: "Russia", currency: "Russian Ruble", symbol: "RUB" },
+            { country: "Saudi Arabia", currency: "Saudi Riyal", symbol: "SAR" },
+            { country: "Serbia", currency: "Serbian Dinar", symbol: "RSD" },
+            { country: "Singapore", currency: "Singapore Dollar", symbol: "SGD" },
+            { country: "Slovakia", currency: "Euro", symbol: "EUR" },
+            { country: "Slovenia", currency: "Euro", symbol: "EUR" },
+            { country: "South Africa", currency: "South African Rand", symbol: "ZAR" },
+            { country: "Sweden", currency: "Swedish Krona", symbol: "SEK" },
+            { country: "Switzerland", currency: "Swiss Franc", symbol: "CHF" },
+            { country: "Syria", currency: "Syrian Pound", symbol: "SYP" },
+            { country: "Taiwan", currency: "New Taiwan Dollar", symbol: "TWD" },
+            { country: "Thailand", currency: "Thai Baht", symbol: "THB" },
+            { country: "Trinidad and Tobago", currency: "Trinidad Dollar", symbol: "TTD" },
+            { country: "Tunisia", currency: "Tunisian Dinar", symbol: "TND" },
+            { country: "Ukraine", currency: "Ukrainian Hryvnia", symbol: "UAH" },
+            { country: "United Arab Emirates", currency: "UAE Dirham", symbol: "AED" },
+            { country: "Uruguay", currency: "Peso Uruguayo", symbol: "UYU" },
+            { country: "Uzbekistan", currency: "Uzbekistan Som", symbol: "UZS" },
+            { country: "Vietnam", currency: "Vietnamese Dong", symbol: "VND" },
+            { country: "Yemen", currency: "Yemeni Rial", symbol: "YER" },
+            { country: "Zimbabwe", currency: "Zimbabwe Dollar", symbol: "ZWL" }
+        ];
+
+        let sessionId = null;
+        let token = localStorage.getItem("token") || null;
+
+        // Populate country dropdown on load
+        window.addEventListener('DOMContentLoaded', () => {
+            const dropdown = document.getElementById("countryDropdown");
+            countriesList.forEach((item, index) => {
+                const option = document.createElement("option");
+                option.value = index;
+                option.textContent = `${item.country} (${item.symbol})`;
+                dropdown.appendChild(option);
+            });
+
+            // If token exists, bypass login screen
+            if (token) {
+                document.getElementById("loginScreen").style.opacity = '0';
+                setTimeout(() => {
+                    document.getElementById("loginScreen").style.display = 'none';
+                }, 300);
+            }
+        });
+
+        // Handles user login and Bearer token acquisition
+        async function handleLogin(event) {
+            event.preventDefault();
+            const agency = document.getElementById("agencyCode").value;
+            const user = document.getElementById("userCode").value;
+            const password = document.getElementById("password").value;
+            const loginError = document.getElementById("loginError");
+
+            loginError.style.display = "none";
+
+            try {
+                const response = await fetch("/api/authenticationservice/login", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ Agency: agency, User: user, Password: password })
+                });
+
+                if (!response.ok) {
+                    throw new Error("Unauthorized");
+                }
+
+                const result = await response.json();
+                if (result.body && result.body.token) {
+                    token = result.body.token;
+                    localStorage.setItem("token", token);
+                    
+                    // Hide login screen with transition
+                    const screen = document.getElementById("loginScreen");
+                    screen.style.opacity = '0';
+                    setTimeout(() => {
+                        screen.style.display = 'none';
+                    }, 300);
+
+                    // Add welcome message with the user name
+                    addMessage(`Successfully logged in as ${result.body.userInfo.name} (${result.body.userInfo.office.name})!`, "assistant");
+                } else {
+                    throw new Error("Invalid response format");
+                }
+            } catch (err) {
+                console.error("Login failed:", err);
+                loginError.style.display = "block";
+            }
+        }
+
+        // Perform clean logout
+        function logout() {
+            localStorage.removeItem("token");
+            token = null;
+            sessionId = null;
+            document.getElementById("loginScreen").style.display = 'flex';
+            setTimeout(() => {
+                document.getElementById("loginScreen").style.opacity = '1';
+            }, 50);
+            
+            // Reset chat
+            const chatViewport = document.getElementById("chatViewport");
+            chatViewport.innerHTML = `
+                <div class="message-row assistant-row">
+                    <div class="bubble-wrapper">
+                        <div class="avatar assistant-avatar"><i class="fa-solid fa-robot"></i></div>
+                        <div class="message-bubble">
+                            Welcome to TourVisio AI Travel Assistant! I can help you search for hotels, flight tickets, or make reservations.
+                            <br><br>
+                            Please choose your language/region in the top menu. I will respond in your chosen language!
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Dropdown selection change handler
+        function changeLanguage() {
+            const dropdown = document.getElementById("countryDropdown");
+            const selected = countriesList[dropdown.value];
+            addMessage(`Language preference updated. Region: ${selected.country}, Currency: ${selected.currency} (${selected.symbol}).`, "assistant");
+        }
+
+        // Adds typing indicator to viewport
+        function showTypingIndicator() {
+            const viewport = document.getElementById("chatViewport");
+            const row = document.createElement("div");
+            row.className = "message-row assistant-row";
+            row.id = "typingIndicator";
+            row.innerHTML = `
+                <div class="bubble-wrapper">
+                    <div class="avatar assistant-avatar"><i class="fa-solid fa-robot"></i></div>
+                    <div class="message-bubble typing-bubble">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
+                </div>
+            `;
+            viewport.appendChild(row);
+            viewport.scrollTop = viewport.scrollHeight;
+        }
+
+        // Removes typing indicator from viewport
+        function hideTypingIndicator() {
+            const indicator = document.getElementById("typingIndicator");
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+
+        // Post chat message to backend
+        async function sendMessage() {
+            const input = document.getElementById("messageInput");
+            const message = input.value.trim();
+            if (!message) return;
+
+            input.value = "";
+            addMessage(message, "user");
+
+            showTypingIndicator();
+
+            const dropdown = document.getElementById("countryDropdown");
+            const selectedRegion = countriesList[dropdown.value];
+
+            try {
+                const response = await fetch("/api/chat/message", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        sessionId: sessionId,
+                        country: selectedRegion.country,
+                        currencyName: selectedRegion.currency,
+                        currencySymbol: selectedRegion.symbol
+                    })
+                });
+
+                if (response.status === 401) {
+                    hideTypingIndicator();
+                    addMessage("Session unauthorized. Please log in again.", "assistant");
+                    logout();
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error("Server error");
+                }
+
+                const result = await response.json();
+                hideTypingIndicator();
+
+                // Save or refresh sessionId
+                if (result.sessionId) {
+                    sessionId = result.sessionId;
+                }
+
+                // Render assistant response
+                addMessage(result.reply, "assistant", result.results, result.searchType);
+
+            } catch (err) {
+                console.error("Message send failed:", err);
+                hideTypingIndicator();
+                addMessage("I'm sorry, I'm having trouble connecting to the service. Please try again later.", "assistant");
+            }
+        }
+
+        // Renders text messages and maps structured lists of search results (hotels/flights)
+        function addMessage(text, sender, results = null, searchType = "") {
+            const viewport = document.getElementById("chatViewport");
+            const row = document.createElement("div");
+            row.className = `message-row ${sender}-row`;
+
+            let avatarHtml = sender === "user" 
+                ? `<div class="avatar user-avatar"><i class="fa-solid fa-user"></i></div>`
+                : `<div class="avatar assistant-avatar"><i class="fa-solid fa-robot"></i></div>`;
+
+            let bubbleContent = `
+                <div class="bubble-wrapper">
+                    ${avatarHtml}
+                    <div class="message-bubble">
+                        ${text.replace(/\n/g, "<br>")}
+                        ${results && results.length > 0 ? renderResults(results, searchType) : ""}
+                    </div>
+                </div>
+            `;
+            
+            row.innerHTML = bubbleContent;
+            viewport.appendChild(row);
+            viewport.scrollTop = viewport.scrollHeight;
+        }
+
+        // Render card results for hotels or flights
+        function renderResults(results, searchType) {
+            const dropdown = document.getElementById("countryDropdown");
+            const selectedRegion = countriesList[dropdown.value];
+            const currencySymbol = selectedRegion.symbol;
+
+            let html = `<div class="results-container">`;
+
+            if (searchType === "HOTEL_SEARCH") {
+                results.forEach((hotel, idx) => {
+                    const stars = hotel.stars || 4;
+                    const starsHtml = '<i class="fa-solid fa-star"></i>'.repeat(stars) + '<i class="fa-regular fa-star"></i>'.repeat(5 - stars);
+                    const photo = hotel.thumbnail || `https://images.unsplash.com/photo-${1566073771259-6a8506099945}?auto=format&fit=crop&w=400&q=80`;
+                    
+                    html += `
+                        <div class="card">
+                            <div class="card-header-img" style="background-image: url('${photo}')">
+                                <span class="hotel-tag">Hotel</span>
+                            </div>
+                            <div class="card-body">
+                                <h3 class="card-title">${hotel.name}</h3>
+                                <div class="card-meta">
+                                    <span class="stars">${starsHtml}</span>
+                                    <span>•</span>
+                                    <span>${hotel.location || 'Antalya'}</span>
+                                </div>
+                                <div class="price-section">
+                                    <span class="price-label">Price per night</span>
+                                    <span class="price-value">${currencySymbol} ${hotel.price || '120'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            } else if (searchType === "FLIGHT_SEARCH") {
+                results.forEach((flight, idx) => {
+                    const airline = flight.airline || "TourVisio Air";
+                    const duration = flight.duration || "2h 15m";
+                    const type = flight.tripType === "ROUND_TRIP" ? "Round Trip" : "One Way";
+                    
+                    html += `
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="card-meta">
+                                    <span class="flight-tag">${type}</span>
+                                    <span style="margin-left:auto; font-weight: 600; color: #fff;">${airline}</span>
+                                </div>
+                                <div class="flight-path">
+                                    <div class="airport-code">${flight.departureAirport || 'IST'}</div>
+                                    <div class="flight-connector">
+                                        <i class="fa-solid fa-plane"></i>
+                                        <div class="line"></div>
+                                        <div class="duration">${duration}</div>
+                                    </div>
+                                    <div class="airport-code">${flight.arrivalAirport || 'AYT'}</div>
+                                </div>
+                                <div class="price-section">
+                                    <span class="price-label">Total Price</span>
+                                    <span class="price-value">${currencySymbol} ${flight.price || '85'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            html += `</div>`;
+            return html;
+        }
+    </script>
+</body>
+</html>

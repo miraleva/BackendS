@@ -79,21 +79,38 @@ public class ChatOrchestrationService {
 
         log.debug("[Orchestration] sessionId={}", sessionId);
 
+        // Retrieve search criteria
+        SearchCriteria existingCriteria = sessionStore.getOrCreate(sessionId);
+
+        // Update multi-language preferences from request if present
+        if (request.getCountry() != null && !request.getCountry().isBlank()) {
+            existingCriteria.setCountry(request.getCountry());
+        }
+        if (request.getCurrencySymbol() != null && !request.getCurrencySymbol().isBlank()) {
+            existingCriteria.setCurrency(request.getCurrencySymbol());
+        }
+        if (request.getCountry() != null && !request.getCountry().isBlank()) {
+            existingCriteria.setPreferredLanguage(request.getCountry());
+        }
+        sessionStore.save(sessionId, existingCriteria);
+
         // 2. Oturum sonlandırılmışsa erken çık
         if ("TERMINATED".equals(sessionState.getChatStatus())) {
-            return terminatedResponse(sessionId);
+            return ChatResponse.builder()
+                    .reply(translateOrLocalize("Bu sohbet sonlandırılmıştır. Yeni bir arama başlatmak için lütfen sayfayı yenileyin.", existingCriteria))
+                    .sessionId(sessionId)
+                    .searchType("OUT_OF_SCOPE")
+                    .missingFields(List.of())
+                    .chatStatus("TERMINATED")
+                    .build();
         }
 
         String userMessage = request.getMessage();
 
         // 3. Aktif arama session'ı var mı?
-        SearchCriteria existingCriteria = sessionStore.getOrCreate(sessionId);
         boolean hasActiveSearch = existingCriteria.getSearchType() != null;
 
         // 4. Intent tespiti
-        //    - Aktif bir search session varsa intent'i yeniden hesaplamaya gerek yok;
-        //      gelen mesaj doğrudan o session'a ait takip mesajıdır.
-        //    - Aktif session yoksa klasik intent detection devreye girer.
         String intent;
 
         if (hasActiveSearch) {
@@ -108,11 +125,11 @@ public class ChatOrchestrationService {
             if ("OUT_OF_SCOPE".equals(intent)) {
                 sessionState.incrementOutOfScopeCount();
                 String chatStatus = sessionState.getChatStatus();
-                String reply = "TERMINATED".equals(chatStatus)
+                String rawReply = "TERMINATED".equals(chatStatus)
                         ? "Çok sayıda alakasız mesaj gönderdiğiniz için bu sohbet sonlandırılmıştır."
                         : "Sadece otel arama, uçak bileti arama ve rezervasyon konularında yardımcı olabilirim.";
                 return ChatResponse.builder()
-                        .reply(reply)
+                        .reply(translateOrLocalize(rawReply, existingCriteria))
                         .sessionId(sessionId)
                         .searchType("OUT_OF_SCOPE")
                         .missingFields(List.of())
@@ -123,7 +140,7 @@ public class ChatOrchestrationService {
             // UNKNOWN: ne aradığını sor
             if ("UNKNOWN".equals(intent)) {
                 return ChatResponse.builder()
-                        .reply("Otel mi aramak istiyorsunuz, yoksa uçak bileti mi?")
+                        .reply(translateOrLocalize("Otel mi aramak istiyorsunuz, yoksa uçak bileti mi?", existingCriteria))
                         .sessionId(sessionId)
                         .searchType("UNKNOWN")
                         .missingFields(List.of())
@@ -145,7 +162,7 @@ public class ChatOrchestrationService {
         List<String> missingFields = missingFieldsService.getMissingFields(existingCriteria);
 
         if (!missingFields.isEmpty()) {
-            String replyText = missingFieldsService.buildPrompt(missingFields);
+            String replyText = missingFieldsService.buildPrompt(missingFields, existingCriteria);
             return ChatResponse.builder()
                     .reply(replyText)
                     .sessionId(sessionId)
@@ -177,7 +194,7 @@ public class ChatOrchestrationService {
             searchResponse = flightSearchService.searchFromCriteria(criteria);
         } else {
             searchResponse = ChatSearchResponse.builder()
-                    .reply("Arama türü tanımlanamadı.")
+                    .reply(translateOrLocalize("Arama türü tanımlanamadı.", criteria))
                     .searchType(intent)
                     .success(false)
                     .results(List.of())
@@ -194,24 +211,32 @@ public class ChatOrchestrationService {
                         searchResponse.getResults().subList(0, Math.min(5, searchResponse.getResults().size()))
                 );
 
+                String lang = (criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "Turkish";
+                String country = (criteria.getCountry() != null) ? criteria.getCountry() : "Turkey";
+
                 String prompt = """
-                        Kullanıcının seyahat araması başarıyla tamamlandı ve şu sonuçlar bulundu:
-                        Arama Türü: %s
-                        Bulunan Sonuçlar:
+                        The user's travel search has been successfully completed, and the following results were found:
+                        Search Type: %s
+                        Results:
                         %s
                         
-                        Kullanıcıya bu sonuçları özetleyen, en uygun/cazip olan seçenekleri kibarca listeleyen ve seyahat detaylarını (fiyat, havayolu, yıldız, pansiyon türü vb.) vurgulayan Türkçe bir asistan cevabı yaz.
-                        Cevabında gerçekçi ve TourVisio API'den dönen gerçek fiyat/bilgileri kullan.
-                        Sadece asistanın söyleyeceği metni dön (başka hiçbir açıklayıcı metin ekleme).
-                        Asistan Yanıtı:""".formatted(intent, resultsJson);
+                        Write a polite assistant response summarizing these results, highlighting the best/most attractive options and travel details (price, airline, stars, board type, etc.) in the official/most common language of %s (%s).
+                        Use real prices and information from the API response.
+                        Return ONLY the assistant's response, with no notes or extra text.
+                        Assistant Response:""".formatted(intent, resultsJson, country, lang);
 
                 String aiSummary = aiProviderClient.complete(prompt);
                 if (aiSummary != null && !aiSummary.trim().startsWith("[MOCK]")) {
                     finalReply = aiSummary.trim();
+                } else {
+                    finalReply = translateOrLocalize(finalReply, criteria);
                 }
             } catch (Exception e) {
                 log.warn("[Orchestration] Arama sonuçları AI ile özetlenemedi, varsayılan cevaba dönülüyor: {}", e.getMessage());
+                finalReply = translateOrLocalize(finalReply, criteria);
             }
+        } else {
+            finalReply = translateOrLocalize(finalReply, criteria);
         }
 
         return ChatResponse.builder()
@@ -242,5 +267,50 @@ public class ChatOrchestrationService {
                 .missingFields(List.of())
                 .chatStatus("TERMINATED")
                 .build();
+    }
+
+    private String translateOrLocalize(String message, SearchCriteria criteria) {
+        if (criteria == null || message == null) return message;
+        String lang = criteria.getPreferredLanguage();
+        String country = criteria.getCountry();
+        if (lang == null || lang.isBlank() || "Turkish".equalsIgnoreCase(lang) || "Turkey".equalsIgnoreCase(lang)) {
+            return message;
+        }
+
+        try {
+            String prompt = String.format(
+                    "Translate the following text into the official/common language of %s (%s). Keep the tone polite, helpful, and natural.\n" +
+                    "Do NOT add any notes, headers, or explanations. Just return the translation.\n\n" +
+                    "Text: %s\n" +
+                    "Translation:",
+                    country, lang, message
+            );
+            String response = aiProviderClient.complete(prompt);
+            if (response != null && !response.trim().startsWith("[MOCK]")) {
+                return response.trim();
+            }
+        } catch (Exception e) {
+            log.warn("[Orchestration] Failed to translate message: {}", e.getMessage());
+        }
+
+        // English hardcoded fallback rules
+        if ("English".equalsIgnoreCase(lang) || "en".equalsIgnoreCase(lang)) {
+            if (message.contains("Otel mi aramak istiyorsunuz")) {
+                return "Would you like to search for a hotel or a flight ticket?";
+            }
+            if (message.contains("alakasız mesaj")) {
+                return "This chat has been terminated due to multiple irrelevant messages.";
+            }
+            if (message.contains("Sadece otel arama")) {
+                return "I can only assist you with hotel searches, flight ticket searches, and reservations.";
+            }
+            if (message.contains("Bu sohbet sonlandırılmıştır")) {
+                return "This chat has been terminated. Please refresh the page to start a new search.";
+            }
+            if (message.contains("Arama türü tanımlanamadı")) {
+                return "Search type could not be identified.";
+            }
+        }
+        return message;
     }
 }
