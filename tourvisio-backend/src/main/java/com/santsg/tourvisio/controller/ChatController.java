@@ -1,8 +1,10 @@
 package com.santsg.tourvisio.controller;
-
+ 
 import com.santsg.tourvisio.dto.ChatRequest;
 import com.santsg.tourvisio.dto.ChatResponse;
 import com.santsg.tourvisio.service.ChatOrchestrationService;
+import com.santsg.tourvisio.service.ChatSessionManager;
+import com.santsg.tourvisio.exception.ResourceNotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -13,10 +15,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+ 
+import java.util.List;
 
 /**
  * AI Chatbot REST controller.
@@ -28,11 +29,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/chat")
 @Tag(name = "Chat", description = "TourVisio AI Chatbot — otel ve uçak arama asistanı")
 public class ChatController {
-
+ 
     private final ChatOrchestrationService orchestrationService;
-
-    public ChatController(ChatOrchestrationService orchestrationService) {
+    private final ChatSessionManager chatSessionManager;
+ 
+    public ChatController(ChatOrchestrationService orchestrationService, ChatSessionManager chatSessionManager) {
         this.orchestrationService = orchestrationService;
+        this.chatSessionManager = chatSessionManager;
     }
 
     /**
@@ -105,5 +108,21 @@ public class ChatController {
 
         ChatResponse response = orchestrationService.orchestrate(request);
         return ResponseEntity.ok(response);
+    }
+ 
+    @GetMapping(value = "/sessions", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "List all chat sessions")
+    public ResponseEntity<List<ChatSessionManager.SessionSummaryResponse>> getSessions() {
+        return ResponseEntity.ok(chatSessionManager.getAllSessionSummaries());
+    }
+ 
+    @GetMapping(value = "/sessions/{id}/messages", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Get full message history for a session")
+    public ResponseEntity<List<ChatSessionManager.MessageHistoryItem>> getSessionMessages(@PathVariable String id) {
+        ChatSessionManager.SessionState state = chatSessionManager.getSessionState(id);
+        if (state == null) {
+            throw new ResourceNotFoundException("Session not found: " + id);
+        }
+        return ResponseEntity.ok(state.getMessages());
     }
 }

@@ -139,26 +139,7 @@ public class SearchCriteria {
         return req;
     }
 
-    /**
-     * Backend 1'in yeni detaylı HotelSearchRequest DTO'sunu oluşturur.
-     */
-    public com.santsg.tourvisio.dto.hotel.HotelSearchRequest toHotelSearchRequestDto() {
-        if (locationOrHotelName == null || checkInDate == null
-                || checkOutDate == null || adultCount == null || currency == null) {
-            return null;
-        }
-        return com.santsg.tourvisio.dto.hotel.HotelSearchRequest.builder()
-                .locationOrHotelName(locationOrHotelName)
-                .checkInDate(checkInDate)
-                .checkOutDate(checkOutDate)
-                .adultCount(adultCount)
-                .childCount(childCount != null ? childCount : 0)
-                .childAges(childAges != null ? childAges : new ArrayList<>())
-                .nationality(nationality != null ? nationality : "TR")
-                .currency(currency)
-                .roomCount(roomCount != null ? roomCount : 1)
-                .build();
-    }
+
 
     /**
      * Tüm uçak alanları doluysa {@link FlightSearchRequest} döner; aksi hâlde

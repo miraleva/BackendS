@@ -250,17 +250,49 @@ public class SearchCriteriaExtractor {
      * gibi ifadelerden checkIn ve checkOut tarihlerini çıkarır.
      */
     private void extractHotelDates(String lower, SearchCriteria c) {
-        List<LocalDate> dates = extractAllDates(lower);
+        List<LocalDate> dates = new java.util.ArrayList<>();
+        List<String> labels = new java.util.ArrayList<>();
 
-        if (dates.size() >= 2) {
-            c.setCheckInDate(dates.get(0));
-            c.setCheckOutDate(dates.get(1));
+        Matcher m = DATE_WITH_LABEL_PATTERN.matcher(lower);
+        while (m.find()) {
+            LocalDate d = buildDate(
+                    Integer.parseInt(m.group(1)),
+                    m.group(2).toLowerCase(TR));
+            if (d != null) {
+                dates.add(d);
+                labels.add(m.group(3));
+            }
+        }
+
+        if (dates.isEmpty()) {
             return;
         }
 
-        if (dates.size() == 1) {
-            LocalDate firstDate = dates.get(0);
-            c.setCheckInDate(firstDate);
+        boolean hasExplicitLabel = false;
+        for (String label : labels) {
+            if (label != null && !label.isBlank()) {
+                hasExplicitLabel = true;
+                break;
+            }
+        }
+
+        if (hasExplicitLabel) {
+            for (int i = 0; i < dates.size(); i++) {
+                LocalDate d = dates.get(i);
+                String label = labels.get(i);
+                if (label != null && (label.contains("çıkış") || label.contains("cikis") || label.contains("checkout") || label.contains("bitiş") || label.contains("bitis"))) {
+                    c.setCheckOutDate(d);
+                } else {
+                    c.setCheckInDate(d);
+                }
+            }
+        } else {
+            if (dates.size() >= 2) {
+                c.setCheckInDate(dates.get(0));
+                c.setCheckOutDate(dates.get(1));
+            } else if (dates.size() == 1) {
+                c.setCheckInDate(dates.get(0));
+            }
         }
     }
 
