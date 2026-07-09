@@ -31,7 +31,7 @@ public class GeminiClient implements AIProviderClient {
         this(builder.build());
     }
 
-    GeminiClient(RestTemplate restTemplate) {
+    public GeminiClient(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
     }
 
@@ -68,8 +68,7 @@ public class GeminiClient implements AIProviderClient {
                     apiUrl,
                     HttpMethod.POST,
                     entity,
-                    GeminiGenerateContentResponse.class
-            ).getBody();
+                    GeminiGenerateContentResponse.class).getBody();
 
             return extractText(response);
         } catch (RestClientException ex) {
@@ -84,7 +83,8 @@ public class GeminiClient implements AIProviderClient {
         }
 
         GeminiGenerateContentResponse.Candidate candidate = response.getCandidates().get(0);
-        if (candidate == null || candidate.getContent() == null || candidate.getContent().getParts() == null || candidate.getContent().getParts().isEmpty()) {
+        if (candidate == null || candidate.getContent() == null || candidate.getContent().getParts() == null
+                || candidate.getContent().getParts().isEmpty()) {
             return "";
         }
 
