@@ -324,6 +324,7 @@ public class SearchCriteriaExtractor {
             }
         }
 
+        
         // Gidiş tarihi
         Matcher datM = DEPARTURE_DATE_PATTERN.matcher(lower);
         if (datM.find()) {
