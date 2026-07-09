@@ -13,6 +13,7 @@ import java.time.Month;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -97,7 +98,7 @@ public class SearchCriteriaExtractor {
 
     // ── Tarih: "15 Temmuz", "15 temmuz girişli", "20 temmuz çıkış" ──────────
     private static final Pattern DATE_WITH_LABEL_PATTERN = Pattern.compile(
-            "(\\d{1,2})\\s+(" + String.join("|", MONTHS_TR) + ")"
+            "(\\d{1,2})\\s+(" + String.join("|", MONTHS_BY_NAME.keySet()) + ")"
                     + "(?:\\s+\\d{4})?" // opsiyonel yıl
                     + "(?:\\s*(giriş|giris|checkin|başlangıç|baslangic"
                     + "|çıkış|cikis|checkout|bitiş|bitis))?",
@@ -105,7 +106,7 @@ public class SearchCriteriaExtractor {
 
     // ── Gidiş tarihi için "X tarihinde", "X'de git" ──────────────────────────
     private static final Pattern DEPARTURE_DATE_PATTERN = Pattern.compile(
-            "(\\d{1,2})\\s+(" + String.join("|", MONTHS_TR) + ")"
+            "(\\d{1,2})\\s+(" + String.join("|", MONTHS_BY_NAME.keySet()) + ")"
                     + "(?:\\s+\\d{4})?"
                     + "(?:\\s*(?:gidiş|gidis|kalkış|kalkis|hareket))?",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
@@ -249,7 +250,7 @@ public class SearchCriteriaExtractor {
      * gibi ifadelerden checkIn ve checkOut tarihlerini çıkarır.
      */
     private void extractHotelDates(String lower, SearchCriteria c) {
-        Matcher m = DATE_WITH_LABEL_PATTERN.matcher(lower);
+        List<LocalDate> dates = extractAllDates(lower);
 
         if (dates.size() >= 2) {
             c.setCheckInDate(dates.get(0));
@@ -359,11 +360,11 @@ public class SearchCriteriaExtractor {
     }
 
     private LocalDate buildDate(int day, String monthTr) {
-        int monthIdx = MONTHS_TR.indexOf(monthTr.toLowerCase(TR));
-        if (monthIdx < 0)
+        Integer monthNum = MONTHS_BY_NAME.get(monthTr.toLowerCase(TR));
+        if (monthNum == null)
             return null;
         try {
-            return LocalDate.of(CURRENT_YEAR, Month.of(monthIdx + 1), day);
+            return LocalDate.of(CURRENT_YEAR, Month.of(monthNum), day);
         } catch (Exception e) {
             log.warn("[Extractor] Geçersiz tarih: {} {}", day, monthTr);
             return null;

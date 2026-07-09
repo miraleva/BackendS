@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
@@ -25,6 +26,7 @@ import java.util.Map;
  * Bu sayede geliştirme ortamında key olmadan uygulama ayağa kalkar.</p>
  */
 @Component
+@Primary
 public class OpenAIClient implements AIProviderClient {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAIClient.class);
