@@ -1,7 +1,6 @@
 package com.santsg.tourvisio.exception;
 
 import com.santsg.tourvisio.dto.ErrorResponse;
-import com.santsg.tourvisio.exception.TourVisioAuthException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;

@@ -36,18 +36,9 @@ public class HotelSearchService {
      */
     public ChatSearchResponse searchFromCriteria(SearchCriteria criteria) {
         try {
-            HotelSearchRequest request = criteria.toHotelSearchRequest();
-            if (request == null) {
-                log.warn("[HotelSearchService] SearchCriteria → HotelSearchRequest dönüşümü başarısız — eksik alanlar var.");
-                return ChatSearchResponse.builder()
-                        .reply("Otel araması için gerekli bilgiler eksik. Lütfen tekrar deneyin.")
-                        .searchType("HOTEL_SEARCH")
-                        .success(false)
-                        .results(List.of())
-                        .build();
-            }
-
-            List<HotelSearchResponseItem> results = hotelApiClient.searchHotels(request);
+            // Önce SearchCriteria'dan doğrudan arama yap
+            // (culture, dil, para birimi criteria'dan okunur)
+            List<HotelSearchResponseItem> results = hotelApiClient.searchHotelsFromCriteria(criteria);
 
             if (results == null || results.isEmpty()) {
                 return ChatSearchResponse.builder()
@@ -59,7 +50,20 @@ public class HotelSearchService {
             }
 
             String location = criteria.getLocationOrHotelName();
-            String reply = location + " için " + results.size() + " otel bulundu.";
+            String currency = criteria.getCurrency() != null ? criteria.getCurrency() : "EUR";
+
+            // En iyi teklifi öne çıkar
+            HotelSearchResponseItem best = results.get(0);
+            String bestInfo = String.format("%s (%d★) — %s — %.2f %s",
+                    best.getName(),
+                    best.getStars() != null ? best.getStars() : 0,
+                    best.getBoardType() != null ? best.getBoardType() : best.getPensionType(),
+                    best.getPrice() != null ? best.getPrice() : 0.0,
+                    currency);
+
+            String reply = String.format(
+                    "%s için %d otel bulundu. En iyi teklif: %s",
+                    location, results.size(), bestInfo);
 
             return ChatSearchResponse.builder()
                     .reply(reply)
@@ -77,6 +81,14 @@ public class HotelSearchService {
                     .results(List.of())
                     .build();
         }
+    }
+
+    public com.santsg.tourvisio.dto.tourvisio.GetCheckInDatesResponse getCheckInDates(com.santsg.tourvisio.dto.tourvisio.GetCheckInDatesRequest request) {
+        return hotelApiClient.getCheckInDates(request);
+    }
+
+    public com.santsg.tourvisio.dto.tourvisio.GetProductInfoResponse getProductInfo(com.santsg.tourvisio.dto.tourvisio.GetProductInfoRequest request) {
+        return hotelApiClient.getProductInfo(request);
     }
 }
 

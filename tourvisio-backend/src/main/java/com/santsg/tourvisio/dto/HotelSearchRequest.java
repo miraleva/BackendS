@@ -31,11 +31,10 @@ public class HotelSearchRequest {
     @NotBlank(message = "currency is required")
     private String currency;
 
-    // TourVisio ek alanlar (opsiyonel)
     private Integer childCount;
     private List<Integer> childAges;
     private Integer roomCount;
-    private String nationality; // e.g., "TR", "DE"
+    private String nationality;
 
     // Additional optional filters
     private String region;

@@ -43,4 +43,20 @@ public class HotelSearchController {
         List<ArrivalAutocompleteResponse> results = autocompleteService.getArrivalAutocomplete(request.getQuery());
         return ResponseEntity.ok(results);
     }
+
+    @PostMapping("/checkindates")
+    @Operation(summary = "Get hotel checkin dates", description = "Retrieves all available checkin dates for a hotel")
+    public ResponseEntity<com.santsg.tourvisio.dto.tourvisio.GetCheckInDatesResponse> getCheckInDates(
+            @Valid @RequestBody com.santsg.tourvisio.dto.tourvisio.GetCheckInDatesRequest request) {
+        com.santsg.tourvisio.dto.tourvisio.GetCheckInDatesResponse response = hotelSearchService.getCheckInDates(request);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/productinfo")
+    @Operation(summary = "Get hotel product info", description = "Retrieves hotel media and description info without prices")
+    public ResponseEntity<com.santsg.tourvisio.dto.tourvisio.GetProductInfoResponse> getProductInfo(
+            @Valid @RequestBody com.santsg.tourvisio.dto.tourvisio.GetProductInfoRequest request) {
+        com.santsg.tourvisio.dto.tourvisio.GetProductInfoResponse response = hotelSearchService.getProductInfo(request);
+        return ResponseEntity.ok(response);
+    }
 }

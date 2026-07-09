@@ -1,5 +1,6 @@
 package com.santsg.tourvisio.chat;
 
+import com.santsg.tourvisio.client.AIProviderClient;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -16,6 +17,12 @@ import java.util.List;
  */
 @Service
 public class CriteriaMissingFieldsService {
+
+    private final AIProviderClient aiProviderClient;
+
+    public CriteriaMissingFieldsService(AIProviderClient aiProviderClient) {
+        this.aiProviderClient = aiProviderClient;
+    }
 
     /**
      * {@code criteria} içindeki {@code null} / boş zorunlu alanları listeler.
@@ -58,7 +65,43 @@ public class CriteriaMissingFieldsService {
      * Eksik alanları kullanıcıya gösterilecek tek bir Türkçe soruya dönüştürür.
      */
     public String buildPrompt(List<String> missingFields) {
+        return buildPrompt(missingFields, null);
+    }
+
+    /**
+     * Eksik alanları kullanıcıya gösterilecek tek bir soruya dönüştürür.
+     */
+    public String buildPrompt(List<String> missingFields, SearchCriteria criteria) {
         if (missingFields.isEmpty()) return "";
+
+        String lang = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "Turkish";
+        String country = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "Turkey";
+
+        // AI ile soru sorma (API key tanımlıysa)
+        try {
+            String prompt = String.format(
+                    "The user needs to supply the following missing information for their travel search: %s.\n\n" +
+                    "Write a short, polite and natural question in the official/most common language of %s (%s) asking the user to provide this missing information.\n" +
+                    "Return ONLY the question itself, no explanations.\n" +
+                    "Question:",
+                    String.join(", ", missingFields), country, lang
+            );
+
+            String response = aiProviderClient.complete(prompt);
+            if (response != null && !response.trim().startsWith("[MOCK]")) {
+                return response.trim();
+            }
+        } catch (Exception e) {
+            // Hata durumunda fallback
+        }
+
+        if ("English".equalsIgnoreCase(lang) || "en".equalsIgnoreCase(lang)) {
+            if (missingFields.size() == 1) {
+                return "Could you specify the " + missingFields.get(0) + " to perform the search?";
+            }
+            return "Could you specify the following missing information: " + String.join(", ", missingFields) + "?";
+        }
+
         if (missingFields.size() == 1) {
             return "Arama yapabilmem için " + missingFields.get(0) + " bilgisini de belirtir misiniz?";
         }

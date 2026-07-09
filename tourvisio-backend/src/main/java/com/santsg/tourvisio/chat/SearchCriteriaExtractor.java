@@ -1,11 +1,16 @@
 package com.santsg.tourvisio.chat;
 
+import com.santsg.tourvisio.client.AIProviderClient;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.Month;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -38,10 +43,28 @@ public class SearchCriteriaExtractor {
     private static final Locale TR = Locale.forLanguageTag("tr-TR");
     private static final int CURRENT_YEAR = LocalDate.now().getYear();
 
-    // ── Türkçe ay adları ──────────────────────────────────────────────────────
-    private static final List<String> MONTHS_TR = List.of(
-            "ocak", "şubat", "mart", "nisan", "mayıs", "haziran",
-            "temmuz", "ağustos", "eylül", "ekim", "kasım", "aralık");
+    private final AIProviderClient aiProviderClient;
+    private final ObjectMapper objectMapper;
+
+    public SearchCriteriaExtractor(AIProviderClient aiProviderClient) {
+        this.aiProviderClient = aiProviderClient;
+        this.objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+    }
+
+    // ── Ay adları ──────────────────────────────────────────────────────────
+    private static final Map<String, Integer> MONTHS_BY_NAME = Map.ofEntries(
+            Map.entry("ocak", 1), Map.entry("january", 1),
+            Map.entry("şubat", 2), Map.entry("february", 2),
+            Map.entry("mart", 3), Map.entry("march", 3),
+            Map.entry("nisan", 4), Map.entry("april", 4),
+            Map.entry("mayıs", 5), Map.entry("may", 5),
+            Map.entry("haziran", 6), Map.entry("june", 6),
+            Map.entry("temmuz", 7), Map.entry("july", 7),
+            Map.entry("ağustos", 8), Map.entry("august", 8),
+            Map.entry("eylül", 9), Map.entry("september", 9),
+            Map.entry("ekim", 10), Map.entry("october", 10),
+            Map.entry("kasım", 11), Map.entry("november", 11),
+            Map.entry("aralık", 12), Map.entry("december", 12));
 
     // ── Şehirler ──────────────────────────────────────────────────────────────
     private static final List<String> HOTEL_CITIES = List.of(
@@ -113,6 +136,69 @@ public class SearchCriteriaExtractor {
         if (message == null || message.isBlank())
             return new SearchCriteria();
 
+        // AI ile parametre çıkarma (API key tanımlıysa)
+        try {
+            String schemaDescription = "HOTEL_SEARCH".equals(intent)
+                    ? """
+                            {
+                              "locationOrHotelName": "şehir veya otel adı (ör. Antalya)",
+                              "checkInDate": "giriş tarihi YYYY-MM-DD formatında (ör. 2026-07-15). Bugünün tarihi 2026-07-08'dir. Eğer mesajda sadece gün/ay varsa (ör. 15 Temmuz) yılı 2026 olarak al.",
+                              "checkOutDate": "çıkış tarihi YYYY-MM-DD formatında. Eğer sadece gece sayısı verilmişse (ör. 5 gece), giriş tarihine bu sayıyı ekleyerek hesapla.",
+                              "adultCount": yetişkin sayısı tamsayı,
+                              "childCount": çocuk sayısı tamsayı,
+                              "childAges": çocuk yaşları dizisi (tamsayılar),
+                              "currency": para birimi (TRY, EUR, USD, GBP),
+                              "roomCount": oda sayısı tamsayı,
+                              "nationality": milliyet kodu (ör. TR)
+                            }
+                            """
+                    : """
+                            {
+                              "departureLocation": "kalkış yeri (ör. İstanbul)",
+                              "arrivalLocation": "varış yeri (ör. Antalya)",
+                              "departureDate": "gidiş tarihi YYYY-MM-DD formatında (ör. 2026-07-20). Bugünün tarihi 2026-07-08'dir. Eğer mesajda sadece gün/ay varsa yılı 2026 olarak al.",
+                              "returnDate": "dönüş tarihi YYYY-MM-DD formatında.",
+                              "passengerCount": yolcu sayısı tamsayı,
+                              "tripType": "ONE_WAY" veya "ROUND_TRIP",
+                              "currency": para birimi (TRY, EUR, USD, GBP)
+                            }
+                            """;
+
+            String prompt = """
+                    Kullanıcının şu mesajından seyahat kriterlerini çıkar ve SADECE saf bir JSON objesi olarak dön. Başka hiçbir açıklama, markdown bloğu (```json gibi) veya metin ekleme.
+                    Sadece bulabildiğin alanları doldur, bulamadıklarını JSON'da hiç gösterme veya null bırak.
+
+                    Kullanıcı Mesajı: "%s"
+                    Arama Türü: %s
+                    Beklenen JSON Şeması:
+                    %s
+
+                    Yanıt (Sadece JSON):"""
+                    .formatted(message, intent, schemaDescription);
+
+            String response = aiProviderClient.complete(prompt);
+            if (response != null && !response.trim().startsWith("[MOCK]")) {
+                // Markdown ```json bloğu varsa temizle
+                String jsonText = response.trim();
+                if (jsonText.startsWith("```")) {
+                    jsonText = jsonText.substring(jsonText.indexOf("\n") + 1);
+                }
+                if (jsonText.endsWith("```")) {
+                    jsonText = jsonText.substring(0, jsonText.lastIndexOf("```"));
+                }
+                jsonText = jsonText.trim();
+
+                SearchCriteria criteria = objectMapper.readValue(jsonText, SearchCriteria.class);
+                if (criteria != null) {
+                    criteria.setSearchType(intent);
+                    log.debug("[Extractor] AI parametre çıkarma başarılı: {}", criteria);
+                    return criteria;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[Extractor] AI parametre çıkarma başarısız, rule-based sisteme geçiliyor: {}", e.getMessage());
+        }
+
         String lower = message.toLowerCase(TR);
         SearchCriteria c = new SearchCriteria();
         c.setSearchType(intent);
@@ -151,76 +237,11 @@ public class SearchCriteriaExtractor {
 
         // Çocuk
         Matcher cm = CHILD_PATTERN.matcher(lower);
-        if (cm.find()) {
+        if (cm.find())
             c.setChildCount(Integer.parseInt(cm.group(1)));
-        }
-
-        // Çocuk Yaşları
-        List<Integer> ages = extractChildAges(lower);
-        if (!ages.isEmpty()) {
-            c.setChildAges(ages);
-        }
-
-        // Uyruk (Nationality)
-        String nationality = extractNationality(lower);
-        if (nationality != null) {
-            c.setNationality(nationality);
-        }
-
-        // Oda Sayısı (Room Count)
-        Pattern roomPattern = Pattern.compile("(\\d+)\\s*(?:oda|room)");
-        Matcher rm = roomPattern.matcher(lower);
-        if (rm.find()) {
-            c.setRoomCount(Integer.parseInt(rm.group(1)));
-        }
 
         // Tarihler (giriş & çıkış)
         extractHotelDates(lower, c);
-    }
-
-    private List<Integer> extractChildAges(String lower) {
-        List<Integer> ages = new java.util.ArrayList<>();
-        Pattern agePattern = Pattern.compile(
-                "(?:yaş|yas|yaşlarında|yaslar|yaşında|yasinda|yaşlar)\\s*(?::)?\\s*(\\d+(?:\\s*[,\\s+ve\\s+&]\\s*\\d+)*)");
-        Matcher m = agePattern.matcher(lower);
-        if (m.find()) {
-            String numbersGroup = m.group(1);
-            Pattern numPat = Pattern.compile("\\d+");
-            Matcher numMat = numPat.matcher(numbersGroup);
-            while (numMat.find()) {
-                ages.add(Integer.parseInt(numMat.group()));
-            }
-        }
-        if (ages.isEmpty()) {
-            Pattern ageSuffixPattern = Pattern.compile("(\\d+(?:\\s*[,\\s+ve\\s+&]\\s*\\d+)*)\\s*(?:yaş|yas)");
-            Matcher m2 = ageSuffixPattern.matcher(lower);
-            if (m2.find()) {
-                String numbersGroup = m2.group(1);
-                Pattern numPat = Pattern.compile("\\d+");
-                Matcher numMat = numPat.matcher(numbersGroup);
-                while (numMat.find()) {
-                    ages.add(Integer.parseInt(numMat.group()));
-                }
-            }
-        }
-        return ages;
-    }
-
-    private String extractNationality(String lower) {
-        if (lower.contains("türk") || lower.contains("turk") || lower.contains("tc") || lower.contains("tr uyruklu")
-                || lower.contains("türk uyruklu")) {
-            return "TR";
-        }
-        if (lower.contains("alman") || lower.contains("german") || lower.contains("de uyruklu")) {
-            return "DE";
-        }
-        if (lower.contains("ingiliz") || lower.contains("english") || lower.contains("gb uyruklu")) {
-            return "GB";
-        }
-        if (lower.contains("yabancı") || lower.contains("yabanci") || lower.contains("foreign")) {
-            return "FOREIGN";
-        }
-        return null;
     }
 
     /**
@@ -230,90 +251,14 @@ public class SearchCriteriaExtractor {
     private void extractHotelDates(String lower, SearchCriteria c) {
         Matcher m = DATE_WITH_LABEL_PATTERN.matcher(lower);
 
-        LocalDate firstDate = null;
-        LocalDate secondDate = null;
-        boolean firstIsCheckIn = false;
-        boolean firstIsCheckOut = false;
-
-        while (m.find()) {
-            int day = Integer.parseInt(m.group(1));
-            String month = m.group(2).toLowerCase(TR);
-            String label = m.group(3) != null ? m.group(3).toLowerCase(TR) : "";
-
-            LocalDate date = buildDate(day, month);
-            if (date == null)
-                continue;
-
-            boolean isCheckIn = label.matches("giriş|giris|checkin|başlangıç|baslangic");
-            boolean isCheckOut = label.matches("çıkış|cikis|checkout|bitiş|bitis");
-
-            if (firstDate == null) {
-                firstDate = date;
-                firstIsCheckIn = isCheckIn;
-                firstIsCheckOut = isCheckOut;
-            } else {
-                secondDate = date;
-
-                // İkinci tarihi label'ına göre ata
-                if (isCheckOut || (!isCheckIn && firstIsCheckIn)) {
-                    c.setCheckOutDate(date);
-                } else if (isCheckIn) {
-                    c.setCheckInDate(date);
-                }
-
-                // BUG FIX: İkinci tarih işlenince firstDate'yi de ata
-                // "15 Temmuz giriş 20 Temmuz çıkış" → firstDate=15Tem(checkIn),
-                // secondDate=20Tem(checkOut)
-                // Döngüde checkOutDate set edilir ama checkInDate hâlâ null kalır;
-                // sonraki guard'lar checkOutDate dolu olduğu için çalışmaz.
-                if (c.getCheckInDate() == null && firstIsCheckIn) {
-                    c.setCheckInDate(firstDate);
-                } else if (c.getCheckOutDate() == null && firstIsCheckOut) {
-                    c.setCheckOutDate(firstDate);
-                }
-            }
+        if (dates.size() >= 2) {
+            c.setCheckInDate(dates.get(0));
+            c.setCheckOutDate(dates.get(1));
+            return;
         }
 
-        // ── Tek tarih senaryoları ──────────────────────────────────────────────
-
-        // Tek tarih + "5 gece" kombinasyonu (ör. "15 Temmuz girişli 5 gece")
-        if (firstDate != null && c.getCheckInDate() == null && c.getCheckOutDate() == null) {
-            if (firstIsCheckOut) {
-                c.setCheckOutDate(firstDate);
-            } else {
-                // Varsayılan: giriş tarihi
-                c.setCheckInDate(firstDate);
-
-                // Gece sayısı varsa checkOut hesapla
-                Matcher nm = NIGHT_PATTERN.matcher(lower);
-                if (nm.find()) {
-                    int nights = Integer.parseInt(nm.group(1));
-                    c.setCheckOutDate(firstDate.plusDays(nights));
-                }
-            }
-        }
-
-        // ── İki tarih bulundu ama ikisi de label'sız ─────────────────────────
-        if (firstDate != null && secondDate != null
-                && c.getCheckInDate() == null && c.getCheckOutDate() == null) {
-            c.setCheckInDate(firstDate.isBefore(secondDate) ? firstDate : secondDate);
-            c.setCheckOutDate(firstDate.isBefore(secondDate) ? secondDate : firstDate);
-        }
-
-        // ── İki tarihten sadece biri label'lıydı; diğeri kalan slot'a gider ──
-        if (firstDate != null && secondDate != null) {
-            if (c.getCheckInDate() == null && c.getCheckOutDate() != null) {
-                // checkOut doldu ama checkIn boş — firstDate muhtemelen giriş
-                c.setCheckInDate(firstDate.isBefore(c.getCheckOutDate()) ? firstDate : secondDate);
-            } else if (c.getCheckOutDate() == null && c.getCheckInDate() != null) {
-                // checkIn doldu ama checkOut boş — secondDate muhtemelen çıkış
-                c.setCheckOutDate(secondDate.isAfter(c.getCheckInDate()) ? secondDate : firstDate);
-            }
-        }
-
-        // ── Tek tarih, label verilmemişse checkIn varsayılan ─────────────────
-        if (firstDate != null && secondDate == null
-                && c.getCheckInDate() == null && c.getCheckOutDate() == null) {
+        if (dates.size() == 1) {
+            LocalDate firstDate = dates.get(0);
             c.setCheckInDate(firstDate);
         }
     }
