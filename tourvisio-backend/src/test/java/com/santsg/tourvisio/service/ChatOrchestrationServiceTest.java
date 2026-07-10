@@ -58,6 +58,15 @@ class ChatOrchestrationServiceTest {
                 when(intentDetectionService
                                 .detectIntent("Hotel in Antalya from July 15 to July 20 for 2 adults in EUR"))
                                 .thenReturn("HOTEL_SEARCH");
+                when(aiProviderClient.complete(any())).thenReturn("""
+                                {
+                                  "locationOrHotelName": "Antalya",
+                                  "checkInDate": "2026-07-15",
+                                  "checkOutDate": "2026-07-20",
+                                  "adultCount": 2,
+                                  "currency": "EUR"
+                                }
+                                """);
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
                                 .reply("Found suitable hotels for Antalya")
                                 .searchType("HOTEL_SEARCH")

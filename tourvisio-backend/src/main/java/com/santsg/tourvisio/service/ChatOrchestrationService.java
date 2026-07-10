@@ -276,6 +276,8 @@ public class ChatOrchestrationService {
                 .searchType(intent)
                 .missingFields(List.of())
                 .chatStatus("ACTIVE")
+                .success(searchResponse.isSuccess())
+                .results(searchResponse.getResults())
                 .build();
     }
 
