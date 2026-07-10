@@ -84,6 +84,9 @@ public class SearchCriteriaExtractor {
     private static final Pattern CURRENCY_PATTERN = Pattern.compile(
             "\\b(tl|try|türk lirası|turk lirasi|lira|eur|euro|usd|dolar|gbp|sterlin)\\b");
 
+    private static final Pattern NUMERIC_DATE_PATTERN = Pattern.compile(
+            "\\b(?:(\\d{4})[-/.](0[1-9]|1[0-2])[-/.](0[1-9]|[12]\\d|3[01])|(0[1-9]|[12]\\d|3[01])[-/.](0[1-9]|1[0-2])[-/.](\\d{4}))\\b");
+
     // ── Sayı + kişi ifadeleri ─────────────────────────────────────────────────
     private static final Pattern ADULT_PATTERN = Pattern.compile(
             "(\\d+)\\s*(?:yetişkin|yetiskin|adult|kişi|kisi)");
@@ -265,6 +268,16 @@ public class SearchCriteriaExtractor {
         }
 
         if (dates.isEmpty()) {
+            List<LocalDate> numericDates = extractNumericDates(lower);
+            if (!numericDates.isEmpty()) {
+                dates.addAll(numericDates);
+                for (int i = 0; i < numericDates.size(); i++) {
+                    labels.add(null);
+                }
+            }
+        }
+
+        if (dates.isEmpty()) {
             return;
         }
 
@@ -288,8 +301,15 @@ public class SearchCriteriaExtractor {
             }
         } else {
             if (dates.size() >= 2) {
-                c.setCheckInDate(dates.get(0));
-                c.setCheckOutDate(dates.get(1));
+                LocalDate d1 = dates.get(0);
+                LocalDate d2 = dates.get(1);
+                if (d1.isAfter(d2)) {
+                    c.setCheckInDate(d2);
+                    c.setCheckOutDate(d1);
+                } else {
+                    c.setCheckInDate(d1);
+                    c.setCheckOutDate(d2);
+                }
             } else if (dates.size() == 1) {
                 c.setCheckInDate(dates.get(0));
             }
@@ -357,20 +377,35 @@ public class SearchCriteriaExtractor {
         }
 
         
-        // Gidiş tarihi
-        Matcher datM = DEPARTURE_DATE_PATTERN.matcher(lower);
-        if (datM.find()) {
-            LocalDate d = buildDate(Integer.parseInt(datM.group(1)), datM.group(2).toLowerCase(TR));
-            if (d != null)
-                c.setDepartureDate(d);
+        List<LocalDate> flightDates = extractNumericDates(lower);
+        if (flightDates.isEmpty()) {
+            Matcher datM = DEPARTURE_DATE_PATTERN.matcher(lower);
+            if (datM.find()) {
+                LocalDate d = buildDate(Integer.parseInt(datM.group(1)), datM.group(2).toLowerCase(TR));
+                if (d != null)
+                    flightDates.add(d);
+            }
+            if ("ROUND_TRIP".equals(c.getTripType())) {
+                List<LocalDate> labelDates = extractAllDates(lower);
+                if (labelDates.size() >= 2) {
+                    flightDates = labelDates;
+                }
+            }
         }
 
-        // Dönüş tarihi (gidiş-dönüş ise ikinci tarih)
-        if ("ROUND_TRIP".equals(c.getTripType())) {
-            List<LocalDate> dates = extractAllDates(lower);
-            if (dates.size() >= 2) {
-                c.setDepartureDate(dates.get(0));
-                c.setReturnDate(dates.get(1));
+        if (!flightDates.isEmpty()) {
+            if ("ROUND_TRIP".equals(c.getTripType()) && flightDates.size() >= 2) {
+                LocalDate d1 = flightDates.get(0);
+                LocalDate d2 = flightDates.get(1);
+                if (d1.isAfter(d2)) {
+                    c.setDepartureDate(d2);
+                    c.setReturnDate(d1);
+                } else {
+                    c.setDepartureDate(d1);
+                    c.setReturnDate(d2);
+                }
+            } else {
+                c.setDepartureDate(flightDates.get(0));
             }
         }
     }
@@ -413,6 +448,29 @@ public class SearchCriteriaExtractor {
                     m.group(2).toLowerCase(TR));
             if (d != null)
                 dates.add(d);
+        }
+        return dates;
+    }
+
+    private List<LocalDate> extractNumericDates(String text) {
+        List<LocalDate> dates = new java.util.ArrayList<>();
+        Matcher m = NUMERIC_DATE_PATTERN.matcher(text);
+        while (m.find()) {
+            try {
+                if (m.group(1) != null) {
+                    int year = Integer.parseInt(m.group(1));
+                    int month = Integer.parseInt(m.group(2));
+                    int day = Integer.parseInt(m.group(3));
+                    dates.add(LocalDate.of(year, month, day));
+                } else if (m.group(4) != null) {
+                    int day = Integer.parseInt(m.group(4));
+                    int month = Integer.parseInt(m.group(5));
+                    int year = Integer.parseInt(m.group(6));
+                    dates.add(LocalDate.of(year, month, day));
+                }
+            } catch (Exception e) {
+                // Ignore invalid date combinations
+            }
         }
         return dates;
     }
