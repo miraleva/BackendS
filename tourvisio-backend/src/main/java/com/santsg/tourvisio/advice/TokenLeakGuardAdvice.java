@@ -42,6 +42,10 @@ public class TokenLeakGuardAdvice implements ResponseBodyAdvice<Object> {
             return null;
         }
         try {
+            // Bypass leakage prevention for auth endpoints
+            if (request.getURI().getPath().contains("/api/auth/")) {
+                return body;
+            }
             // Serialize to a mutable JSON node tree.
             JsonNode node = mapper.valueToTree(body);
             if (node instanceof ObjectNode objectNode) {

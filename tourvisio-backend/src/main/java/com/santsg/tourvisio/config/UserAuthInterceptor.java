@@ -15,13 +15,15 @@ public class UserAuthInterceptor implements HandlerInterceptor {
 
     private final ActiveTokenRegistry tokenRegistry;
     private final TourVisioConfig tourVisioConfig;
+    private final JwtProvider jwtProvider;
 
     @org.springframework.beans.factory.annotation.Value("${tourvisio.api.test-mode:false}")
     private boolean testMode;
 
-    public UserAuthInterceptor(ActiveTokenRegistry tokenRegistry, TourVisioConfig tourVisioConfig) {
+    public UserAuthInterceptor(ActiveTokenRegistry tokenRegistry, TourVisioConfig tourVisioConfig, JwtProvider jwtProvider) {
         this.tokenRegistry = tokenRegistry;
         this.tourVisioConfig = tourVisioConfig;
+        this.jwtProvider = jwtProvider;
     }
 
     @Override
@@ -41,8 +43,20 @@ public class UserAuthInterceptor implements HandlerInterceptor {
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7).trim();
-            // In mock mode, we accept any dummy tokens or tokens starting with dummy values for development flexibility,
-            // but we still enforce a non-empty token presence.
+            
+            // 1. Try to validate as our JWT
+            try {
+                com.auth0.jwt.interfaces.DecodedJWT jwt = jwtProvider.validateToken(token);
+                Long userId = jwtProvider.getUserId(jwt);
+                String email = jwtProvider.getEmail(jwt);
+                request.setAttribute("userId", userId);
+                request.setAttribute("email", email);
+                return true;
+            } catch (Exception e) {
+                // Not a valid JWT or expired, fall back to existing token registry check
+            }
+
+            // 2. Fall back to existing token validation
             if (tokenRegistry.isValid(token) || (tourVisioConfig.isMockMode() && token.length() > 10)) {
                 return true;
             }
