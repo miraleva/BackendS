@@ -8,6 +8,7 @@ import com.santsg.tourvisio.service.ArrivalAutocompleteService;
 import com.santsg.tourvisio.dto.tourvisio.TourVisioFlightSearchRequest;
 import com.santsg.tourvisio.dto.tourvisio.TourVisioFlightSearchResponse;
 import com.santsg.tourvisio.exception.TourVisioAuthException;
+import com.santsg.tourvisio.exception.TourVisioApiException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.*;
@@ -73,9 +74,13 @@ public class TourVisioFlightApiClient {
     }
  
     public List<FlightSearchResponseItem> searchFlights(FlightSearchRequest request) {
-        if (config.isMockMode() || !config.isConfigured()) {
-            log.info("[FlightApiClient] Mock mod aktif veya credential eksik — mock data dönülüyor.");
+        if (config.isMockMode()) {
+            log.info("[FlightApiClient] Mock mod aktif — mock data dönülüyor.");
             return generateMockFlights(request);
+        }
+ 
+        if (!config.isConfigured()) {
+            throw new TourVisioApiException("TourVisio API bağlantısı yapılandırılmamış.");
         }
  
         try {
@@ -88,12 +93,12 @@ public class TourVisioFlightApiClient {
  
             TourVisioFlightSearchRequest.LocationCriteria dep = resolveLocation(request.getDepartureLocation());
             TourVisioFlightSearchRequest.LocationCriteria arr = resolveLocation(request.getArrivalLocation());
-
+ 
             TourVisioFlightSearchRequest.RoomCriteria room = TourVisioFlightSearchRequest.RoomCriteria.builder()
                     .adult(request.getPassengerCount())
                     .childAges(new ArrayList<>())
                     .build();
-
+ 
             TourVisioFlightSearchRequest tvRequest = TourVisioFlightSearchRequest.builder()
                     .productType(13)
                     .departureLocations(List.of(dep))
@@ -105,9 +110,9 @@ public class TourVisioFlightApiClient {
                     .nationality("TR")
                     .roomCriteria(List.of(room))
                     .build();
-
+ 
             HttpEntity<TourVisioFlightSearchRequest> entity = new HttpEntity<>(tvRequest, headers);
-
+ 
             log.info("[FlightApiClient] TourVisio uçuş arama isteği: {}", url);
             ResponseEntity<TourVisioFlightSearchResponse> response = restTemplate.exchange(
                     url,
@@ -115,7 +120,7 @@ public class TourVisioFlightApiClient {
                     entity,
                     TourVisioFlightSearchResponse.class
             );
-
+ 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null
                     && response.getBody().getFlights() != null) {
                 return response.getBody().getFlights().stream()
@@ -130,18 +135,18 @@ public class TourVisioFlightApiClient {
                                 .build())
                         .collect(Collectors.toList());
             } else {
-                log.warn("[FlightApiClient] TourVisio API status: {} — mock'a düşülüyor.",
-                        response.getStatusCode());
-                return generateMockFlights(request);
+                throw new TourVisioApiException(
+                        "TourVisio FlightSearch API response failed. Status: " + response.getStatusCode());
             }
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (TourVisioAuthException e) {
-            log.error("[FlightApiClient] TourVisio auth hatası: {} — mock'a düşülüyor.", e.getMessage());
-            return generateMockFlights(request);
+            throw new TourVisioApiException("TourVisio'ya giriş yapılamadı veya yetkilendirme hatası: " + e.getMessage(), e);
         } catch (Exception e) {
-            log.error("[FlightApiClient] TourVisio API hatası: {} — mock'a düşülüyor.", e.getMessage());
-            return generateMockFlights(request);
+            if (e instanceof TourVisioApiException) {
+                throw (TourVisioApiException) e;
+            }
+            throw new TourVisioApiException("TourVisio FlightSearch integration exception: " + e.getMessage(), e);
         }
     }
 

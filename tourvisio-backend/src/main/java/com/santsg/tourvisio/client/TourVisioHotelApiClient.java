@@ -6,6 +6,7 @@ import com.santsg.tourvisio.dto.HotelSearchResponseItem;
 import com.santsg.tourvisio.dto.ArrivalAutocompleteResponse;
 import com.santsg.tourvisio.dto.tourvisio.*;
 import com.santsg.tourvisio.exception.TourVisioAuthException;
+import com.santsg.tourvisio.exception.TourVisioApiException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.*;
@@ -722,20 +723,6 @@ public class TourVisioHotelApiClient {
             this.id = id;
             this.type = type;
             this.name = name;
-        }
-    }
-
-    /**
-     * TourVisio API hata sınıfı.
-     * Mock mod false iken hata olursa bu exception fırlatılır.
-     */
-    public static class TourVisioApiException extends RuntimeException {
-        public TourVisioApiException(String message) {
-            super(message);
-        }
-
-        public TourVisioApiException(String message, Throwable cause) {
-            super(message, cause);
         }
     }
 }
