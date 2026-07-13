@@ -519,12 +519,15 @@ public class TourVisioHotelApiClient {
                         })
                         .collect(Collectors.toList());
             } else {
-                log.warn("[HotelApiClient] Autocomplete API error (status={}) — falling back to mock autocomplete.", response.getStatusCode());
-                return generateMockAutocomplete(query);
+                throw new TourVisioApiException(
+                        "TourVisio Autocomplete API response failed. Status: " + response.getStatusCode());
             }
         } catch (Exception e) {
-            log.error("[HotelApiClient] Autocomplete integration exception — falling back to mock: {}", e.getMessage(), e);
-            return generateMockAutocomplete(query);
+            if (e instanceof TourVisioApiException) {
+                throw (TourVisioApiException) e;
+            }
+            throw new TourVisioApiException(
+                    "TourVisio Autocomplete integration exception (query='" + query + "'): " + e.getMessage(), e);
         }
     }
 
