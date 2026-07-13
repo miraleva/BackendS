@@ -22,14 +22,14 @@ public class IntentDetectionService {
         try {
             String prompt = """
                     Kullanıcının seyahat asistanına gönderdiği şu mesajın amacını (intent) tespit et.
-                    Sadece aşağıdaki dört değerden birini dön (başka hiçbir metin dönme):
-                    - HOTEL_SEARCH: Otel aramak, oda bakmak, konaklamak istiyorsa.
+                    Sadece aşağıdaki dört değerden birini dön (başka hiçbir metin dönme): //TO DO:aşağıdakilerle eşleşenleri döndürsün değiştir.
+                    - HOTEL_SEARCH: Otel aramak, oda bakmak, konaklamak istiyorsa.  
                     - FLIGHT_SEARCH: Uçak bileti, uçuş aramak istiyorsa.
                     - OUT_OF_SCOPE: Seyahat konusuyla alakasız bir sohbet ise.
                     - UNKNOWN: Selamlaşma veya ne aradığını belirtmediği belirsiz durumlar için.
-                    
                     Kullanıcı mesajı: "%s"
                     Değer:""".formatted(userMessage);
+                     // kullanıcının mesaj örenkleri dört değer içinde ekle.
 
             String response = aiProviderClient.complete(prompt);
             if (response != null && !response.trim().startsWith("[MOCK]")) {
