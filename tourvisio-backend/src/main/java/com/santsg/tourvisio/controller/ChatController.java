@@ -104,24 +104,36 @@ public class ChatController {
         @ApiResponse(responseCode = "400", description = "Geçersiz istek – mesaj boş olamaz")
     })
     public ResponseEntity<ChatResponse> sendMessage(
-            @Valid @RequestBody ChatRequest request) {
+            @Valid @RequestBody ChatRequest request,
+            @RequestAttribute(value = "userId", required = false) Long userId) {
 
-        ChatResponse response = orchestrationService.orchestrate(request);
+        ChatResponse response = orchestrationService.orchestrate(request, userId);
         return ResponseEntity.ok(response);
     }
  
     @GetMapping(value = "/sessions", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "List all chat sessions")
-    public ResponseEntity<List<ChatSessionManager.SessionSummaryResponse>> getSessions() {
-        return ResponseEntity.ok(chatSessionManager.getAllSessionSummaries());
+    public ResponseEntity<List<ChatSessionManager.SessionSummaryResponse>> getSessions(
+            @RequestAttribute(value = "userId", required = false) Long userId) {
+        if (userId == null) {
+            return ResponseEntity.ok(List.of());
+        }
+        return ResponseEntity.ok(chatSessionManager.getSessionSummariesForUser(userId));
     }
  
     @GetMapping(value = "/sessions/{id}/messages", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get full message history for a session")
-    public ResponseEntity<List<ChatSessionManager.MessageHistoryItem>> getSessionMessages(@PathVariable String id) {
+    public ResponseEntity<List<ChatSessionManager.MessageHistoryItem>> getSessionMessages(
+            @PathVariable String id,
+            @RequestAttribute(value = "userId", required = false) Long userId) {
         ChatSessionManager.SessionState state = chatSessionManager.getSessionState(id);
         if (state == null) {
             throw new ResourceNotFoundException("Session not found: " + id);
+        }
+        if (userId == null || !userId.equals(state.getUserId())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN, "Access denied to session: " + id
+            );
         }
         return ResponseEntity.ok(state.getMessages());
     }

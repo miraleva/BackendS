@@ -480,4 +480,57 @@ public class SearchCriteriaExtractor {
             return s;
         return Character.toUpperCase(s.charAt(0)) + s.substring(1).toLowerCase(TR);
     }
+
+    public LocalDate parseSingleDate(String text) {
+        if (text == null || text.isBlank()) return null;
+        String lower = text.toLowerCase(TR);
+        
+        // 1. Try numeric date
+        List<LocalDate> numericDates = extractNumericDates(lower);
+        if (!numericDates.isEmpty()) {
+            return numericDates.get(0);
+        }
+        
+        // 2. Try word date
+        Matcher m = DATE_WITH_LABEL_PATTERN.matcher(lower);
+        if (m.find()) {
+            return buildDate(Integer.parseInt(m.group(1)), m.group(2).toLowerCase(TR));
+        }
+        
+        return null;
+    }
+
+    public String parseLocation(String text, boolean isFlight) {
+        if (text == null || text.isBlank()) return null;
+        String lower = text.toLowerCase(TR);
+        List<String> cities = isFlight ? FLIGHT_CITIES : HOTEL_CITIES;
+        for (String city : cities) {
+            if (lower.contains(city)) {
+                return capitalize(city);
+            }
+        }
+        // Fallback: strip punctuation and capitalize
+        String cleaned = text.replaceAll("[.,!?']", "").trim();
+        if (cleaned.length() > 0) {
+            return capitalize(cleaned);
+        }
+        return null;
+    }
+
+    public String parseCurrency(String text) {
+        if (text == null || text.isBlank()) return null;
+        return extractCurrency(text.toLowerCase(TR));
+    }
+
+    public String parseTripType(String text) {
+        if (text == null) return null;
+        String lower = text.toLowerCase(TR);
+        if (lower.contains("tek") || lower.contains("one")) {
+            return "ONE_WAY";
+        }
+        if (lower.contains("dönüş") || lower.contains("donus") || lower.contains("round") || lower.contains("gidiş") || lower.contains("gidis")) {
+            return "ROUND_TRIP";
+        }
+        return null;
+    }
 }

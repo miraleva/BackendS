@@ -2,6 +2,7 @@ package com.santsg.tourvisio.service;
 
 import com.santsg.tourvisio.chat.ChatSessionStore;
 import com.santsg.tourvisio.chat.CriteriaMissingFieldsService;
+import com.santsg.tourvisio.chat.SearchCriteria;
 import com.santsg.tourvisio.chat.SearchCriteriaExtractor;
 import com.santsg.tourvisio.client.AIProviderClient;
 import com.santsg.tourvisio.dto.ChatRequest;
@@ -84,5 +85,127 @@ class ChatOrchestrationServiceTest {
                 assertThat(response.getSuccess()).isTrue();
                 assertThat(response.getResults()).hasSize(1);
                 verify(hotelSearchService).searchFromCriteria(any());
+        }
+
+        @Test
+        void orchestrate_shouldThrowForbiddenWhenSessionBelongsToAnotherUser() {
+                ChatSessionManager chatSessionManager = new ChatSessionManager();
+                ChatSessionStore sessionStore = new ChatSessionStore();
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor(aiProviderClient);
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService(aiProviderClient);
+
+                ChatOrchestrationService service = new ChatOrchestrationService(
+                                intentDetectionService,
+                                chatSessionManager,
+                                sessionStore,
+                                extractor,
+                                missingFieldsService,
+                                aiProviderClient,
+                                hotelSearchService,
+                                flightSearchService);
+
+                // Create a session owned by user 123L
+                chatSessionManager.getOrCreateSession("session-forbidden-test", 123L);
+
+                // Access session with user 456L
+                org.assertj.core.api.Assertions.assertThatThrownBy(() -> {
+                        service.orchestrate(ChatRequest.builder()
+                                        .message("Hello")
+                                        .sessionId("session-forbidden-test")
+                                        .build(), 456L);
+                }).isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                  .hasMessageContaining("Access denied to session");
+        }
+
+        @Test
+        void orchestrate_shouldAssignDirectlyWhenAskedForAdultCount() {
+                ChatSessionManager chatSessionManager = new ChatSessionManager();
+                ChatSessionStore sessionStore = new ChatSessionStore();
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor(aiProviderClient);
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService(aiProviderClient);
+
+                ChatOrchestrationService service = new ChatOrchestrationService(
+                                intentDetectionService,
+                                chatSessionManager,
+                                sessionStore,
+                                extractor,
+                                missingFieldsService,
+                                aiProviderClient,
+                                hotelSearchService,
+                                flightSearchService);
+
+                // Set up session and criteria
+                String sessionId = "session-assign-test";
+                ChatSessionManager.SessionState sessionState = chatSessionManager.getOrCreateSession(sessionId);
+                sessionState.setLastRequestedField("yetişkin sayısı");
+
+                SearchCriteria criteria = sessionStore.getOrCreate(sessionId);
+                criteria.setSearchType("HOTEL_SEARCH");
+                criteria.setLocationOrHotelName("Antalya");
+                criteria.setCheckInDate(java.time.LocalDate.of(2026, 7, 15));
+                criteria.setCheckOutDate(java.time.LocalDate.of(2026, 7, 20));
+                criteria.setCurrency("EUR");
+
+                when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
+                                .reply("Found suitable hotels")
+                                .searchType("HOTEL_SEARCH")
+                                .success(true)
+                                .results(List.of("Hotel sample"))
+                                .build());
+
+                // Send response "2"
+                ChatResponse response = service.orchestrate(ChatRequest.builder()
+                                .message("2")
+                                .sessionId(sessionId)
+                                .build());
+
+                assertThat(criteria.getAdultCount()).isEqualTo(2);
+                assertThat(response.getSuccess()).isTrue();
+        }
+
+        @Test
+        void orchestrate_shouldAssignDirectlyWhenAskedForCheckOutDate() {
+                ChatSessionManager chatSessionManager = new ChatSessionManager();
+                ChatSessionStore sessionStore = new ChatSessionStore();
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor(aiProviderClient);
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService(aiProviderClient);
+
+                ChatOrchestrationService service = new ChatOrchestrationService(
+                                intentDetectionService,
+                                chatSessionManager,
+                                sessionStore,
+                                extractor,
+                                missingFieldsService,
+                                aiProviderClient,
+                                hotelSearchService,
+                                flightSearchService);
+
+                // Set up session and criteria
+                String sessionId = "session-date-test";
+                ChatSessionManager.SessionState sessionState = chatSessionManager.getOrCreateSession(sessionId);
+                sessionState.setLastRequestedField("çıkış tarihi");
+
+                SearchCriteria criteria = sessionStore.getOrCreate(sessionId);
+                criteria.setSearchType("HOTEL_SEARCH");
+                criteria.setLocationOrHotelName("Antalya");
+                criteria.setCheckInDate(java.time.LocalDate.of(2026, 7, 15));
+                criteria.setAdultCount(2);
+                criteria.setCurrency("EUR");
+
+                when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
+                                .reply("Found suitable hotels")
+                                .searchType("HOTEL_SEARCH")
+                                .success(true)
+                                .results(List.of("Hotel sample"))
+                                .build());
+
+                // Send response "23 Temmuz"
+                ChatResponse response = service.orchestrate(ChatRequest.builder()
+                                .message("23 Temmuz")
+                                .sessionId(sessionId)
+                                .build());
+
+                assertThat(criteria.getCheckOutDate()).isEqualTo(java.time.LocalDate.of(2026, 7, 23));
+                assertThat(response.getSuccess()).isTrue();
         }
 }

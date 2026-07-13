@@ -73,16 +73,28 @@ public class ChatOrchestrationService {
     // ─────────────────────────────────────────────────────────────────────────
 
     public ChatResponse orchestrate(ChatRequest request) {
+        return orchestrate(request, null);
+    }
+
+    public ChatResponse orchestrate(ChatRequest request, Long userId) {
         // 1. Session yönetimi
         String sessionId = resolveSessionId(request.getSessionId());
-        ChatSessionManager.SessionState sessionState = chatSessionManager.getOrCreateSession(sessionId);
- 
+
+        ChatSessionManager.SessionState existingState = chatSessionManager.getSessionState(sessionId);
+        if (existingState != null && existingState.getUserId() != null && !existingState.getUserId().equals(userId)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN, "Access denied to session: " + sessionId);
+        }
+
+        ChatSessionManager.SessionState sessionState = chatSessionManager.getOrCreateSession(sessionId, userId);
+
         log.debug("[Orchestration] sessionId={}", sessionId);
- 
+
         // Record User Message
         String userMessage = request.getMessage();
         if (userMessage != null && !userMessage.isBlank()) {
-            sessionState.getMessages().add(new ChatSessionManager.MessageHistoryItem("user", userMessage, java.time.Instant.now()));
+            sessionState.getMessages()
+                    .add(new ChatSessionManager.MessageHistoryItem("user", userMessage, java.time.Instant.now()));
             sessionState.setLastMessageTimestamp(java.time.Instant.now());
             if ("New Chat Session".equals(sessionState.getTitle())) {
                 String title = userMessage;
@@ -92,22 +104,24 @@ public class ChatOrchestrationService {
                 sessionState.setTitle(title);
             }
         }
- 
+
         ChatResponse response = doOrchestrate(request, sessionId, sessionState);
- 
+
         // Record Bot Response
         if (response != null && response.getReply() != null) {
-            sessionState.getMessages().add(new ChatSessionManager.MessageHistoryItem("bot", response.getReply(), java.time.Instant.now()));
+            sessionState.getMessages().add(
+                    new ChatSessionManager.MessageHistoryItem("bot", response.getReply(), java.time.Instant.now()));
             sessionState.setLastMessageTimestamp(java.time.Instant.now());
         }
- 
+
         return response;
     }
- 
-    private ChatResponse doOrchestrate(ChatRequest request, String sessionId, ChatSessionManager.SessionState sessionState) {
+
+    private ChatResponse doOrchestrate(ChatRequest request, String sessionId,
+            ChatSessionManager.SessionState sessionState) {
         // Retrieve search criteria
         SearchCriteria existingCriteria = sessionStore.getOrCreate(sessionId);
- 
+
         // Update multi-language preferences from request if present
         if (request.getCountry() != null && !request.getCountry().isBlank()) {
             existingCriteria.setCountry(request.getCountry());
@@ -119,7 +133,7 @@ public class ChatOrchestrationService {
             existingCriteria.setPreferredLanguage(request.getCountry());
         }
         sessionStore.save(sessionId, existingCriteria);
- 
+
         // 2. Oturum sonlandırılmışsa erken çık
         if ("TERMINATED".equals(sessionState.getChatStatus())) {
             return ChatResponse.builder()
@@ -132,15 +146,15 @@ public class ChatOrchestrationService {
                     .chatStatus("TERMINATED")
                     .build();
         }
- 
+
         String userMessage = request.getMessage();
- 
+
         // 3. Aktif arama session'ı var mı?
         boolean hasActiveSearch = existingCriteria.getSearchType() != null;
- 
+
         // 4. Intent tespiti
         String intent;
- 
+
         if (hasActiveSearch) {
             // Takip mesajı: mevcut searchType'ı koru
             intent = existingCriteria.getSearchType();
@@ -148,7 +162,7 @@ public class ChatOrchestrationService {
         } else {
             intent = intentDetectionService.detectIntent(userMessage);
             log.debug("[Orchestration] Yeni session — intent={}", intent);
- 
+
             // OUT_OF_SCOPE (sadece yeni session başlatırken kontrol edilir)
             if ("OUT_OF_SCOPE".equals(intent)) {
                 sessionState.incrementOutOfScopeCount();
@@ -164,7 +178,7 @@ public class ChatOrchestrationService {
                         .chatStatus(chatStatus)
                         .build();
             }
- 
+
             // UNKNOWN: ne aradığını sor
             if ("UNKNOWN".equals(intent)) {
                 return ChatResponse.builder()
@@ -177,20 +191,28 @@ public class ChatOrchestrationService {
                         .build();
             }
         }
- 
+
         // 5. Mesajdan arama kriterlerini çıkar
         SearchCriteria incoming = extractor.extract(userMessage, intent);
- 
+
+        // Conversational adjustment based on lastRequestedField
+        String lastField = sessionState.getLastRequestedField();
+        if (lastField != null && userMessage != null && !userMessage.isBlank()) {
+            adjustIncomingCriteria(incoming, lastField, userMessage);
+            sessionState.setLastRequestedField(null);
+        }
+
         // 6. Yeni kriterler önceki session kriterleri üzerine birleştir
         existingCriteria.mergeWith(incoming);
         sessionStore.save(sessionId, existingCriteria);
- 
+
         log.debug("[Orchestration] Birleştirilmiş kriterler: {}", existingCriteria);
- 
+
         // 7. Eksik alan kontrolü
         List<String> missingFields = missingFieldsService.getMissingFields(existingCriteria);
- 
+
         if (!missingFields.isEmpty()) {
+            sessionState.setLastRequestedField(missingFields.get(0));
             String replyText = missingFieldsService.buildPrompt(missingFields, existingCriteria);
             return ChatResponse.builder()
                     .reply(replyText)
@@ -200,9 +222,150 @@ public class ChatOrchestrationService {
                     .chatStatus("ACTIVE")
                     .build();
         }
- 
+
         // 8. Tüm bilgiler tamam → arama servisine yönlendir
         return readyToSearchResponse(sessionId, intent, existingCriteria);
+    }
+
+    private void adjustIncomingCriteria(SearchCriteria incoming, String lastField, String message) {
+        if (incoming == null || lastField == null || message == null || message.isBlank()) {
+            return;
+        }
+
+        switch (lastField) {
+            case "konum veya otel adı":
+                if (incoming.getLocationOrHotelName() == null) {
+                    incoming.setLocationOrHotelName(extractor.parseLocation(message, false));
+                }
+                break;
+
+            case "kalkış noktası":
+                if (incoming.getDepartureLocation() == null) {
+                    incoming.setDepartureLocation(extractor.parseLocation(message, true));
+                }
+                break;
+
+            case "varış noktası":
+                if (incoming.getArrivalLocation() == null) {
+                    incoming.setArrivalLocation(extractor.parseLocation(message, true));
+                }
+                break;
+
+            case "giriş tarihi":
+                if (incoming.getCheckInDate() == null) {
+                    java.time.LocalDate d = extractor.parseSingleDate(message);
+                    if (d == null && incoming.getCheckOutDate() != null) {
+                        d = incoming.getCheckOutDate();
+                        incoming.setCheckOutDate(null);
+                    }
+                    incoming.setCheckInDate(d);
+                }
+                break;
+
+            case "çıkış tarihi":
+                if (incoming.getCheckOutDate() == null) {
+                    java.time.LocalDate d = extractor.parseSingleDate(message);
+                    if (d == null && incoming.getCheckInDate() != null) {
+                        d = incoming.getCheckInDate();
+                    }
+                    incoming.setCheckOutDate(d);
+                }
+                // If standard extractor incorrectly put it in checkInDate, null it out so it
+                // doesn't overwrite checkIn
+                incoming.setCheckInDate(null);
+                break;
+
+            case "gidiş tarihi":
+                if (incoming.getDepartureDate() == null) {
+                    java.time.LocalDate d = extractor.parseSingleDate(message);
+                    if (d == null && incoming.getReturnDate() != null) {
+                        d = incoming.getReturnDate();
+                        incoming.setReturnDate(null);
+                    }
+                    incoming.setDepartureDate(d);
+                }
+                break;
+
+            case "dönüş tarihi":
+                if (incoming.getReturnDate() == null) {
+                    java.time.LocalDate d = extractor.parseSingleDate(message);
+                    if (d == null && incoming.getDepartureDate() != null) {
+                        d = incoming.getDepartureDate();
+                    }
+                    incoming.setReturnDate(d);
+                }
+                incoming.setDepartureDate(null);
+                break;
+
+            case "yetişkin sayısı":
+                if (incoming.getAdultCount() == null) {
+                    incoming.setAdultCount(parseInteger(message));
+                }
+                break;
+
+            case "yolcu sayısı":
+                if (incoming.getPassengerCount() == null) {
+                    incoming.setPassengerCount(parseInteger(message));
+                }
+                break;
+
+            case "oda sayısı":
+                if (incoming.getRoomCount() == null || incoming.getRoomCount() == 1) {
+                    Integer rooms = parseInteger(message);
+                    if (rooms != null) {
+                        incoming.setRoomCount(rooms);
+                    }
+                }
+                break;
+
+            case "çocuk sayısı":
+                if (incoming.getChildCount() == null || incoming.getChildCount() == 0) {
+                    Integer children = parseInteger(message);
+                    if (children != null) {
+                        incoming.setChildCount(children);
+                    }
+                }
+                break;
+
+            case "çocuk yaşları":
+                if (incoming.getChildAges() == null || incoming.getChildAges().isEmpty()) {
+                    incoming.setChildAges(parseIntegerList(message));
+                }
+                break;
+
+            case "para birimi":
+                if (incoming.getCurrency() == null) {
+                    incoming.setCurrency(extractor.parseCurrency(message));
+                }
+                break;
+
+            case "tek yön / gidiş-dönüş":
+                if (incoming.getTripType() == null) {
+                    incoming.setTripType(extractor.parseTripType(message));
+                }
+                break;
+        }
+    }
+
+    private Integer parseInteger(String message) {
+        if (message == null)
+            return null;
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\d+").matcher(message);
+        if (matcher.find()) {
+            return Integer.parseInt(matcher.group());
+        }
+        return null;
+    }
+
+    private List<Integer> parseIntegerList(String message) {
+        List<Integer> list = new java.util.ArrayList<>();
+        if (message == null)
+            return list;
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\d+").matcher(message);
+        while (matcher.find()) {
+            list.add(Integer.parseInt(matcher.group()));
+        }
+        return list;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

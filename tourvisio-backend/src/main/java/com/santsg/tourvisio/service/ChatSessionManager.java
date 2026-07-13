@@ -28,13 +28,31 @@ public class ChatSessionManager {
     }
  
     public static class SessionState {
+        private Long userId;
         private String id;
         private String title = "New Chat Session";
         private java.time.Instant lastMessageTimestamp = java.time.Instant.now();
         private int outOfScopeCount = 0;
         private String chatStatus = "ACTIVE";
         private final java.util.List<MessageHistoryItem> messages = new java.util.concurrent.CopyOnWriteArrayList<>();
+        private String lastRequestedField;
  
+        public String getLastRequestedField() {
+            return lastRequestedField;
+        }
+
+        public void setLastRequestedField(String lastRequestedField) {
+            this.lastRequestedField = lastRequestedField;
+        }
+
+        public Long getUserId() {
+            return userId;
+        }
+
+        public void setUserId(Long userId) {
+            this.userId = userId;
+        }
+
         public String getId() {
             return id;
         }
@@ -86,15 +104,24 @@ public class ChatSessionManager {
     private final Map<String, SessionState> sessions = new ConcurrentHashMap<>();
  
     public SessionState getOrCreateSession(String sessionId) {
+        return getOrCreateSession(sessionId, null);
+    }
+
+    public SessionState getOrCreateSession(String sessionId, Long userId) {
         if (sessionId == null || sessionId.trim().isEmpty()) {
             sessionId = "default-session";
         }
         final String finalSessionId = sessionId;
-        return sessions.computeIfAbsent(sessionId, k -> {
-            SessionState state = new SessionState();
-            state.setId(finalSessionId);
-            return state;
+        SessionState state = sessions.computeIfAbsent(sessionId, k -> {
+            SessionState s = new SessionState();
+            s.setId(finalSessionId);
+            s.setUserId(userId);
+            return s;
         });
+        if (state.getUserId() == null && userId != null) {
+            state.setUserId(userId);
+        }
+        return state;
     }
  
     public void removeSession(String sessionId) {
@@ -109,6 +136,14 @@ public class ChatSessionManager {
  
     public java.util.List<SessionSummaryResponse> getAllSessionSummaries() {
         return sessions.values().stream()
+                .map(s -> new SessionSummaryResponse(s.getId(), s.getTitle(), s.getLastMessageTimestamp()))
+                .sorted((s1, s2) -> s2.getLastMessageTimestamp().compareTo(s1.getLastMessageTimestamp()))
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    public java.util.List<SessionSummaryResponse> getSessionSummariesForUser(Long userId) {
+        return sessions.values().stream()
+                .filter(s -> userId == null ? s.getUserId() == null : userId.equals(s.getUserId()))
                 .map(s -> new SessionSummaryResponse(s.getId(), s.getTitle(), s.getLastMessageTimestamp()))
                 .sorted((s1, s2) -> s2.getLastMessageTimestamp().compareTo(s1.getLastMessageTimestamp()))
                 .collect(java.util.stream.Collectors.toList());
