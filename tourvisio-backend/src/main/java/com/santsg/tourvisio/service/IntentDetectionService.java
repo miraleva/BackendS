@@ -1,46 +1,17 @@
 package com.santsg.tourvisio.service;
 
-import com.santsg.tourvisio.client.AIProviderClient;
 import org.springframework.stereotype.Service;
 import java.util.Locale;
 
 @Service
 public class IntentDetectionService {
 
-    private final AIProviderClient aiProviderClient;
-
-    public IntentDetectionService(AIProviderClient aiProviderClient) {
-        this.aiProviderClient = aiProviderClient;
+    public IntentDetectionService() {
     }
 
     public String detectIntent(String userMessage) {
         if (userMessage == null || userMessage.trim().isEmpty()) {
             return "UNKNOWN";
-        }
-
-        // AI ile intent tespiti (API key tanımlıysa)
-        try {
-            String prompt = """
-                    Kullanıcının seyahat asistanına gönderdiği şu mesajın amacını (intent) tespit et.
-                    Sadece aşağıdaki dört değerden birini dön (başka hiçbir metin dönme): //TO DO:aşağıdakilerle eşleşenleri döndürsün değiştir.
-                    - HOTEL_SEARCH: Otel aramak, oda bakmak, konaklamak istiyorsa.  
-                    - FLIGHT_SEARCH: Uçak bileti, uçuş aramak istiyorsa.
-                    - OUT_OF_SCOPE: Seyahat konusuyla alakasız bir sohbet ise.
-                    - UNKNOWN: Selamlaşma veya ne aradığını belirtmediği belirsiz durumlar için.
-                    Kullanıcı mesajı: "%s"
-                    Değer:""".formatted(userMessage);
-                     // kullanıcının mesaj örenkleri dört değer içinde ekle.
-
-            String response = aiProviderClient.complete(prompt);
-            if (response != null && !response.trim().startsWith("[MOCK]")) {
-                String cleanResponse = response.trim().toUpperCase();
-                if (cleanResponse.contains("HOTEL_SEARCH")) return "HOTEL_SEARCH";
-                if (cleanResponse.contains("FLIGHT_SEARCH")) return "FLIGHT_SEARCH";
-                if (cleanResponse.contains("OUT_OF_SCOPE")) return "OUT_OF_SCOPE";
-                if (cleanResponse.contains("UNKNOWN")) return "UNKNOWN";
-            }
-        } catch (Exception e) {
-            // Hata durumunda veya key yoksa rule-based yönteme devam et
         }
 
         // Convert to lowercase using Turkish locale to handle characters like I/ı and
