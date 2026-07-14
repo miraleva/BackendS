@@ -6,6 +6,7 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
 /**
@@ -63,7 +64,15 @@ public class TourVisioConfig {
      */
     @Bean("tourVisioRestTemplate")
     public RestTemplate tourVisioRestTemplate(@org.springframework.context.annotation.Lazy TourVisioAuthService authService) {
-        RestTemplate restTemplate = new RestTemplate();
+        // Bazi yogun rotalarda (ornek: Roma gibi cok sonuclu sehirler) TourVisio
+        // birkac MB'lik cevaplari yavas gonderebiliyor; sinirsiz bekleme yerine
+        // makul bir zaman asimi koyup arayan tarafin (FlightSearchService) daha
+        // hizli "servis kullanilamiyor" ile geri donebilmesini sagliyoruz.
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10_000);
+        factory.setReadTimeout(30_000);
+
+        RestTemplate restTemplate = new RestTemplate(factory);
         restTemplate.getInterceptors().add(new TourVisioAuthInterceptor(authService));
         return restTemplate;
     }
