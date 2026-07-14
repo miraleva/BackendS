@@ -1,6 +1,6 @@
 package com.santsg.tourvisio.agent;
 
-import com.santsg.tourvisio.client.OpenAIClient;
+import com.santsg.tourvisio.client.GeminiExtractionClient;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -16,7 +16,7 @@ import static org.mockito.Mockito.when;
 class ExtractionAgentTest {
 
     @Mock
-    private OpenAIClient openAiClient;
+    private GeminiExtractionClient geminiExtractionClient;
 
     @InjectMocks
     private ExtractionAgent extractionAgent;
@@ -35,7 +35,7 @@ class ExtractionAgentTest {
                   }
                 }
                 """;
-        when(openAiClient.complete(anyString())).thenReturn(mockResponse);
+        when(geminiExtractionClient.complete(anyString())).thenReturn(mockResponse);
 
         ExtractionResult result = extractionAgent.extract("Hotel in Antalya for 2 adults in EUR from July 15 to 20", null);
 
@@ -51,7 +51,7 @@ class ExtractionAgentTest {
 
     @Test
     void extract_shouldThrowException_whenOpenAiReturnsMockModeString() {
-        when(openAiClient.complete(anyString())).thenReturn("[MOCK] OpenAI API key is not configured.");
+        when(geminiExtractionClient.complete(anyString())).thenReturn("[MOCK] Gemini Lite API key is not configured.");
 
         assertThrows(RuntimeException.class, () -> {
             extractionAgent.extract("Hotel in Antalya", null);
@@ -60,7 +60,7 @@ class ExtractionAgentTest {
 
     @Test
     void extract_shouldThrowException_whenOpenAiReturnsUnparsableJson() {
-        when(openAiClient.complete(anyString())).thenReturn("unparsable response text");
+        when(geminiExtractionClient.complete(anyString())).thenReturn("unparsable response text");
 
         assertThrows(RuntimeException.class, () -> {
             extractionAgent.extract("Hotel in Antalya", null);
