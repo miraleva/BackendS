@@ -72,7 +72,7 @@ class ChatOrchestrationServiceTest {
                 when(extractionAgent.extract(any(), any()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", criteria));
 
-                when(responseAgent.summarize(any(), any(), any(), any()))
+                when(responseAgent.summarize(any(), any(), any(), any(), any()))
                                 .thenReturn("Found suitable hotels for Antalya");
 
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
@@ -155,7 +155,7 @@ class ChatOrchestrationServiceTest {
                 when(extractionAgent.extract(any(), any()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", new SearchCriteria()));
 
-                when(responseAgent.summarize(any(), any(), any(), any()))
+                when(responseAgent.summarize(any(), any(), any(), any(), any()))
                                 .thenReturn("Found suitable hotels");
 
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
@@ -206,7 +206,7 @@ class ChatOrchestrationServiceTest {
                 when(extractionAgent.extract(any(), any()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", new SearchCriteria()));
 
-                when(responseAgent.summarize(any(), any(), any(), any()))
+                when(responseAgent.summarize(any(), any(), any(), any(), any()))
                                 .thenReturn("Found suitable hotels");
 
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()

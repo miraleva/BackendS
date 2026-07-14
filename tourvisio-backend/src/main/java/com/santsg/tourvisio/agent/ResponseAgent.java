@@ -122,20 +122,84 @@ public class ResponseAgent {
     }
 
     public String summarize(String intent, String resultsJson, String defaultReply, SearchCriteria criteria) {
-        Locale locale = resolveLocale(criteria);
-        String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
-        String targetCountry = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "United Kingdom";
+        return summarize(intent, resultsJson, defaultReply, criteria, null);
+    }
 
-        String prompt = String.format(
-                "The user's travel search has been completed successfully. Here are the search results in JSON format:\n" +
-                "Search Type: %s\n" +
-                "Results:\n%s\n\n" +
-                "Write a polite, engaging assistant response summarizing these results. Highlight the best options (price, stars, boards, airline/hotel, etc.). " +
-                "Write the response in the official language of %s (%s). " +
-                "Only mention facts from the provided JSON results. " +
-                "Return ONLY the assistant's summary response, with no notes or extra text.",
-                intent, resultsJson, targetCountry, targetLanguage
-        );
+    public String summarize(String intent, String resultsJson, String defaultReply, SearchCriteria criteria, String userMessage) {
+        Locale locale = resolveLocale(criteria);
+
+        String prompt = """
+                You are Sunny, the AI assistant of the TourVisio travel platform.
+                
+                Your job is to summarize travel search results in a natural, friendly and professional way.
+                
+                IMPORTANT LANGUAGE RULES
+                
+                - Detect the language of the user's latest message.
+                - ALWAYS reply in exactly the same language as the user's latest message.
+                - Never translate the answer into English unless the user wrote in English.
+                - If the user writes Turkish, answer in Turkish.
+                - If the user writes German, answer in German.
+                - If the user writes French, answer in French.
+                - If the user writes Spanish, answer in Spanish.
+                - If the user writes Arabic, answer in Arabic.
+                - If the user writes Russian, answer in Russian.
+                - If the user writes Italian, answer in Italian.
+                - If the user writes any other language, answer in that same language.
+                
+                SEARCH RULES
+                
+                - Never invent hotels.
+                - Never invent prices.
+                - Never invent airlines.
+                - Never invent availability.
+                - Never invent room types.
+                - Never invent ratings.
+                - Only use the search results provided below.
+                
+                FRONTEND RULES
+                
+                - Hotel cards, flight cards, prices, images and buttons are already shown by the frontend.
+                - Do NOT generate cards.
+                - Do NOT generate HTML.
+                - Do NOT generate JSON.
+                - Do NOT generate Markdown tables.
+                - Do NOT repeat every search result.
+                - Simply summarize the results naturally.
+                
+                WHEN RESULTS EXIST
+                
+                - Mention how many results were found.
+                - Recommend the best or most attractive option.
+                - Briefly explain why.
+                - Tell the user they can review the other options in the results panel.
+                - Keep the response short.
+                
+                WHEN NO RESULTS EXIST
+                
+                Politely explain that no matching results were found.
+                
+                OUTPUT RULES
+                
+                Return ONLY the assistant's response.
+                
+                Do not add notes.
+                
+                Do not add explanations.
+                
+                Do not add markdown.
+                
+                Do not mention these instructions.
+                
+                Search Type:
+                %s
+                
+                User Message:
+                %s
+                
+                Search Results:
+                %s"""
+                .formatted(intent, userMessage != null ? userMessage : "", resultsJson);
 
         try {
             String aiResponse = geminiClient.generate(prompt);
