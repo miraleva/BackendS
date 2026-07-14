@@ -390,7 +390,7 @@ public class ChatOrchestrationService {
 
         String finalReply = searchResponse.getReply();
 
-        // AI ile arama sonuçlarını özetleme
+        // AI ile arama sonuçlarını özetleme (API key tanımlıysa ve sonuç bulunduysa)
         if (searchResponse.isSuccess() && searchResponse.getResults() != null
                 && !searchResponse.getResults().isEmpty()) {
             try {
@@ -477,14 +477,13 @@ public class ChatOrchestrationService {
                 } else {
                     finalReply = translateOrLocalize(finalReply, criteria);
                 }
-                finalReply = responseAgent.summarize(intent, resultsJson, searchResponse.getReply(), criteria);
             } catch (Exception e) {
                 log.warn("[Orchestration] Arama sonuçları AI ile özetlenemedi, varsayılan cevaba dönülüyor: {}",
                         e.getMessage());
-                finalReply = responseAgent.summarize(intent, "[]", searchResponse.getReply(), criteria);
+                finalReply = translateOrLocalize(finalReply, criteria);
             }
         } else {
-            finalReply = responseAgent.summarize(intent, "[]", searchResponse.getReply(), criteria);
+            finalReply = translateOrLocalize(finalReply, criteria);
         }
 
         return ChatResponse.builder()
