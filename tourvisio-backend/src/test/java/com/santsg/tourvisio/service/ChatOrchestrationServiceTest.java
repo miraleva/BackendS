@@ -4,7 +4,9 @@ import com.santsg.tourvisio.chat.ChatSessionStore;
 import com.santsg.tourvisio.chat.CriteriaMissingFieldsService;
 import com.santsg.tourvisio.chat.SearchCriteria;
 import com.santsg.tourvisio.chat.SearchCriteriaExtractor;
-import com.santsg.tourvisio.client.AIProviderClient;
+import com.santsg.tourvisio.agent.ExtractionAgent;
+import com.santsg.tourvisio.agent.ExtractionResult;
+import com.santsg.tourvisio.agent.ResponseAgent;
 import com.santsg.tourvisio.dto.ChatRequest;
 import com.santsg.tourvisio.dto.ChatResponse;
 import com.santsg.tourvisio.dto.ChatSearchResponse;
@@ -28,7 +30,10 @@ class ChatOrchestrationServiceTest {
         private IntentDetectionService intentDetectionService;
 
         @Mock
-        private AIProviderClient aiProviderClient;
+        private ExtractionAgent extractionAgent;
+
+        @Mock
+        private ResponseAgent responseAgent;
 
         @Mock
         private HotelSearchService hotelSearchService;
@@ -43,8 +48,8 @@ class ChatOrchestrationServiceTest {
         void orchestrate_shouldUseHotelSearchServiceWhenCriteriaAreComplete() {
                 ChatSessionManager chatSessionManager = new ChatSessionManager();
                 ChatSessionStore sessionStore = new ChatSessionStore();
-                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor(aiProviderClient);
-                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService(aiProviderClient);
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor();
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService();
 
                 ChatOrchestrationService service = new ChatOrchestrationService(
                                 intentDetectionService,
@@ -52,22 +57,24 @@ class ChatOrchestrationServiceTest {
                                 sessionStore,
                                 extractor,
                                 missingFieldsService,
-                                aiProviderClient,
+                                extractionAgent,
+                                responseAgent,
                                 hotelSearchService,
                                 flightSearchService);
 
-                when(intentDetectionService
-                                .detectIntent("Hotel in Antalya from July 15 to July 20 for 2 adults in EUR"))
-                                .thenReturn("HOTEL_SEARCH");
-                when(aiProviderClient.complete(any())).thenReturn("""
-                                {
-                                  "locationOrHotelName": "Antalya",
-                                  "checkInDate": "2026-07-15",
-                                  "checkOutDate": "2026-07-20",
-                                  "adultCount": 2,
-                                  "currency": "EUR"
-                                }
-                                """);
+                SearchCriteria criteria = new SearchCriteria();
+                criteria.setLocationOrHotelName("Antalya");
+                criteria.setCheckInDate(java.time.LocalDate.of(2026, 7, 15));
+                criteria.setCheckOutDate(java.time.LocalDate.of(2026, 7, 20));
+                criteria.setAdultCount(2);
+                criteria.setCurrency("EUR");
+
+                when(extractionAgent.extract(any(), any()))
+                                .thenReturn(new ExtractionResult("HOTEL_SEARCH", criteria));
+
+                when(responseAgent.summarize(any(), any(), any(), any()))
+                                .thenReturn("Found suitable hotels for Antalya");
+
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
                                 .reply("Found suitable hotels for Antalya")
                                 .searchType("HOTEL_SEARCH")
@@ -91,8 +98,8 @@ class ChatOrchestrationServiceTest {
         void orchestrate_shouldThrowForbiddenWhenSessionBelongsToAnotherUser() {
                 ChatSessionManager chatSessionManager = new ChatSessionManager();
                 ChatSessionStore sessionStore = new ChatSessionStore();
-                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor(aiProviderClient);
-                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService(aiProviderClient);
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor();
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService();
 
                 ChatOrchestrationService service = new ChatOrchestrationService(
                                 intentDetectionService,
@@ -100,14 +107,13 @@ class ChatOrchestrationServiceTest {
                                 sessionStore,
                                 extractor,
                                 missingFieldsService,
-                                aiProviderClient,
+                                extractionAgent,
+                                responseAgent,
                                 hotelSearchService,
                                 flightSearchService);
 
-                // Create a session owned by user 123L
                 chatSessionManager.getOrCreateSession("session-forbidden-test", 123L);
 
-                // Access session with user 456L
                 org.assertj.core.api.Assertions.assertThatThrownBy(() -> {
                         service.orchestrate(ChatRequest.builder()
                                         .message("Hello")
@@ -121,8 +127,8 @@ class ChatOrchestrationServiceTest {
         void orchestrate_shouldAssignDirectlyWhenAskedForAdultCount() {
                 ChatSessionManager chatSessionManager = new ChatSessionManager();
                 ChatSessionStore sessionStore = new ChatSessionStore();
-                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor(aiProviderClient);
-                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService(aiProviderClient);
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor();
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService();
 
                 ChatOrchestrationService service = new ChatOrchestrationService(
                                 intentDetectionService,
@@ -130,11 +136,11 @@ class ChatOrchestrationServiceTest {
                                 sessionStore,
                                 extractor,
                                 missingFieldsService,
-                                aiProviderClient,
+                                extractionAgent,
+                                responseAgent,
                                 hotelSearchService,
                                 flightSearchService);
 
-                // Set up session and criteria
                 String sessionId = "session-assign-test";
                 ChatSessionManager.SessionState sessionState = chatSessionManager.getOrCreateSession(sessionId);
                 sessionState.setLastRequestedField("yetişkin sayısı");
@@ -146,6 +152,12 @@ class ChatOrchestrationServiceTest {
                 criteria.setCheckOutDate(java.time.LocalDate.of(2026, 7, 20));
                 criteria.setCurrency("EUR");
 
+                when(extractionAgent.extract(any(), any()))
+                                .thenReturn(new ExtractionResult("HOTEL_SEARCH", new SearchCriteria()));
+
+                when(responseAgent.summarize(any(), any(), any(), any()))
+                                .thenReturn("Found suitable hotels");
+
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
                                 .reply("Found suitable hotels")
                                 .searchType("HOTEL_SEARCH")
@@ -153,7 +165,6 @@ class ChatOrchestrationServiceTest {
                                 .results(List.of("Hotel sample"))
                                 .build());
 
-                // Send response "2"
                 ChatResponse response = service.orchestrate(ChatRequest.builder()
                                 .message("2")
                                 .sessionId(sessionId)
@@ -167,8 +178,8 @@ class ChatOrchestrationServiceTest {
         void orchestrate_shouldAssignDirectlyWhenAskedForCheckOutDate() {
                 ChatSessionManager chatSessionManager = new ChatSessionManager();
                 ChatSessionStore sessionStore = new ChatSessionStore();
-                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor(aiProviderClient);
-                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService(aiProviderClient);
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor();
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService();
 
                 ChatOrchestrationService service = new ChatOrchestrationService(
                                 intentDetectionService,
@@ -176,11 +187,11 @@ class ChatOrchestrationServiceTest {
                                 sessionStore,
                                 extractor,
                                 missingFieldsService,
-                                aiProviderClient,
+                                extractionAgent,
+                                responseAgent,
                                 hotelSearchService,
                                 flightSearchService);
 
-                // Set up session and criteria
                 String sessionId = "session-date-test";
                 ChatSessionManager.SessionState sessionState = chatSessionManager.getOrCreateSession(sessionId);
                 sessionState.setLastRequestedField("çıkış tarihi");
@@ -192,6 +203,12 @@ class ChatOrchestrationServiceTest {
                 criteria.setAdultCount(2);
                 criteria.setCurrency("EUR");
 
+                when(extractionAgent.extract(any(), any()))
+                                .thenReturn(new ExtractionResult("HOTEL_SEARCH", new SearchCriteria()));
+
+                when(responseAgent.summarize(any(), any(), any(), any()))
+                                .thenReturn("Found suitable hotels");
+
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
                                 .reply("Found suitable hotels")
                                 .searchType("HOTEL_SEARCH")
@@ -199,7 +216,6 @@ class ChatOrchestrationServiceTest {
                                 .results(List.of("Hotel sample"))
                                 .build());
 
-                // Send response "23 Temmuz"
                 ChatResponse response = service.orchestrate(ChatRequest.builder()
                                 .message("23 Temmuz")
                                 .sessionId(sessionId)
