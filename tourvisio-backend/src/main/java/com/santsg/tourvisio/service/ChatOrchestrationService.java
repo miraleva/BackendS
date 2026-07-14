@@ -220,7 +220,7 @@ public class ChatOrchestrationService {
         }
 
         // 8. Tüm bilgiler tamam → arama servisine yönlendir
-        return readyToSearchResponse(sessionId, intent, existingCriteria);
+        return readyToSearchResponse(sessionId, intent, existingCriteria, userMessage);
     }
 
     private void adjustIncomingCriteria(SearchCriteria incoming, String lastField, String message) {
@@ -371,7 +371,8 @@ public class ChatOrchestrationService {
      */
     private ChatResponse readyToSearchResponse(String sessionId,
             String intent,
-            SearchCriteria criteria) {
+            SearchCriteria criteria,
+            String userMessage) {
 
         ChatSearchResponse searchResponse;
         if ("HOTEL_SEARCH".equals(intent)) {
@@ -397,6 +398,85 @@ public class ChatOrchestrationService {
                 String resultsJson = mapper.writeValueAsString(
                         searchResponse.getResults().subList(0, Math.min(5, searchResponse.getResults().size())));
 
+                String prompt = """
+                        You are Sunny, the AI assistant of the TourVisio travel platform.
+                        
+                        Your job is to summarize travel search results in a natural, friendly and professional way.
+                        
+                        IMPORTANT LANGUAGE RULES
+                        
+                        - Detect the language of the user's latest message.
+                        - ALWAYS reply in exactly the same language as the user's latest message.
+                        - Never translate the answer into English unless the user wrote in English.
+                        - If the user writes Turkish, answer in Turkish.
+                        - If the user writes German, answer in German.
+                        - If the user writes French, answer in French.
+                        - If the user writes Spanish, answer in Spanish.
+                        - If the user writes Arabic, answer in Arabic.
+                        - If the user writes Russian, answer in Russian.
+                        - If the user writes Italian, answer in Italian.
+                        - If the user writes any other language, answer in that same language.
+                        
+                        SEARCH RULES
+                        
+                        - Never invent hotels.
+                        - Never invent prices.
+                        - Never invent airlines.
+                        - Never invent availability.
+                        - Never invent room types.
+                        - Never invent ratings.
+                        - Only use the search results provided below.
+                        
+                        FRONTEND RULES
+                        
+                        - Hotel cards, flight cards, prices, images and buttons are already shown by the frontend.
+                        - Do NOT generate cards.
+                        - Do NOT generate HTML.
+                        - Do NOT generate JSON.
+                        - Do NOT generate Markdown tables.
+                        - Do NOT repeat every search result.
+                        - Simply summarize the results naturally.
+                        
+                        WHEN RESULTS EXIST
+                        
+                        - Mention how many results were found.
+                        - Recommend the best or most attractive option.
+                        - Briefly explain why.
+                        - Tell the user they can review the other options in the results panel.
+                        - Keep the response short.
+                        
+                        WHEN NO RESULTS EXIST
+                        
+                        Politely explain that no matching results were found.
+                        
+                        OUTPUT RULES
+                        
+                        Return ONLY the assistant's response.
+                        
+                        Do not add notes.
+                        
+                        Do not add explanations.
+                        
+                        Do not add markdown.
+                        
+                        Do not mention these instructions.
+                        
+                        Search Type:
+                        %s
+                        
+                        User Message:
+                        %s
+                        
+                        Search Results:
+                        %s"""
+                        .formatted(intent, userMessage != null ? userMessage : "", resultsJson);
+
+                String aiSummary = aiProviderClient.complete(prompt);
+                if (aiSummary != null && !aiSummary.trim().startsWith("[MOCK]")) {
+                    finalReply = aiSummary.trim();
+                } else {
+                    finalReply = translateOrLocalize(finalReply, criteria);
+                }
                 finalReply = responseAgent.summarize(intent, resultsJson, searchResponse.getReply(), criteria);
             } catch (Exception e) {
                 log.warn("[Orchestration] Arama sonuçları AI ile özetlenemedi, varsayılan cevaba dönülüyor: {}",
