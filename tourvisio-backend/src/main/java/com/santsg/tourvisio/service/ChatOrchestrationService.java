@@ -390,7 +390,7 @@ public class ChatOrchestrationService {
 
         String finalReply = searchResponse.getReply();
 
-        // AI ile arama sonuçlarını özetleme
+        // AI ile arama sonuçlarını özetleme (API key tanımlıysa ve sonuç bulunduysa)
         if (searchResponse.isSuccess() && searchResponse.getResults() != null
                 && !searchResponse.getResults().isEmpty()) {
             try {
@@ -398,7 +398,6 @@ public class ChatOrchestrationService {
                 String resultsJson = mapper.writeValueAsString(
                         searchResponse.getResults().subList(0, Math.min(5, searchResponse.getResults().size())));
 
-<<<<<<< HEAD
                 String prompt = """
                         You are Sunny, the AI assistant of the TourVisio travel platform.
                         
@@ -478,16 +477,13 @@ public class ChatOrchestrationService {
                 } else {
                     finalReply = translateOrLocalize(finalReply, criteria);
                 }
-=======
-                finalReply = responseAgent.summarize(intent, resultsJson, searchResponse.getReply(), criteria);
->>>>>>> 7d35ce576b748030f8670028ffb6e97135b1bae5
             } catch (Exception e) {
                 log.warn("[Orchestration] Arama sonuçları AI ile özetlenemedi, varsayılan cevaba dönülüyor: {}",
                         e.getMessage());
-                finalReply = responseAgent.summarize(intent, "[]", searchResponse.getReply(), criteria);
+                finalReply = translateOrLocalize(finalReply, criteria);
             }
         } else {
-            finalReply = responseAgent.summarize(intent, "[]", searchResponse.getReply(), criteria);
+            finalReply = translateOrLocalize(finalReply, criteria);
         }
 
         return ChatResponse.builder()
