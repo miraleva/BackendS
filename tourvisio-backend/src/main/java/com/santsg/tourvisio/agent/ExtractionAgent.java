@@ -3,7 +3,7 @@ package com.santsg.tourvisio.agent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.santsg.tourvisio.chat.SearchCriteria;
-import com.santsg.tourvisio.client.OpenAIClient;
+import com.santsg.tourvisio.client.GeminiExtractionClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -15,11 +15,11 @@ public class ExtractionAgent {
 
     private static final Logger log = LoggerFactory.getLogger(ExtractionAgent.class);
 
-    private final OpenAIClient openAiClient;
+    private final GeminiExtractionClient geminiExtractionClient;
     private final ObjectMapper objectMapper;
 
-    public ExtractionAgent(OpenAIClient openAiClient) {
-        this.openAiClient = openAiClient;
+    public ExtractionAgent(GeminiExtractionClient geminiExtractionClient) {
+        this.geminiExtractionClient = geminiExtractionClient;
         this.objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
     }
 
@@ -84,16 +84,16 @@ public class ExtractionAgent {
                 Response (JSON only):"""
                 .formatted(todayStr, activeIntentContext, message, schemaDescription);
 
-        String response = openAiClient.complete(prompt);
+        String response = geminiExtractionClient.complete(prompt);
 
         if (response == null || response.trim().isEmpty()) {
-            throw new RuntimeException("Received empty response from OpenAI client.");
+            throw new RuntimeException("Received empty response from Gemini Lite client.");
         }
         if (response.trim().startsWith("[MOCK]")) {
-            throw new RuntimeException("OpenAI API is running in MOCK mode: " + response);
+            throw new RuntimeException("Gemini Lite API is running in MOCK mode: " + response);
         }
-        if (response.contains("AI servisine bağlanılamadı")) {
-            throw new RuntimeException("Failed to connect to OpenAI service: " + response);
+        if (response.contains("Gemini service could not be reached")) {
+            throw new RuntimeException("Failed to connect to Gemini Lite service: " + response);
         }
 
         try {
