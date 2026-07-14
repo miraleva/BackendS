@@ -6,6 +6,7 @@ import com.santsg.tourvisio.dto.HotelSearchResponseItem;
 import com.santsg.tourvisio.dto.ArrivalAutocompleteResponse;
 import com.santsg.tourvisio.dto.tourvisio.*;
 import com.santsg.tourvisio.exception.TourVisioAuthException;
+import com.santsg.tourvisio.exception.TourVisioApiException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.*;
@@ -519,12 +520,15 @@ public class TourVisioHotelApiClient {
                         })
                         .collect(Collectors.toList());
             } else {
-                log.warn("[HotelApiClient] Autocomplete API error (status={}) — falling back to mock autocomplete.", response.getStatusCode());
-                return generateMockAutocomplete(query);
+                throw new TourVisioApiException(
+                        "TourVisio Autocomplete API response failed. Status: " + response.getStatusCode());
             }
         } catch (Exception e) {
-            log.error("[HotelApiClient] Autocomplete integration exception — falling back to mock: {}", e.getMessage(), e);
-            return generateMockAutocomplete(query);
+            if (e instanceof TourVisioApiException) {
+                throw (TourVisioApiException) e;
+            }
+            throw new TourVisioApiException(
+                    "TourVisio Autocomplete integration exception (query='" + query + "'): " + e.getMessage(), e);
         }
     }
 
@@ -719,20 +723,6 @@ public class TourVisioHotelApiClient {
             this.id = id;
             this.type = type;
             this.name = name;
-        }
-    }
-
-    /**
-     * TourVisio API hata sınıfı.
-     * Mock mod false iken hata olursa bu exception fırlatılır.
-     */
-    public static class TourVisioApiException extends RuntimeException {
-        public TourVisioApiException(String message) {
-            super(message);
-        }
-
-        public TourVisioApiException(String message, Throwable cause) {
-            super(message, cause);
         }
     }
 }

@@ -1,9 +1,5 @@
 package com.santsg.tourvisio.chat;
 
-import com.santsg.tourvisio.client.AIProviderClient;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -44,12 +40,7 @@ public class SearchCriteriaExtractor {
     private static final Locale TR = Locale.forLanguageTag("tr-TR");
     private static final int CURRENT_YEAR = LocalDate.now().getYear();
 
-    private final AIProviderClient aiProviderClient;
-    private final ObjectMapper objectMapper;
-
-    public SearchCriteriaExtractor(AIProviderClient aiProviderClient) {
-        this.aiProviderClient = aiProviderClient;
-        this.objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+    public SearchCriteriaExtractor() {
     }
 
     // ── Ay adları ──────────────────────────────────────────────────────────
@@ -139,69 +130,6 @@ public class SearchCriteriaExtractor {
     public SearchCriteria extract(String message, String intent) {
         if (message == null || message.isBlank())
             return new SearchCriteria();
-
-        // AI ile parametre çıkarma (API key tanımlıysa)
-        try {
-            String schemaDescription = "HOTEL_SEARCH".equals(intent)
-                    ? """
-                            {
-                              "locationOrHotelName": "şehir veya otel adı (ör. Antalya)",
-                              "checkInDate": "giriş tarihi YYYY-MM-DD formatında (ör. 2026-07-15). Bugünün tarihi 2026-07-08'dir. Eğer mesajda sadece gün/ay varsa (ör. 15 Temmuz) yılı 2026 olarak al.",
-                              "checkOutDate": "çıkış tarihi YYYY-MM-DD formatında. Eğer sadece gece sayısı verilmişse (ör. 5 gece), giriş tarihine bu sayıyı ekleyerek hesapla.",
-                              "adultCount": yetişkin sayısı tamsayı,
-                              "childCount": çocuk sayısı tamsayı,
-                              "childAges": çocuk yaşları dizisi (tamsayılar),
-                              "currency": para birimi (TRY, EUR, USD, GBP),
-                              "roomCount": oda sayısı tamsayı,
-                              "nationality": milliyet kodu (ör. TR)
-                            }
-                            """
-                    : """
-                            {
-                              "departureLocation": "kalkış yeri (ör. İstanbul)",
-                              "arrivalLocation": "varış yeri (ör. Antalya)",
-                              "departureDate": "gidiş tarihi YYYY-MM-DD formatında (ör. 2026-07-20). Bugünün tarihi 2026-07-08'dir. Eğer mesajda sadece gün/ay varsa yılı 2026 olarak al.",
-                              "returnDate": "dönüş tarihi YYYY-MM-DD formatında.",
-                              "passengerCount": yolcu sayısı tamsayı,
-                              "tripType": "ONE_WAY" veya "ROUND_TRIP",
-                              "currency": para birimi (TRY, EUR, USD, GBP)
-                            }
-                            """;
-
-            String prompt = """
-                    Kullanıcının şu mesajından seyahat kriterlerini çıkar ve SADECE saf bir JSON objesi olarak dön. Başka hiçbir açıklama, markdown bloğu (```json gibi) veya metin ekleme.
-                    Sadece bulabildiğin alanları doldur, bulamadıklarını JSON'da hiç gösterme veya null bırak.
-
-                    Kullanıcı Mesajı: "%s"
-                    Arama Türü: %s
-                    Beklenen JSON Şeması:
-                    %s
-
-                    Yanıt (Sadece JSON):"""
-                    .formatted(message, intent, schemaDescription);
-
-            String response = aiProviderClient.complete(prompt);
-            if (response != null && !response.trim().startsWith("[MOCK]")) {
-                // Markdown ```json bloğu varsa temizle
-                String jsonText = response.trim();
-                if (jsonText.startsWith("```")) {
-                    jsonText = jsonText.substring(jsonText.indexOf("\n") + 1);
-                }
-                if (jsonText.endsWith("```")) {
-                    jsonText = jsonText.substring(0, jsonText.lastIndexOf("```"));
-                }
-                jsonText = jsonText.trim();
-
-                SearchCriteria criteria = objectMapper.readValue(jsonText, SearchCriteria.class);
-                if (criteria != null) {
-                    criteria.setSearchType(intent);
-                    log.debug("[Extractor] AI parametre çıkarma başarılı: {}", criteria);
-                    return criteria;
-                }
-            }
-        } catch (Exception e) {
-            log.warn("[Extractor] AI parametre çıkarma başarısız, rule-based sisteme geçiliyor: {}", e.getMessage());
-        }
 
         String lower = message.toLowerCase(TR);
         SearchCriteria c = new SearchCriteria();

@@ -36,3 +36,5 @@ build/
 .env
 .env.local
 
+
+start-local.ps1
