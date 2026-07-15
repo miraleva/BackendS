@@ -8,12 +8,16 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Oturum bazlı arama kriterlerini bellekte tutan depo.
  *
- * <p>Her {@code sessionId} için tek bir {@link SearchCriteria} nesnesi
- * saklanır; mesajlar arası birikim bu nesne üzerinden yapılır.</p>
+ * <p>
+ * Her {@code sessionId} için tek bir {@link SearchCriteria} nesnesi
+ * saklanır; mesajlar arası birikim bu nesne üzerinden yapılır.
+ * </p>
  *
- * <p><strong>Genişletme notu:</strong> Bu sınıf yalnızca bir bellek deposudur.
+ * <p>
+ * <strong>Genişletme notu:</strong> Bu sınıf yalnızca bir bellek deposudur.
  * İleride {@code ChatSession} JPA entity'siyle veya Redis/Hazelcast gibi
- * bir dağıtık cache ile değiştirilebilir; çağıran kod değişmez.</p>
+ * bir dağıtık cache ile değiştirilebilir; çağıran kod değişmez.
+ * </p>
  */
 @Component
 public class ChatSessionStore {
@@ -21,8 +25,10 @@ public class ChatSessionStore {
     /**
      * sessionId → biriktirilmiş arama kriterleri
      *
-     * <p>Şimdilik uygulama yeniden başlayana kadar bellekte tutulur.
-     * Üretim ortamı için TTL eklenebilir (örn. Caffeine cache).</p>
+     * <p>
+     * Şimdilik uygulama yeniden başlayana kadar bellekte tutulur.
+     * Üretim ortamı için TTL eklenebilir (örn. Caffeine cache).
+     * </p>
      */
     private final Map<String, SearchCriteria> store = new ConcurrentHashMap<>();
 
