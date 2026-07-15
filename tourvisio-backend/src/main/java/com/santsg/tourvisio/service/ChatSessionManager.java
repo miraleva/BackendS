@@ -103,6 +103,29 @@ public class ChatSessionManager {
         public java.util.List<MessageHistoryItem> getMessages() {
             return messages;
         }
+        public java.util.List<?> getLastShownResults() {
+            return lastShownResults;
+        }
+
+        public void setLastShownResults(java.util.List<?> lastShownResults) {
+            this.lastShownResults = lastShownResults;
+        }
+
+        public String getMode() {
+            return mode;
+        }
+
+        public void setMode(String mode) {
+            this.mode = mode;
+        }
+
+        public Object getSelectedItem() {
+            return selectedItem;
+        }
+
+        public void setSelectedItem(Object selectedItem) {
+            this.selectedItem = selectedItem;
+        }
     }
 
     private final Map<String, SessionState> sessions = new ConcurrentHashMap<>();
