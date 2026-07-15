@@ -50,5 +50,7 @@ public class ChatResponse {
 
     @Schema(description = "Bulunan sonuçların listesi (otel veya uçak)")
     private List<?> results;
-}
 
+    @Schema(description = "Seçilen ve onay bekleyen öğe")
+    private Object selectedItem;
+}
