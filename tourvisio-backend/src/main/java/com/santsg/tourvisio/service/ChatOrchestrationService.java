@@ -83,7 +83,7 @@ public class ChatOrchestrationService {
         String userMessage = request.getMessage();
         if (userMessage != null && !userMessage.isBlank()) {
             sessionState.getMessages()
-                    .add(new ChatSessionManager.MessageHistoryItem("user", userMessage, java.time.Instant.now()));
+                    .add(new ChatSessionManager.MessageHistoryItem("user", userMessage, java.time.Instant.now(), null));
             sessionState.setLastMessageTimestamp(java.time.Instant.now());
             if ("New Chat Session".equals(sessionState.getTitle())) {
                 String title = userMessage;
@@ -99,7 +99,7 @@ public class ChatOrchestrationService {
         // Record Bot Response
         if (response != null && response.getReply() != null) {
             sessionState.getMessages().add(
-                    new ChatSessionManager.MessageHistoryItem("bot", response.getReply(), java.time.Instant.now()));
+                    new ChatSessionManager.MessageHistoryItem("bot", response.getReply(), java.time.Instant.now(), response.getResults()));
             sessionState.setLastMessageTimestamp(java.time.Instant.now());
         }
 
@@ -135,6 +135,30 @@ public class ChatOrchestrationService {
         }
 
         String userMessage = request.getMessage();
+
+        // 2.5 AWAITING_CONFIRM mode check
+        if ("AWAITING_CONFIRM".equals(sessionState.getMode()) && sessionState.getLastShownResults() != null) {
+            Object matchedItem = matchSelectedItem(userMessage, sessionState.getLastShownResults());
+            if (matchedItem != null) {
+                // Selection recognized!
+                sessionState.setMode("BOOKING");
+                sessionState.setSelectedItem(matchedItem);
+                
+                String confirmReply = responseAgent.confirmSelection(matchedItem, existingCriteria);
+                return ChatResponse.builder()
+                        .reply(confirmReply)
+                        .sessionId(sessionId)
+                        .searchType(existingCriteria.getSearchType())
+                        .missingFields(java.util.List.of())
+                        .chatStatus("BOOKING")
+                        .selectedItem(matchedItem)
+                        .build();
+            } else {
+                // Not a match, reset back to GATHERING
+                sessionState.setMode("GATHERING");
+                sessionState.setLastShownResults(null);
+            }
+        }
 
         // 3. Aktif arama session'ı var mı?
         boolean hasActiveSearch = existingCriteria.getSearchType() != null;
@@ -392,6 +416,14 @@ public class ChatOrchestrationService {
         // AI ile arama sonuçlarını özetleme
         if (searchResponse.isSuccess() && searchResponse.getResults() != null
                 && !searchResponse.getResults().isEmpty()) {
+                
+            // Set AWAITING_CONFIRM mode
+            ChatSessionManager.SessionState sessionState = chatSessionManager.getSessionState(sessionId);
+            if (sessionState != null) {
+                sessionState.setMode("AWAITING_CONFIRM");
+                sessionState.setLastShownResults(searchResponse.getResults());
+            }
+
             try {
                 com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                 String resultsJson = mapper.writeValueAsString(
@@ -423,5 +455,35 @@ public class ChatOrchestrationService {
             return UUID.randomUUID().toString();
         }
         return sessionId;
+    }
+
+    private Object matchSelectedItem(String userMessage, java.util.List<?> lastResults) {
+        if (userMessage == null || userMessage.isBlank() || lastResults == null) {
+            return null;
+        }
+        
+        String cleanUserMsg = userMessage.toLowerCase()
+            .replace("hoteli", "")
+            .replace("oteli", "")
+            .replace("hotel", "")
+            .replace("otel", "")
+            .trim();
+            
+        for (Object item : lastResults) {
+            String itemName = "";
+            if (item instanceof com.santsg.tourvisio.dto.HotelSearchResponseItem) {
+                itemName = ((com.santsg.tourvisio.dto.HotelSearchResponseItem) item).getName();
+            } else if (item instanceof com.santsg.tourvisio.dto.FlightSearchResponseItem) {
+                itemName = ((com.santsg.tourvisio.dto.FlightSearchResponseItem) item).getAirline();
+            }
+            
+            if (itemName != null && !itemName.isBlank()) {
+                String cleanItemName = itemName.toLowerCase();
+                if (userMessage.toLowerCase().contains(cleanItemName) || cleanItemName.contains(cleanUserMsg)) {
+                    return item;
+                }
+            }
+        }
+        return null;
     }
 }

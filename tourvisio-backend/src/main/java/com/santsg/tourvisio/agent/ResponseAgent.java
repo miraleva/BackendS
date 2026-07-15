@@ -153,12 +153,45 @@ public class ResponseAgent {
         return messageSource.getMessage("search.success.fallback", null, locale);
     }
 
+    public String confirmSelection(Object selectedItem, SearchCriteria criteria) {
+        Locale locale = resolveLocale(criteria);
+        String itemName = "";
+        if (selectedItem instanceof com.santsg.tourvisio.dto.HotelSearchResponseItem) {
+            itemName = ((com.santsg.tourvisio.dto.HotelSearchResponseItem) selectedItem).getName();
+        } else if (selectedItem instanceof com.santsg.tourvisio.dto.FlightSearchResponseItem) {
+            itemName = ((com.santsg.tourvisio.dto.FlightSearchResponseItem) selectedItem).getAirline() + " flight";
+        }
+        
+        String prompt = String.format(
+            "You are a helpful travel assistant. The user has selected '%s' from the search results. " +
+            "Please ask them politely if they would like to proceed with booking this option. " +
+            "Ensure the response is natural and written in %s.",
+            itemName, locale.getDisplayLanguage(Locale.ENGLISH));
+            
+        try {
+            String aiResponse = geminiClient.generate(prompt);
+            if (isValidResponse(aiResponse)) {
+                return aiResponse.trim();
+            }
+        } catch (Exception e) {
+            log.warn("[ResponseAgent] Confirm AI generation failed, using fallback: {}", e.getMessage());
+        }
+        
+        if ("tr".equals(locale.getLanguage())) {
+            return String.format("%s için rezervasyon işlemine geçmek ister misiniz?", itemName);
+        }
+        return String.format("Would you like to proceed with booking %s?", itemName);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
     private boolean isValidResponse(String response) {
-        return response != null && !response.trim().isEmpty() && !response.trim().startsWith("[MOCK]");
+        return response != null 
+                && !response.trim().isEmpty() 
+                && !response.trim().startsWith("[MOCK]")
+                && !response.contains("Gemini service could not be reached");
     }
 
     private Locale resolveLocale(SearchCriteria criteria) {
