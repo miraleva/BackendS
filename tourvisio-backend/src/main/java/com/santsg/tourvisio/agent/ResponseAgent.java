@@ -158,7 +158,10 @@ public class ResponseAgent {
     // ─────────────────────────────────────────────────────────────────────────
 
     private boolean isValidResponse(String response) {
-        return response != null && !response.trim().isEmpty() && !response.trim().startsWith("[MOCK]");
+        return response != null 
+                && !response.trim().isEmpty() 
+                && !response.trim().startsWith("[MOCK]")
+                && !response.contains("Gemini service could not be reached");
     }
 
     private Locale resolveLocale(SearchCriteria criteria) {

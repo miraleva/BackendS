@@ -83,7 +83,7 @@ public class ChatOrchestrationService {
         String userMessage = request.getMessage();
         if (userMessage != null && !userMessage.isBlank()) {
             sessionState.getMessages()
-                    .add(new ChatSessionManager.MessageHistoryItem("user", userMessage, java.time.Instant.now()));
+                    .add(new ChatSessionManager.MessageHistoryItem("user", userMessage, java.time.Instant.now(), null));
             sessionState.setLastMessageTimestamp(java.time.Instant.now());
             if ("New Chat Session".equals(sessionState.getTitle())) {
                 String title = userMessage;
@@ -99,7 +99,7 @@ public class ChatOrchestrationService {
         // Record Bot Response
         if (response != null && response.getReply() != null) {
             sessionState.getMessages().add(
-                    new ChatSessionManager.MessageHistoryItem("bot", response.getReply(), java.time.Instant.now()));
+                    new ChatSessionManager.MessageHistoryItem("bot", response.getReply(), java.time.Instant.now(), response.getResults()));
             sessionState.setLastMessageTimestamp(java.time.Instant.now());
         }
 

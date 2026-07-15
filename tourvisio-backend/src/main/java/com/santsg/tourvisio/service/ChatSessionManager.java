@@ -25,6 +25,7 @@ public class ChatSessionManager {
         private String sender; // "user" or "bot"
         private String text;
         private java.time.Instant timestamp;
+        private java.util.List<?> results;
     }
  
     public static class SessionState {
