@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.util.List;
 
 @SpringBootApplication
+@org.springframework.scheduling.annotation.EnableScheduling
 public class TourvisioBackendApplication {
 
 	static {

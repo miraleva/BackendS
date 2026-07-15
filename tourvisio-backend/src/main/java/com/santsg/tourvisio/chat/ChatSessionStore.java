@@ -26,6 +26,17 @@ public class ChatSessionStore {
      */
     private final Map<String, SearchCriteria> store = new ConcurrentHashMap<>();
 
+    public Map<String, SearchCriteria> getStoreMap() {
+        return this.store;
+    }
+
+    public void restoreStoreMap(Map<String, SearchCriteria> restoredStore) {
+        this.store.clear();
+        if (restoredStore != null) {
+            this.store.putAll(restoredStore);
+        }
+    }
+
     /**
      * Var olan kriteri döner; yoksa yeni boş bir {@link SearchCriteria} oluşturur.
      */

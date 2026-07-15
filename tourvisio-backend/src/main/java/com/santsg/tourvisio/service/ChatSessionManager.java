@@ -102,7 +102,18 @@ public class ChatSessionManager {
     }
  
     private final Map<String, SessionState> sessions = new ConcurrentHashMap<>();
- 
+
+    public Map<String, SessionState> getSessionsMap() {
+        return this.sessions;
+    }
+
+    public void restoreSessionsMap(Map<String, SessionState> restoredSessions) {
+        this.sessions.clear();
+        if (restoredSessions != null) {
+            this.sessions.putAll(restoredSessions);
+        }
+    }
+
     public SessionState getOrCreateSession(String sessionId) {
         return getOrCreateSession(sessionId, null);
     }
