@@ -54,10 +54,10 @@ class SnapshotServiceTest {
         originalSession.setChatStatus("ACTIVE");
         originalSession.setLastRequestedField("check_in_date");
         originalSession.getMessages().add(
-                new ChatSessionManager.MessageHistoryItem("user", "I want to search a hotel in Antalya", java.time.Instant.now())
+                new ChatSessionManager.MessageHistoryItem("user", "I want to search a hotel in Antalya", java.time.Instant.now(), null)
         );
         originalSession.getMessages().add(
-                new ChatSessionManager.MessageHistoryItem("bot", "Sure, what are the check-in and check-out dates?", java.time.Instant.now())
+                new ChatSessionManager.MessageHistoryItem("bot", "Sure, what are the check-in and check-out dates?", java.time.Instant.now(), null)
         );
 
         // Search Criteria
