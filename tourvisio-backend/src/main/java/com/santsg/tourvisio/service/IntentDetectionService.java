@@ -34,6 +34,10 @@ public class IntentDetectionService {
                 lowerMsg.contains("ucus") ||
                 lowerMsg.contains("sefer") ||
                 lowerMsg.contains("fly") ||
+                lowerMsg.contains("flight") ||
+                lowerMsg.contains("plane") ||
+                lowerMsg.contains("airline") ||
+                lowerMsg.contains("airport") ||
                 lowerMsg.contains("havaliman");
 
         // Keywords for Reservations
