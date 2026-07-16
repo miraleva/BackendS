@@ -25,6 +25,7 @@ public class ChatSessionManager {
         private String sender; // "user" or "bot"
         private String text;
         private java.time.Instant timestamp;
+        private java.util.List<?> results;
     }
  
     public static class SessionState {
@@ -34,9 +35,21 @@ public class ChatSessionManager {
         private java.time.Instant lastMessageTimestamp = java.time.Instant.now();
         private int outOfScopeCount = 0;
         private String chatStatus = "ACTIVE";
+        private String mode = "GATHERING";
+        private java.util.List<?> lastShownResults;
+        private Object selectedItem;
         private final java.util.List<MessageHistoryItem> messages = new java.util.concurrent.CopyOnWriteArrayList<>();
         private String lastRequestedField;
  
+        public String getMode() { return mode; }
+        public void setMode(String mode) { this.mode = mode; }
+        
+        public java.util.List<?> getLastShownResults() { return lastShownResults; }
+        public void setLastShownResults(java.util.List<?> lastShownResults) { this.lastShownResults = lastShownResults; }
+        
+        public Object getSelectedItem() { return selectedItem; }
+        public void setSelectedItem(Object selectedItem) { this.selectedItem = selectedItem; }
+
         public String getLastRequestedField() {
             return lastRequestedField;
         }
