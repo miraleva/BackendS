@@ -4,6 +4,7 @@ import com.santsg.tourvisio.chat.ChatSessionStore;
 import com.santsg.tourvisio.chat.CriteriaMissingFieldsService;
 import com.santsg.tourvisio.chat.SearchCriteria;
 import com.santsg.tourvisio.chat.SearchCriteriaExtractor;
+import com.santsg.tourvisio.chat.SearchCriteriaValidator;
 import com.santsg.tourvisio.agent.ExtractionAgent;
 import com.santsg.tourvisio.agent.ExtractionResult;
 import com.santsg.tourvisio.agent.ResponseAgent;
@@ -30,6 +31,7 @@ public class ChatOrchestrationService {
     private final ChatSessionStore sessionStore;
     private final SearchCriteriaExtractor extractor;
     private final CriteriaMissingFieldsService missingFieldsService;
+    private final SearchCriteriaValidator criteriaValidator;
     private final ExtractionAgent extractionAgent;
     private final ResponseAgent responseAgent;
     private final HotelSearchService hotelSearchService;
@@ -41,6 +43,7 @@ public class ChatOrchestrationService {
             ChatSessionStore sessionStore,
             SearchCriteriaExtractor extractor,
             CriteriaMissingFieldsService missingFieldsService,
+            SearchCriteriaValidator criteriaValidator,
             ExtractionAgent extractionAgent,
             ResponseAgent responseAgent,
             HotelSearchService hotelSearchService,
@@ -51,6 +54,7 @@ public class ChatOrchestrationService {
         this.sessionStore = sessionStore;
         this.extractor = extractor;
         this.missingFieldsService = missingFieldsService;
+        this.criteriaValidator = criteriaValidator;
         this.extractionAgent = extractionAgent;
         this.responseAgent = responseAgent;
         this.hotelSearchService = hotelSearchService;
@@ -234,7 +238,30 @@ public class ChatOrchestrationService {
 
         log.debug("[Orchestration] Birleştirilmiş kriterler: {}", existingCriteria);
 
-        // 7. Eksik alan kontrolü
+        // 7. Validate criteria constraints (Date rules, Adult counts, etc.)
+        SearchCriteriaValidator.ValidationResult validation = criteriaValidator.validate(existingCriteria);
+        if (!validation.isValid()) {
+            String errorType = validation.getErrorType();
+            String replyText = "";
+            if ("DATE_PAST".equals(errorType) || "DATE_MISMATCH".equals(errorType)) {
+                replyText = responseAgent.invalidDateRange(errorType, existingCriteria, userMessage);
+            } else if ("NO_ADULTS".equals(errorType)) {
+                replyText = responseAgent.noAdults(existingCriteria, userMessage);
+            }
+            
+            if (!replyText.isEmpty()) {
+                return ChatResponse.builder()
+                        .reply(replyText)
+                        .sessionId(sessionId)
+                        .searchType(intent)
+                        .missingFields(List.of())
+                        .chatStatus("ACTIVE")
+                        .success(false)
+                        .build();
+            }
+        }
+
+        // 8. Eksik alan kontrolü
         List<String> missingFields = missingFieldsService.getMissingFields(existingCriteria);
 
         if (!missingFields.isEmpty()) {
@@ -249,8 +276,8 @@ public class ChatOrchestrationService {
                     .build();
         }
 
-        // 8. Tüm bilgiler tamam → arama servisine yönlendir
-        return readyToSearchResponse(sessionId, intent, existingCriteria);
+        // 9. Tüm bilgiler tamam → arama servisine yönlendir
+        return readyToSearchResponse(sessionId, intent, existingCriteria, userMessage);
     }
 
     private void adjustIncomingCriteria(SearchCriteria incoming, String lastField, String message) {
@@ -401,7 +428,8 @@ public class ChatOrchestrationService {
      */
     private ChatResponse readyToSearchResponse(String sessionId,
             String intent,
-            SearchCriteria criteria) {
+            SearchCriteria criteria,
+            String userMessage) {
 
         ChatSearchResponse searchResponse;
         if ("HOTEL_SEARCH".equals(intent)) {
@@ -442,7 +470,7 @@ public class ChatOrchestrationService {
                 finalReply = responseAgent.summarize(intent, "[]", searchResponse.getReply(), criteria);
             }
         } else {
-            finalReply = responseAgent.summarize(intent, "[]", searchResponse.getReply(), criteria);
+            finalReply = responseAgent.noResultsFound(criteria, userMessage);
         }
 
         return ChatResponse.builder()

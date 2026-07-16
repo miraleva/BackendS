@@ -48,7 +48,7 @@ public class ExtractionAgent {
                   "criteria": {
                     // For HOTEL_SEARCH:
                     "locationOrHotelName": "city or hotel name (e.g. Antalya)",
-                    "checkInDate": "check-in date in YYYY-MM-DD format. Today's date is %s. If only month/day (e.g. 15 July) is specified, use the correct year based on today's date.",
+                    "checkInDate": "check-in date in YYYY-MM-DD format. Today's date is %s. Handle multiple formats robustly (e.g. '13.6.26' -> '2026-06-13', '13/04/2027', '12-08-2026'). If only month/day (e.g. 15 July, haziran 13) is specified, resolve to the nearest future occurrence using today's date.",
                     "checkOutDate": "check-out date in YYYY-MM-DD format. If night count is given, calculate check-out by adding it to check-in.",
                     "adultCount": integer,
                     "childCount": integer,
@@ -60,8 +60,8 @@ public class ExtractionAgent {
                     // For FLIGHT_SEARCH:
                     "departureLocation": "departure location (e.g. Istanbul)",
                     "arrivalLocation": "arrival location (e.g. Antalya)",
-                    "departureDate": "departure date in YYYY-MM-DD format.",
-                    "returnDate": "return date in YYYY-MM-DD format.",
+                    "departureDate": "departure date in YYYY-MM-DD format. Handle multiple formats robustly like checkInDate.",
+                    "returnDate": "return date in YYYY-MM-DD format. Handle multiple formats robustly like checkOutDate.",
                     "passengerCount": integer,
                     "tripType": "ONE_WAY" or "ROUND_TRIP",
                     "currency": currency (TRY, EUR, USD, GBP)

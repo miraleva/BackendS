@@ -4,12 +4,14 @@ import com.santsg.tourvisio.chat.ChatSessionStore;
 import com.santsg.tourvisio.chat.CriteriaMissingFieldsService;
 import com.santsg.tourvisio.chat.SearchCriteria;
 import com.santsg.tourvisio.chat.SearchCriteriaExtractor;
+import com.santsg.tourvisio.chat.SearchCriteriaValidator;
 import com.santsg.tourvisio.agent.ExtractionAgent;
 import com.santsg.tourvisio.agent.ExtractionResult;
 import com.santsg.tourvisio.agent.ResponseAgent;
 import com.santsg.tourvisio.dto.ChatRequest;
 import com.santsg.tourvisio.dto.ChatResponse;
 import com.santsg.tourvisio.dto.ChatSearchResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -20,6 +22,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -41,8 +44,16 @@ class ChatOrchestrationServiceTest {
         @Mock
         private FlightSearchService flightSearchService;
 
+        @Mock
+        private SearchCriteriaValidator criteriaValidator;
+
         @InjectMocks
         private ChatOrchestrationService orchestrationService;
+
+        @BeforeEach
+        void setUp() {
+                lenient().when(criteriaValidator.validate(any())).thenReturn(new SearchCriteriaValidator.ValidationResult(true, null));
+        }
 
         @Test
         void orchestrate_shouldUseHotelSearchServiceWhenCriteriaAreComplete() {
@@ -56,7 +67,7 @@ class ChatOrchestrationServiceTest {
                                 chatSessionManager,
                                 sessionStore,
                                 extractor,
-                                missingFieldsService,
+                                missingFieldsService, criteriaValidator,
                                 extractionAgent,
                                 responseAgent,
                                 hotelSearchService,
@@ -106,7 +117,7 @@ class ChatOrchestrationServiceTest {
                                 chatSessionManager,
                                 sessionStore,
                                 extractor,
-                                missingFieldsService,
+                                missingFieldsService, criteriaValidator,
                                 extractionAgent,
                                 responseAgent,
                                 hotelSearchService,
@@ -135,7 +146,7 @@ class ChatOrchestrationServiceTest {
                                 chatSessionManager,
                                 sessionStore,
                                 extractor,
-                                missingFieldsService,
+                                missingFieldsService, criteriaValidator,
                                 extractionAgent,
                                 responseAgent,
                                 hotelSearchService,
@@ -186,7 +197,7 @@ class ChatOrchestrationServiceTest {
                                 chatSessionManager,
                                 sessionStore,
                                 extractor,
-                                missingFieldsService,
+                                missingFieldsService, criteriaValidator,
                                 extractionAgent,
                                 responseAgent,
                                 hotelSearchService,

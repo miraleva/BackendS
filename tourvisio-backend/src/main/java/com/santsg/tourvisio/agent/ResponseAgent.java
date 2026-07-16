@@ -87,7 +87,8 @@ public class ResponseAgent {
         String fieldsCsv = String.join(", ", missingFields);
         String prompt = String.format(
                 "The user is planning a trip, but the following mandatory search criteria are missing: [%s]. " +
-                "Write a short, polite, and natural question asking the user to provide this missing information. " +
+                "Ask the user for ALL of this information together in a single, friendly, and natural question. " +
+                "Do NOT use bare technical terms (e.g., say 'How many people will be traveling?' instead of 'adult count'). " +
                 "Write the question in the official language of %s (%s). " +
                 "Return ONLY the question itself, no extra notes.",
                 fieldsCsv, targetCountry, targetLanguage
@@ -181,6 +182,93 @@ public class ResponseAgent {
             return String.format("%s için rezervasyon işlemine geçmek ister misiniz?", itemName);
         }
         return String.format("Would you like to proceed with booking %s?", itemName);
+    }
+
+    public String invalidDateRange(String errorType, SearchCriteria criteria, String userMessage) {
+        Locale locale = resolveLocale(criteria);
+        String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
+        
+        String context = "";
+        if ("DATE_PAST".equals(errorType)) {
+            context = "The user provided a check-in or departure date that is in the past. Explain that they must provide a future date.";
+        } else if ("DATE_MISMATCH".equals(errorType)) {
+            context = "The user provided a check-out or return date that is before the check-in or departure date. Explain that the return/check-out date must be after the start date.";
+        }
+        
+        String prompt = String.format(
+                "The user is planning a trip, but there is an issue with the dates. %s\n" +
+                "Write a polite, helpful response explaining the specific error and asking them to correct the dates. " +
+                "Do NOT say 'not found'. Respond directly to the user.\n" +
+                "Write the response in the language of this user message: \"%s\" (Target: %s).\n" +
+                "Return ONLY the response itself, no extra notes.",
+                context, userMessage, targetLanguage
+        );
+
+        try {
+            String aiResponse = geminiClient.generate(prompt);
+            if (isValidResponse(aiResponse)) {
+                return aiResponse.trim();
+            }
+        } catch (Exception e) {
+            log.warn("[ResponseAgent] invalidDateRange AI generation failed: {}", e.getMessage());
+        }
+
+        String key = "DATE_PAST".equals(errorType) ? "invalid.date.past" : "invalid.date.mismatch";
+        return messageSource.getMessage(key, null, locale);
+    }
+
+    public String noAdults(SearchCriteria criteria, String userMessage) {
+        Locale locale = resolveLocale(criteria);
+        String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
+
+        String prompt = String.format(
+                "The user is trying to book a hotel but has indicated 0 adults (only minors). " +
+                "Write a polite response explaining that hotel reservations legally require at least one accompanying adult guest. " +
+                "Write the response in the language of this user message: \"%s\" (Target: %s).\n" +
+                "Return ONLY the response itself, no extra notes.",
+                userMessage, targetLanguage
+        );
+
+        try {
+            String aiResponse = geminiClient.generate(prompt);
+            if (isValidResponse(aiResponse)) {
+                return aiResponse.trim();
+            }
+        } catch (Exception e) {
+            log.warn("[ResponseAgent] noAdults AI generation failed: {}", e.getMessage());
+        }
+
+        return messageSource.getMessage("error.no.adults", null, locale);
+    }
+
+    public String noResultsFound(SearchCriteria criteria, String userMessage) {
+        Locale locale = resolveLocale(criteria);
+        String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
+
+        String location = criteria != null ? criteria.getLocationOrHotelName() : "the selected destination";
+        String adults = criteria != null && criteria.getAdultCount() != null ? String.valueOf(criteria.getAdultCount()) : "?";
+        String checkIn = criteria != null && criteria.getCheckInDate() != null ? criteria.getCheckInDate().toString() : "?";
+        String checkOut = criteria != null && criteria.getCheckOutDate() != null ? criteria.getCheckOutDate().toString() : "?";
+        
+        String prompt = String.format(
+                "The user searched for a trip (Location: %s, Dates: %s to %s, Adults: %s) but no results were found in the system.\n" +
+                "Write a polite response. Start by briefly restating the key criteria (location, dates, guests) you understood from the user's request, then explain that no hotels or flights were found matching those exact criteria. " +
+                "Never give a bare 'not found' message with zero context.\n" +
+                "Write the response in the language of this user message: \"%s\" (Target: %s).\n" +
+                "Return ONLY the response itself, no extra notes.",
+                location, checkIn, checkOut, adults, userMessage, targetLanguage
+        );
+
+        try {
+            String aiResponse = geminiClient.generate(prompt);
+            if (isValidResponse(aiResponse)) {
+                return aiResponse.trim();
+            }
+        } catch (Exception e) {
+            log.warn("[ResponseAgent] noResultsFound AI generation failed: {}", e.getMessage());
+        }
+
+        return messageSource.getMessage("search.no.results", null, locale);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
