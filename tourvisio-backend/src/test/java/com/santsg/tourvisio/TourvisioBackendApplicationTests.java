@@ -188,4 +188,44 @@ class TourvisioBackendApplicationTests {
 				.andExpect(jsonPath("$.reply", containsString("uçuşlar bulundu")))
 				.andExpect(jsonPath("$.chatStatus", equalTo("ACTIVE")));
 	}
+
+
+	@Test
+	void testUnknownIntentWelcome() throws Exception {
+		ChatRequest request1 = new ChatRequest("merhaba", "unknown-session-123");
+		mockMvc.perform(post("/api/chat/message")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(request1)))
+				.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
+				.andExpect(status().isOk());
+	}
+
+
+
+
+	@Test
+	void testWelcomeTriggerConsistency() throws Exception {
+		// Session A - First message
+		ChatRequest req1 = new ChatRequest("merhaba", "session-A");
+		mockMvc.perform(post("/api/chat/message")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(req1)))
+				.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print());
+
+		// Session A - Second message
+		ChatRequest req2 = new ChatRequest("hello", "session-A");
+		mockMvc.perform(post("/api/chat/message")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(req2)))
+				.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print());
+
+		// Session B - First message
+		ChatRequest req3 = new ChatRequest("hello", "session-B");
+		mockMvc.perform(post("/api/chat/message")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(req3)))
+				.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print());
+	}
+
+
 }

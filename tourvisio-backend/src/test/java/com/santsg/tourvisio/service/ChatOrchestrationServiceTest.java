@@ -22,6 +22,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -83,7 +84,7 @@ class ChatOrchestrationServiceTest {
                 when(extractionAgent.extract(any(), any()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", criteria));
 
-                when(responseAgent.summarize(any(), any(), any(), any()))
+                when(responseAgent.summarize(any(), any(), any(), any(), anyInt(), anyInt()))
                                 .thenReturn("Found suitable hotels for Antalya");
 
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
@@ -166,7 +167,7 @@ class ChatOrchestrationServiceTest {
                 when(extractionAgent.extract(any(), any()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", new SearchCriteria()));
 
-                when(responseAgent.summarize(any(), any(), any(), any()))
+                when(responseAgent.summarize(any(), any(), any(), any(), anyInt(), anyInt()))
                                 .thenReturn("Found suitable hotels");
 
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
@@ -217,7 +218,7 @@ class ChatOrchestrationServiceTest {
                 when(extractionAgent.extract(any(), any()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", new SearchCriteria()));
 
-                when(responseAgent.summarize(any(), any(), any(), any()))
+                when(responseAgent.summarize(any(), any(), any(), any(), anyInt(), anyInt()))
                                 .thenReturn("Found suitable hotels");
 
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()

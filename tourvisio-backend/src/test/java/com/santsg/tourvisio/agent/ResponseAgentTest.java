@@ -84,7 +84,7 @@ class ResponseAgentTest {
         criteria.setPreferredLanguage("English");
         when(geminiClient.generate(anyString())).thenReturn("I found 3 lovely hotels in Antalya.");
 
-        String response = responseAgent.summarize("HOTEL_SEARCH", "[{}]", "Fallback reply", criteria);
+        String response = responseAgent.summarize("HOTEL_SEARCH", "[{}]", "Fallback reply", criteria, 5, 5);
 
         assertThat(response).isEqualTo("I found 3 lovely hotels in Antalya.");
     }
@@ -95,7 +95,7 @@ class ResponseAgentTest {
         criteria.setPreferredLanguage("Turkish");
         when(geminiClient.generate(anyString())).thenThrow(new RuntimeException("Gemini error"));
 
-        String response = responseAgent.summarize("HOTEL_SEARCH", "[{}]", "3 otel bulundu.", criteria);
+        String response = responseAgent.summarize("HOTEL_SEARCH", "[{}]", "3 otel bulundu.", criteria, 3, 3);
 
         assertThat(response).isEqualTo("3 otel bulundu.");
     }

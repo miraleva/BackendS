@@ -215,6 +215,16 @@ public class ChatOrchestrationService {
             }
 
             if ("UNKNOWN".equals(intent)) {
+                log.info("[Orchestration] UNKNOWN intent. sessionId: {}, messagesSize: {}", sessionId, (sessionState != null ? sessionState.getMessages().size() : "null"));
+                if (sessionState != null && sessionState.getMessages().size() <= 1) {
+                    return ChatResponse.builder()
+                            .reply(responseAgent.welcome(userMessage))
+                            .sessionId(sessionId)
+                            .searchType("UNKNOWN")
+                            .missingFields(List.of())
+                            .chatStatus("ACTIVE")
+                            .build();
+                }
                 return ChatResponse.builder()
                         .reply(responseAgent.clarify(existingCriteria))
                         .sessionId(sessionId)
@@ -460,14 +470,18 @@ public class ChatOrchestrationService {
 
             try {
                 com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                int totalResults = searchResponse.getResults().size();
+                int shownResults = Math.min(5, totalResults);
                 String resultsJson = mapper.writeValueAsString(
-                        searchResponse.getResults().subList(0, Math.min(5, searchResponse.getResults().size())));
+                        searchResponse.getResults().subList(0, shownResults));
 
-                finalReply = responseAgent.summarize(intent, resultsJson, searchResponse.getReply(), criteria);
+                finalReply = responseAgent.summarize(intent, resultsJson, searchResponse.getReply(), criteria, totalResults, shownResults);
             } catch (Exception e) {
                 log.warn("[Orchestration] Arama sonuçları AI ile özetlenemedi, varsayılan cevaba dönülüyor: {}",
                         e.getMessage());
-                finalReply = responseAgent.summarize(intent, "[]", searchResponse.getReply(), criteria);
+                int totalResults = searchResponse.getResults().size();
+                int shownResults = Math.min(5, totalResults);
+                finalReply = responseAgent.summarize(intent, "[]", searchResponse.getReply(), criteria, totalResults, shownResults);
             }
         } else {
             finalReply = responseAgent.noResultsFound(criteria, userMessage);

@@ -55,6 +55,29 @@ public class ResponseAgent {
         return messageSource.getMessage(key, null, locale);
     }
 
+    public String welcome(String userMessage) {
+        Locale locale = resolveLocale(null);
+        String prompt = String.format(
+                "The user just started a chat and sent their first message: \"%s\".\n" +
+                "Write a warm, welcoming onboarding message as a travel assistant. " +
+                "Briefly explain that you need their destination, dates, and guest count to find the best hotel or flight options. " +
+                "Write the response in the language of this user message.\n" +
+                "Return ONLY the response itself, no extra notes or greetings.",
+                userMessage != null ? userMessage.replace("\"", "\\\"") : ""
+        );
+
+        try {
+            String aiResponse = geminiClient.generate(prompt);
+            if (isValidResponse(aiResponse)) {
+                return aiResponse.trim();
+            }
+        } catch (Exception e) {
+            log.warn("[ResponseAgent] welcome AI generation failed", e);
+        }
+
+        return messageSource.getMessage("welcome.intent", null, locale);
+    }
+
     public String clarify(SearchCriteria criteria) {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
@@ -122,20 +145,36 @@ public class ResponseAgent {
         }
     }
 
-    public String summarize(String intent, String resultsJson, String defaultReply, SearchCriteria criteria) {
+    public String summarize(String intent, String resultsJson, String defaultReply, SearchCriteria criteria, int totalResults, int shownResults) {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
         String targetCountry = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "United Kingdom";
+
+        String childNote = "";
+        if (criteria != null && criteria.getChildCount() != null && criteria.getChildCount() > 0) {
+            childNote = "\nNote: Some hotels may have varying age limits for child discounts (often up to 12). We can verify the exact policy for your chosen hotel.";
+        }
+
+        String countNote = "";
+        if (totalResults > shownResults) {
+            countNote = String.format("\nFound %d matches for your criteria. Here are the top %d best options:", totalResults, shownResults);
+        } else {
+            countNote = String.format("\nFound %d matches for your criteria. Here they are:", totalResults);
+        }
 
         String prompt = String.format(
                 "The user's travel search has been completed successfully. Here are the search results in JSON format:\n" +
                 "Search Type: %s\n" +
                 "Results:\n%s\n\n" +
-                "Write a polite, engaging assistant response summarizing these results. Highlight the best options (price, stars, boards, airline/hotel, etc.). " +
-                "Write the response in the official language of %s (%s). " +
-                "Only mention facts from the provided JSON results. " +
-                "Return ONLY the assistant's summary response, with no notes or extra text.",
-                intent, resultsJson, targetCountry, targetLanguage
+                "Write a warm, polite, and engaging assistant response summarizing these results. " +
+                "Do NOT use terse lists like 'En iyi teklif: X'. Instead, write 1-2 natural sentences per top recommendation. " +
+                "Include the following context naturally in your response:\n%s%s\n\n" +
+                "IMPORTANT RULES:\n" +
+                "1. Write the response in the official language of %s (%s).\n" +
+                "2. Only mention facts from the provided JSON results.\n" +
+                "3. Never invent nicer names for raw system/sandbox data (e.g. if the room name is 'low level yerel dil' or 'BUILD131', present it exactly as is without fabricating a nicer name).\n" +
+                "4. Return ONLY the assistant's summary response, with no notes or extra text.",
+                intent, resultsJson, countNote, childNote, targetCountry, targetLanguage
         );
 
         try {
@@ -144,7 +183,7 @@ public class ResponseAgent {
                 return aiResponse.trim();
             }
         } catch (Exception e) {
-            log.warn("[ResponseAgent] Summarize AI generation failed, using fallback localization: {}", e.getMessage());
+            log.warn("[ResponseAgent] Summarize AI generation failed, using fallback localization: {}", e.getMessage(), e);
         }
 
         // Fallback summary response if AI is down: return defaultReply
