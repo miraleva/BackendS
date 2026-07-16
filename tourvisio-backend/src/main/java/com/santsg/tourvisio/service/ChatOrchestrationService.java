@@ -61,10 +61,12 @@ public class ChatOrchestrationService {
     // Public API
     // ─────────────────────────────────────────────────────────────────────────
 
+    @org.springframework.transaction.annotation.Transactional
     public ChatResponse orchestrate(ChatRequest request) {
         return orchestrate(request, null);
     }
 
+    @org.springframework.transaction.annotation.Transactional
     public ChatResponse orchestrate(ChatRequest request, Long userId) {
         // 1. Session yönetimi
         String sessionId = resolveSessionId(request.getSessionId());

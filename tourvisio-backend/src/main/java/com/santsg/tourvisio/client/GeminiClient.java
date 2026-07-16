@@ -74,7 +74,7 @@ public class GeminiClient implements AIProviderClient {
             return extractText(response);
         } catch (RestClientException ex) {
             log.error("[GeminiClient] Gemini API request failed: {}", ex.getMessage());
-            return "Gemini service could not be reached. Please try again later.";
+            return "[MOCK] Gemini API request failed: " + ex.getMessage();
         }
     }
 
