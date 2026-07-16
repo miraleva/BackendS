@@ -73,8 +73,8 @@ public class ProfileControllerTests {
         ChatMessage message = ChatMessage.builder()
                 .session(session)
                 .sender("user")
-                .messageText("Hello, test delete")
-                .createdAt(Instant.now())
+                .text("Hello, test delete")
+                .timestamp(Instant.now())
                 .build();
         message = chatMessageRepository.save(message);
         Long messageId = message.getId();

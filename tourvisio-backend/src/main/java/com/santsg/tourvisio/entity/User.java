@@ -31,7 +31,7 @@ public class User {
     @Column(nullable = false, unique = true, length = 100)
     private String email;
 
-    @Column(nullable = false, length = 16)
+    @Column(nullable = false, unique = true, length = 16)
     private String phone;
 
     @Column(nullable = false)

@@ -1,10 +1,7 @@
 package com.santsg.tourvisio.entity;
 
-import com.santsg.tourvisio.chat.SearchCriteria;
 import jakarta.persistence.*;
 import lombok.*;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,53 +15,55 @@ import java.util.List;
 public class ChatSession {
 
     @Id
-    @Column(length = 50)
-    private String id; // Represents the sessionId
+    @Column(name = "id", length = 100)
+    private String id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
 
-    @Column(nullable = false, length = 100)
+    @Column(name = "user_id", insertable = false, updatable = false)
+    private Long userId;
+
+    @Column(nullable = false, length = 255)
     @Builder.Default
     private String title = "New Chat Session";
 
-    @Column(name = "chat_status", nullable = false, length = 20)
+    @Column(name = "chat_status", nullable = false, length = 50)
     @Builder.Default
     private String chatStatus = "ACTIVE";
 
-    @Column(name = "mode", nullable = false, length = 30)
+    @Column(name = "\"mode\"", length = 50)
     @Builder.Default
     private String mode = "GATHERING";
 
-    @Column(name = "last_requested_field", length = 50)
+    @Column(name = "out_of_scope_count")
+    private int outOfScopeCount;
+
+    @Column(name = "last_requested_field", length = 100)
     private String lastRequestedField;
 
-    @Column(name = "out_of_scope_count", nullable = false)
-    @Builder.Default
-    private int outOfScopeCount = 0;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "search_criteria", columnDefinition = "jsonb")
-    private SearchCriteria searchCriteria;
+    @Column(name = "search_criteria_json", columnDefinition = "TEXT")
+    private String searchCriteriaJson;
 
     @Column(name = "last_message_timestamp", nullable = false)
     private Instant lastMessageTimestamp;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt;
-
-    @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    @OrderBy("createdAt ASC")
+    @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @Builder.Default
+    @OrderBy("timestamp ASC")
     private List<ChatMessage> messages = new ArrayList<>();
 
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = Instant.now();
-        this.lastMessageTimestamp = Instant.now();
-        if (this.searchCriteria == null) {
-            this.searchCriteria = new SearchCriteria();
-        }
+    // Virtual properties for compatibility with original code and database mappings
+    public Long getUserId() {
+        return this.user != null ? this.user.getId() : this.userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
+
+    public String getMode() {
+        return this.mode != null ? this.mode : "GATHERING";
     }
 }
