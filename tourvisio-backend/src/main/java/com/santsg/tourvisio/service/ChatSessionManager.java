@@ -1,12 +1,22 @@
 package com.santsg.tourvisio.service;
- 
+
 import org.springframework.stereotype.Service;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.santsg.tourvisio.entity.ChatSession;
+import com.santsg.tourvisio.entity.ChatMessage;
+import com.santsg.tourvisio.repository.ChatSessionRepository;
+import com.santsg.tourvisio.chat.ChatSessionStore;
+import com.santsg.tourvisio.chat.SearchCriteria;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
- 
+import java.util.stream.Collectors;
+
 @Service
 public class ChatSessionManager {
- 
+
     @lombok.Data
     @lombok.AllArgsConstructor
     @lombok.NoArgsConstructor
@@ -16,7 +26,7 @@ public class ChatSessionManager {
         private String title;
         private java.time.Instant lastMessageTimestamp;
     }
- 
+
     @lombok.Data
     @lombok.AllArgsConstructor
     @lombok.NoArgsConstructor
@@ -27,7 +37,7 @@ public class ChatSessionManager {
         private java.time.Instant timestamp;
         private java.util.List<?> results;
     }
- 
+
     public static class SessionState {
         private Long userId;
         private String id;
@@ -40,15 +50,6 @@ public class ChatSessionManager {
         private Object selectedItem;
         private final java.util.List<MessageHistoryItem> messages = new java.util.concurrent.CopyOnWriteArrayList<>();
         private String lastRequestedField;
- 
-        public String getMode() { return mode; }
-        public void setMode(String mode) { this.mode = mode; }
-        
-        public java.util.List<?> getLastShownResults() { return lastShownResults; }
-        public void setLastShownResults(java.util.List<?> lastShownResults) { this.lastShownResults = lastShownResults; }
-        
-        public Object getSelectedItem() { return selectedItem; }
-        public void setSelectedItem(Object selectedItem) { this.selectedItem = selectedItem; }
 
         public String getLastRequestedField() {
             return lastRequestedField;
@@ -69,96 +70,288 @@ public class ChatSessionManager {
         public String getId() {
             return id;
         }
- 
+
         public void setId(String id) {
             this.id = id;
         }
- 
+
         public String getTitle() {
             return title;
         }
- 
+
         public void setTitle(String title) {
             this.title = title;
         }
- 
+
         public java.time.Instant getLastMessageTimestamp() {
             return lastMessageTimestamp;
         }
- 
+
         public void setLastMessageTimestamp(java.time.Instant lastMessageTimestamp) {
             this.lastMessageTimestamp = lastMessageTimestamp;
         }
- 
+
         public int getOutOfScopeCount() {
             return outOfScopeCount;
         }
- 
+
         public void incrementOutOfScopeCount() {
             this.outOfScopeCount++;
             if (this.outOfScopeCount >= 3) {
                 this.chatStatus = "TERMINATED";
             }
         }
- 
+
+        public void setOutOfScopeCount(int outOfScopeCount) {
+            this.outOfScopeCount = outOfScopeCount;
+        }
+
         public String getChatStatus() {
             return chatStatus;
         }
- 
+
         public void setChatStatus(String chatStatus) {
             this.chatStatus = chatStatus;
         }
- 
+
         public java.util.List<MessageHistoryItem> getMessages() {
             return messages;
         }
+        public java.util.List<?> getLastShownResults() {
+            return lastShownResults;
+        }
+
+        public void setLastShownResults(java.util.List<?> lastShownResults) {
+            this.lastShownResults = lastShownResults;
+        }
+
+        public String getMode() {
+            return mode;
+        }
+
+        public void setMode(String mode) {
+            this.mode = mode;
+        }
+
+        public Object getSelectedItem() {
+            return selectedItem;
+        }
+
+        public void setSelectedItem(Object selectedItem) {
+            this.selectedItem = selectedItem;
+        }
     }
- 
+
+    private final ChatSessionRepository chatSessionRepository;
+    private final ChatSessionStore chatSessionStore;
+    private final ObjectMapper objectMapper;
     private final Map<String, SessionState> sessions = new ConcurrentHashMap<>();
- 
+
+    public ChatSessionManager(ChatSessionRepository chatSessionRepository,
+                              ChatSessionStore chatSessionStore,
+                              ObjectMapper objectMapper) {
+        this.chatSessionRepository = chatSessionRepository;
+        this.chatSessionStore = chatSessionStore;
+        this.objectMapper = objectMapper;
+    }
+
+    // Default constructor for testing fallback
+    public ChatSessionManager() {
+        this.chatSessionRepository = null;
+        this.chatSessionStore = null;
+        this.objectMapper = new ObjectMapper();
+    }
+
+    private SessionState convertToSessionState(ChatSession entity) {
+        SessionState s = new SessionState();
+        s.setId(entity.getId());
+        s.setUserId(entity.getUserId());
+        s.setTitle(entity.getTitle());
+        s.setLastMessageTimestamp(entity.getLastMessageTimestamp());
+        s.setChatStatus(entity.getChatStatus());
+        s.setMode(entity.getMode());
+        s.setLastRequestedField(entity.getLastRequestedField());
+        s.setOutOfScopeCount(entity.getOutOfScopeCount());
+
+        // Restore messages
+        if (entity.getMessages() != null) {
+            for (ChatMessage msgEntity : entity.getMessages()) {
+                java.util.List<?> results = null;
+                if (msgEntity.getResultsJson() != null && !msgEntity.getResultsJson().isBlank()) {
+                    try {
+                        results = objectMapper.readValue(msgEntity.getResultsJson(), new TypeReference<java.util.List<Object>>() {});
+                    } catch (Exception e) {
+                        // ignore/log
+                    }
+                }
+                s.getMessages().add(new MessageHistoryItem(msgEntity.getSender(), msgEntity.getText(), msgEntity.getTimestamp(), results));
+            }
+        }
+
+        // Restore SearchCriteria to ChatSessionStore
+        if (chatSessionStore != null && entity.getSearchCriteriaJson() != null && !entity.getSearchCriteriaJson().isBlank()) {
+            try {
+                SearchCriteria criteria = objectMapper.readValue(entity.getSearchCriteriaJson(), SearchCriteria.class);
+                chatSessionStore.save(entity.getId(), criteria);
+            } catch (Exception e) {
+                // ignore/log
+            }
+        }
+
+        return s;
+    }
+
+    @Transactional
+    public void saveSession(SessionState state) {
+        if (chatSessionRepository == null) {
+            return;
+        }
+
+        ChatSession entity = chatSessionRepository.findById(state.getId())
+                .orElseGet(() -> ChatSession.builder().id(state.getId()).build());
+
+        entity.setUserId(state.getUserId());
+        entity.setTitle(state.getTitle());
+        entity.setChatStatus(state.getChatStatus());
+        entity.setMode(state.getMode());
+        entity.setOutOfScopeCount(state.getOutOfScopeCount());
+        entity.setLastRequestedField(state.getLastRequestedField());
+        entity.setLastMessageTimestamp(state.getLastMessageTimestamp() != null ? state.getLastMessageTimestamp() : java.time.Instant.now());
+
+        // Save SearchCriteria
+        if (chatSessionStore != null) {
+            SearchCriteria criteria = chatSessionStore.getOrCreate(state.getId());
+            if (criteria != null) {
+                try {
+                    entity.setSearchCriteriaJson(objectMapper.writeValueAsString(criteria));
+                } catch (Exception e) {
+                    // ignore/log
+                }
+            }
+        }
+
+        // Sync messages: rebuild messages list to preserve order and keep collection sync
+        if (entity.getMessages() == null) {
+            entity.setMessages(new java.util.ArrayList<>());
+        } else {
+            entity.getMessages().clear();
+        }
+        
+        if (state.getMessages() != null) {
+            for (MessageHistoryItem item : state.getMessages()) {
+                String resultsJson = null;
+                if (item.getResults() != null) {
+                    try {
+                        resultsJson = objectMapper.writeValueAsString(item.getResults());
+                    } catch (Exception e) {
+                        // ignore
+                    }
+                }
+                ChatMessage msgEntity = ChatMessage.builder()
+                        .session(entity)
+                        .sender(item.getSender())
+                        .text(item.getText())
+                        .timestamp(item.getTimestamp() != null ? item.getTimestamp() : java.time.Instant.now())
+                        .resultsJson(resultsJson)
+                        .build();
+                entity.getMessages().add(msgEntity);
+            }
+        }
+
+        chatSessionRepository.save(entity);
+    }
+
     public SessionState getOrCreateSession(String sessionId) {
         return getOrCreateSession(sessionId, null);
     }
 
     public SessionState getOrCreateSession(String sessionId, Long userId) {
         if (sessionId == null || sessionId.trim().isEmpty()) {
-            sessionId = "default-session";
+            sessionId = java.util.UUID.randomUUID().toString();
         }
-        final String finalSessionId = sessionId;
-        SessionState state = sessions.computeIfAbsent(sessionId, k -> {
-            SessionState s = new SessionState();
-            s.setId(finalSessionId);
-            s.setUserId(userId);
-            return s;
-        });
-        if (state.getUserId() == null && userId != null) {
-            state.setUserId(userId);
+        
+        // 1. Check in-memory cache
+        SessionState state = sessions.get(sessionId);
+        if (state != null) {
+            if (state.getUserId() == null && userId != null) {
+                state.setUserId(userId);
+                saveSession(state);
+            }
+            return state;
         }
-        return state;
+
+        // 2. Check DB
+        if (chatSessionRepository != null) {
+            Optional<ChatSession> optSession = chatSessionRepository.findById(sessionId);
+            if (optSession.isPresent()) {
+                state = convertToSessionState(optSession.get());
+                sessions.put(sessionId, state);
+                return state;
+            }
+        }
+
+        // 3. Create new
+        SessionState s = new SessionState();
+        s.setId(sessionId);
+        s.setUserId(userId);
+        sessions.put(sessionId, s);
+        
+        saveSession(s);
+        
+        return s;
     }
- 
+
+    @Transactional
     public void removeSession(String sessionId) {
         if (sessionId != null) {
             sessions.remove(sessionId);
+            if (chatSessionRepository != null) {
+                chatSessionRepository.deleteById(sessionId);
+            }
+            if (chatSessionStore != null) {
+                chatSessionStore.remove(sessionId);
+            }
         }
     }
- 
+
     public SessionState getSessionState(String sessionId) {
-        return sessions.get(sessionId);
+        if (sessionId == null) return null;
+        SessionState state = sessions.get(sessionId);
+        if (state == null && chatSessionRepository != null) {
+            Optional<ChatSession> optSession = chatSessionRepository.findById(sessionId);
+            if (optSession.isPresent()) {
+                state = convertToSessionState(optSession.get());
+                sessions.put(sessionId, state);
+            }
+        }
+        return state;
     }
- 
+
     public java.util.List<SessionSummaryResponse> getAllSessionSummaries() {
+        if (chatSessionRepository != null) {
+            return chatSessionRepository.findAll().stream()
+                    .map(s -> new SessionSummaryResponse(s.getId(), s.getTitle(), s.getLastMessageTimestamp()))
+                    .sorted((s1, s2) -> s2.getLastMessageTimestamp().compareTo(s1.getLastMessageTimestamp()))
+                    .collect(Collectors.toList());
+        }
+
         return sessions.values().stream()
                 .map(s -> new SessionSummaryResponse(s.getId(), s.getTitle(), s.getLastMessageTimestamp()))
                 .sorted((s1, s2) -> s2.getLastMessageTimestamp().compareTo(s1.getLastMessageTimestamp()))
-                .collect(java.util.stream.Collectors.toList());
+                .collect(Collectors.toList());
     }
 
     public java.util.List<SessionSummaryResponse> getSessionSummariesForUser(Long userId) {
+        if (chatSessionRepository != null) {
+            return chatSessionRepository.findByUserIdOrderByLastMessageTimestampDesc(userId).stream()
+                    .map(s -> new SessionSummaryResponse(s.getId(), s.getTitle(), s.getLastMessageTimestamp()))
+                    .collect(Collectors.toList());
+        }
+
         return sessions.values().stream()
                 .filter(s -> userId == null ? s.getUserId() == null : userId.equals(s.getUserId()))
                 .map(s -> new SessionSummaryResponse(s.getId(), s.getTitle(), s.getLastMessageTimestamp()))
                 .sorted((s1, s2) -> s2.getLastMessageTimestamp().compareTo(s1.getLastMessageTimestamp()))
-                .collect(java.util.stream.Collectors.toList());
+                .collect(Collectors.toList());
     }
 }
