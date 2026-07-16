@@ -50,12 +50,27 @@ public class AuthController {
             ));
         }
 
-        // Validate email uniqueness
-        if (userRepository.existsByEmail(request.getEmail())) {
-            log.warn("[AuthController] Signup failed: email={} already exists", request.getEmail());
+        // Validate email and phone uniqueness (collect all conflicts, not just the first)
+        boolean emailExists = userRepository.existsByEmail(request.getEmail());
+        boolean phoneExists = userRepository.existsByPhone(request.getPhone());
+
+        if (emailExists || phoneExists) {
+            java.util.List<String> messages = new java.util.ArrayList<>();
+            java.util.List<String> fields = new java.util.ArrayList<>();
+            if (emailExists) {
+                log.warn("[AuthController] Signup failed: email={} already exists", request.getEmail());
+                messages.add("Email already exists");
+                fields.add("email");
+            }
+            if (phoneExists) {
+                log.warn("[AuthController] Signup failed: phone={} already exists", request.getPhone());
+                messages.add("Phone number already exists");
+                fields.add("phone");
+            }
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
                     "error", "Conflict",
-                    "message", "Email already exists"
+                    "message", String.join("; ", messages),
+                    "fields", fields
             ));
         }
 

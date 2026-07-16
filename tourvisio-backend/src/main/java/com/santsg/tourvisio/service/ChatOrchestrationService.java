@@ -105,6 +105,9 @@ public class ChatOrchestrationService {
             sessionState.setLastMessageTimestamp(java.time.Instant.now());
         }
 
+        // Save session state to database
+        chatSessionManager.saveSession(sessionState);
+
         return response;
     }
 
@@ -175,7 +178,8 @@ public class ChatOrchestrationService {
             String currentIntent = hasActiveSearch ? existingCriteria.getSearchType() : null;
             extractionResult = extractionAgent.extract(userMessage, currentIntent);
         } catch (Exception e) {
-            log.warn("[Orchestration] ExtractionAgent failed or mocked, falling back to rule-based: {}", e.getMessage());
+            log.warn("[Orchestration] ExtractionAgent failed or mocked, falling back to rule-based: {}",
+                    e.getMessage());
         }
 
         if (extractionResult != null) {
