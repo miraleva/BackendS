@@ -63,6 +63,10 @@ public class UserAuthInterceptor implements HandlerInterceptor {
         }
 
         // Return 401 Unauthorized if token is missing or invalid
+        // Manually add CORS headers because short-circuiting MVC preHandle bypasses CorsFilter/registry
+        response.setHeader("Access-Control-Allow-Origin", "*");
+        response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        response.setHeader("Access-Control-Allow-Headers", "*");
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");

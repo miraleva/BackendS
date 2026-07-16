@@ -49,10 +49,21 @@ public class ChatSession {
     @Column(name = "last_message_timestamp", nullable = false)
     private Instant lastMessageTimestamp;
 
+    @Column(name = "created_at")
+    private Instant createdAt;
+
     @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @Builder.Default
     @OrderBy("timestamp ASC")
     private List<ChatMessage> messages = new ArrayList<>();
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = Instant.now();
+        if (this.lastMessageTimestamp == null) {
+            this.lastMessageTimestamp = Instant.now();
+        }
+    }
 
     // Virtual properties for compatibility with original code and database mappings
     public Long getUserId() {
