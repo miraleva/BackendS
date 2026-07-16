@@ -103,6 +103,9 @@ public class ChatOrchestrationService {
             sessionState.setLastMessageTimestamp(java.time.Instant.now());
         }
 
+        // Save session state to database
+        chatSessionManager.saveSession(sessionState);
+
         return response;
     }
 
