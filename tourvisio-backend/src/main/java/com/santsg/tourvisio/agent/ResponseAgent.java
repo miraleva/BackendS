@@ -203,13 +203,13 @@ public class ResponseAgent {
             return Locale.ENGLISH;
         }
         String normalized = lang.trim().toLowerCase();
-        if (normalized.startsWith("tr") || normalized.contains("turkish")) {
+        if (normalized.startsWith("tr") || normalized.contains("turkish") || normalized.contains("turkey") || normalized.contains("türkiye")) {
             return Locale.forLanguageTag("tr-TR");
         }
-        if (normalized.startsWith("de") || normalized.contains("german")) {
+        if (normalized.startsWith("de") || normalized.contains("german") || normalized.contains("germany")) {
             return Locale.GERMAN;
         }
-        if (normalized.startsWith("ru") || normalized.contains("russian")) {
+        if (normalized.startsWith("ru") || normalized.contains("russian") || normalized.contains("russia")) {
             return Locale.forLanguageTag("ru-RU");
         }
         if (normalized.startsWith("en") || normalized.contains("english")) {

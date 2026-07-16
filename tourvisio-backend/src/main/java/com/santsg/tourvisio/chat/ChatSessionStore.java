@@ -1,56 +1,82 @@
 package com.santsg.tourvisio.chat;
 
+import com.santsg.tourvisio.entity.ChatSession;
+import com.santsg.tourvisio.repository.ChatSessionRepository;
 import org.springframework.stereotype.Component;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
 /**
- * Oturum bazlı arama kriterlerini bellekte tutan depo.
- *
- * <p>Her {@code sessionId} için tek bir {@link SearchCriteria} nesnesi
- * saklanır; mesajlar arası birikim bu nesne üzerinden yapılır.</p>
- *
- * <p><strong>Genişletme notu:</strong> Bu sınıf yalnızca bir bellek deposudur.
- * İleride {@code ChatSession} JPA entity'siyle veya Redis/Hazelcast gibi
- * bir dağıtık cache ile değiştirilebilir; çağıran kod değişmez.</p>
+ * Oturum bazlı arama kriterlerini veritabanında (veya fallback olarak bellekte) tutan depo.
  */
 @Component
 public class ChatSessionStore {
 
-    /**
-     * sessionId → biriktirilmiş arama kriterleri
-     *
-     * <p>Şimdilik uygulama yeniden başlayana kadar bellekte tutulur.
-     * Üretim ortamı için TTL eklenebilir (örn. Caffeine cache).</p>
-     */
-    private final Map<String, SearchCriteria> store = new ConcurrentHashMap<>();
+    private final ChatSessionRepository chatSessionRepository;
+    private final java.util.Map<String, SearchCriteria> fallbackStore;
+
+    // Autowired constructor
+    @org.springframework.beans.factory.annotation.Autowired
+    public ChatSessionStore(ChatSessionRepository chatSessionRepository) {
+        this.chatSessionRepository = chatSessionRepository;
+        this.fallbackStore = null;
+    }
+
+    // No-arg constructor for fallback mode in testing / manual initialization
+    public ChatSessionStore() {
+        this.chatSessionRepository = null;
+        this.fallbackStore = new java.util.concurrent.ConcurrentHashMap<>();
+    }
 
     /**
      * Var olan kriteri döner; yoksa yeni boş bir {@link SearchCriteria} oluşturur.
      */
     public SearchCriteria getOrCreate(String sessionId) {
-        return store.computeIfAbsent(sessionId, id -> new SearchCriteria());
+        if (chatSessionRepository == null) {
+            return fallbackStore.computeIfAbsent(sessionId, id -> new SearchCriteria());
+        }
+        return chatSessionRepository.findById(sessionId)
+                .map(ChatSession::getSearchCriteria)
+                .orElseGet(SearchCriteria::new);
     }
 
     /**
      * Güncellenmiş kriteri oturuma yazar.
      */
     public void save(String sessionId, SearchCriteria criteria) {
-        store.put(sessionId, criteria);
+        if (chatSessionRepository == null) {
+            fallbackStore.put(sessionId, criteria);
+            return;
+        }
+        ChatSession session = chatSessionRepository.findById(sessionId)
+                .orElseGet(() -> {
+                    ChatSession s = new ChatSession();
+                    s.setId(sessionId);
+                    return s;
+                });
+        session.setSearchCriteria(criteria);
+        chatSessionRepository.save(session);
     }
 
     /**
      * Oturumu siler (sohbet bitince temizlik için).
      */
     public void remove(String sessionId) {
-        store.remove(sessionId);
+        if (chatSessionRepository == null) {
+            fallbackStore.remove(sessionId);
+            return;
+        }
+        chatSessionRepository.findById(sessionId).ifPresent(session -> {
+            session.setSearchCriteria(new SearchCriteria());
+            chatSessionRepository.save(session);
+        });
     }
 
     /**
      * Test/diagnostic amaçlı: oturum var mı?
      */
     public boolean exists(String sessionId) {
-        return store.containsKey(sessionId);
+        if (chatSessionRepository == null) {
+            return fallbackStore.containsKey(sessionId);
+        }
+        return chatSessionRepository.existsById(sessionId);
     }
 }
