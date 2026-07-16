@@ -23,10 +23,9 @@ public class ChatMessage {
     @Column(nullable = false, length = 10)
     private String sender; // "user" or "bot"
 
-    @Column(nullable = false, columnDefinition = "TEXT")
+    @Column(columnDefinition = "TEXT")
     private String text;
 
-    @Column(nullable = false)
     private Instant timestamp;
 
     @Column(name = "results_json", columnDefinition = "TEXT")

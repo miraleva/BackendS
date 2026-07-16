@@ -1,21 +1,51 @@
 package com.santsg.tourvisio.service;
 
-import org.springframework.stereotype.Service;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.santsg.tourvisio.entity.ChatSession;
-import com.santsg.tourvisio.entity.ChatMessage;
-import com.santsg.tourvisio.repository.ChatSessionRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.santsg.tourvisio.chat.ChatSessionStore;
 import com.santsg.tourvisio.chat.SearchCriteria;
+import com.santsg.tourvisio.entity.ChatMessage;
+import com.santsg.tourvisio.entity.ChatSession;
+import com.santsg.tourvisio.repository.ChatSessionRepository;
+import com.santsg.tourvisio.repository.UserRepository;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Service
 public class ChatSessionManager {
+
+    private final ChatSessionRepository chatSessionRepository;
+    private final ChatSessionStore chatSessionStore;
+    private final UserRepository userRepository;
+    private final ObjectMapper objectMapper;
+    private final Map<String, SessionState> sessions = new ConcurrentHashMap<>();
+
+    // Autowired constructor
+    @org.springframework.beans.factory.annotation.Autowired
+    public ChatSessionManager(ChatSessionRepository chatSessionRepository,
+                              ChatSessionStore chatSessionStore,
+                              UserRepository userRepository,
+                              ObjectMapper objectMapper) {
+        this.chatSessionRepository = chatSessionRepository;
+        this.chatSessionStore = chatSessionStore;
+        this.userRepository = userRepository;
+        this.objectMapper = objectMapper;
+    }
+
+    // Default constructor for testing fallback
+    public ChatSessionManager() {
+        this.chatSessionRepository = null;
+        this.chatSessionStore = null;
+        this.userRepository = null;
+        this.objectMapper = new ObjectMapper().registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+    }
 
     @lombok.Data
     @lombok.AllArgsConstructor
@@ -39,8 +69,8 @@ public class ChatSessionManager {
     }
 
     public static class SessionState {
-        private Long userId;
         private String id;
+        private Long userId;
         private String title = "New Chat Session";
         private java.time.Instant lastMessageTimestamp = java.time.Instant.now();
         private int outOfScopeCount = 0;
@@ -48,52 +78,37 @@ public class ChatSessionManager {
         private String mode = "GATHERING";
         private java.util.List<?> lastShownResults;
         private Object selectedItem;
-        private final java.util.List<MessageHistoryItem> messages = new java.util.concurrent.CopyOnWriteArrayList<>();
         private String lastRequestedField;
+        private final java.util.List<MessageHistoryItem> messages = new java.util.concurrent.CopyOnWriteArrayList<>();
 
-        public String getLastRequestedField() {
-            return lastRequestedField;
-        }
+        public SessionState() {}
 
-        public void setLastRequestedField(String lastRequestedField) {
-            this.lastRequestedField = lastRequestedField;
-        }
+        public String getMode() { return mode; }
+        public void setMode(String mode) { this.mode = mode; }
+        
+        public java.util.List<?> getLastShownResults() { return lastShownResults; }
+        public void setLastShownResults(java.util.List<?> lastShownResults) { this.lastShownResults = lastShownResults; }
+        
+        public Object getSelectedItem() { return selectedItem; }
+        public void setSelectedItem(Object selectedItem) { this.selectedItem = selectedItem; }
 
-        public Long getUserId() {
-            return userId;
-        }
+        public String getLastRequestedField() { return lastRequestedField; }
+        public void setLastRequestedField(String lastRequestedField) { this.lastRequestedField = lastRequestedField; }
 
-        public void setUserId(Long userId) {
-            this.userId = userId;
-        }
+        public Long getUserId() { return userId; }
+        public void setUserId(Long userId) { this.userId = userId; }
 
-        public String getId() {
-            return id;
-        }
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
 
-        public void setId(String id) {
-            this.id = id;
-        }
+        public String getTitle() { return title; }
+        public void setTitle(String title) { this.title = title; }
 
-        public String getTitle() {
-            return title;
-        }
+        public java.time.Instant getLastMessageTimestamp() { return lastMessageTimestamp; }
+        public void setLastMessageTimestamp(java.time.Instant lastMessageTimestamp) { this.lastMessageTimestamp = lastMessageTimestamp; }
 
-        public void setTitle(String title) {
-            this.title = title;
-        }
-
-        public java.time.Instant getLastMessageTimestamp() {
-            return lastMessageTimestamp;
-        }
-
-        public void setLastMessageTimestamp(java.time.Instant lastMessageTimestamp) {
-            this.lastMessageTimestamp = lastMessageTimestamp;
-        }
-
-        public int getOutOfScopeCount() {
-            return outOfScopeCount;
-        }
+        public int getOutOfScopeCount() { return outOfScopeCount; }
+        public void setOutOfScopeCount(int outOfScopeCount) { this.outOfScopeCount = outOfScopeCount; }
 
         public void incrementOutOfScopeCount() {
             this.outOfScopeCount++;
@@ -102,64 +117,10 @@ public class ChatSessionManager {
             }
         }
 
-        public void setOutOfScopeCount(int outOfScopeCount) {
-            this.outOfScopeCount = outOfScopeCount;
-        }
+        public String getChatStatus() { return chatStatus; }
+        public void setChatStatus(String chatStatus) { this.chatStatus = chatStatus; }
 
-        public String getChatStatus() {
-            return chatStatus;
-        }
-
-        public void setChatStatus(String chatStatus) {
-            this.chatStatus = chatStatus;
-        }
-
-        public java.util.List<MessageHistoryItem> getMessages() {
-            return messages;
-        }
-        public java.util.List<?> getLastShownResults() {
-            return lastShownResults;
-        }
-
-        public void setLastShownResults(java.util.List<?> lastShownResults) {
-            this.lastShownResults = lastShownResults;
-        }
-
-        public String getMode() {
-            return mode;
-        }
-
-        public void setMode(String mode) {
-            this.mode = mode;
-        }
-
-        public Object getSelectedItem() {
-            return selectedItem;
-        }
-
-        public void setSelectedItem(Object selectedItem) {
-            this.selectedItem = selectedItem;
-        }
-    }
-
-    private final ChatSessionRepository chatSessionRepository;
-    private final ChatSessionStore chatSessionStore;
-    private final ObjectMapper objectMapper;
-    private final Map<String, SessionState> sessions = new ConcurrentHashMap<>();
-
-    public ChatSessionManager(ChatSessionRepository chatSessionRepository,
-                              ChatSessionStore chatSessionStore,
-                              ObjectMapper objectMapper) {
-        this.chatSessionRepository = chatSessionRepository;
-        this.chatSessionStore = chatSessionStore;
-        this.objectMapper = objectMapper;
-    }
-
-    // Default constructor for testing fallback
-    public ChatSessionManager() {
-        this.chatSessionRepository = null;
-        this.chatSessionStore = null;
-        this.objectMapper = new ObjectMapper();
+        public java.util.List<MessageHistoryItem> getMessages() { return messages; }
     }
 
     private SessionState convertToSessionState(ChatSession entity) {
@@ -184,7 +145,9 @@ public class ChatSessionManager {
                         // ignore/log
                     }
                 }
-                s.getMessages().add(new MessageHistoryItem(msgEntity.getSender(), msgEntity.getText(), msgEntity.getTimestamp(), results));
+                String messageText = msgEntity.getText() != null ? msgEntity.getText() : "";
+                java.time.Instant msgTimestamp = msgEntity.getTimestamp() != null ? msgEntity.getTimestamp() : java.time.Instant.now();
+                s.getMessages().add(new MessageHistoryItem(msgEntity.getSender(), messageText, msgTimestamp, results));
             }
         }
 
@@ -210,7 +173,13 @@ public class ChatSessionManager {
         ChatSession entity = chatSessionRepository.findById(state.getId())
                 .orElseGet(() -> ChatSession.builder().id(state.getId()).build());
 
-        entity.setUserId(state.getUserId());
+        // Resolve and set User association for cascade delete capability
+        if (state.getUserId() != null && userRepository != null) {
+            userRepository.findById(state.getUserId()).ifPresent(entity::setUser);
+        } else {
+            entity.setUser(null);
+        }
+
         entity.setTitle(state.getTitle());
         entity.setChatStatus(state.getChatStatus());
         entity.setMode(state.getMode());
@@ -267,7 +236,7 @@ public class ChatSessionManager {
 
     public SessionState getOrCreateSession(String sessionId, Long userId) {
         if (sessionId == null || sessionId.trim().isEmpty()) {
-            sessionId = java.util.UUID.randomUUID().toString();
+            sessionId = UUID.randomUUID().toString();
         }
         
         // 1. Check in-memory cache
@@ -327,7 +296,7 @@ public class ChatSessionManager {
         return state;
     }
 
-    public java.util.List<SessionSummaryResponse> getAllSessionSummaries() {
+    public List<SessionSummaryResponse> getAllSessionSummaries() {
         if (chatSessionRepository != null) {
             return chatSessionRepository.findAll().stream()
                     .map(s -> new SessionSummaryResponse(s.getId(), s.getTitle(), s.getLastMessageTimestamp()))
@@ -341,7 +310,7 @@ public class ChatSessionManager {
                 .collect(Collectors.toList());
     }
 
-    public java.util.List<SessionSummaryResponse> getSessionSummariesForUser(Long userId) {
+    public List<SessionSummaryResponse> getSessionSummariesForUser(Long userId) {
         if (chatSessionRepository != null) {
             return chatSessionRepository.findByUserIdOrderByLastMessageTimestampDesc(userId).stream()
                     .map(s -> new SessionSummaryResponse(s.getId(), s.getTitle(), s.getLastMessageTimestamp()))
