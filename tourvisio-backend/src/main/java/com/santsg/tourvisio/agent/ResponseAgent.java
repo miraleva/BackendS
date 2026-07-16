@@ -122,6 +122,10 @@ public class ResponseAgent {
     }
 
     public String summarize(String intent, String resultsJson, String defaultReply, SearchCriteria criteria) {
+        return summarize(intent, resultsJson, defaultReply, criteria, null);
+    }
+
+    public String summarize(String intent, String resultsJson, String defaultReply, SearchCriteria criteria, String userMessage) {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = resolveLanguageName(criteria);
         String targetCountry = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "United Kingdom";
