@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -97,6 +98,36 @@ public class ProfileController {
 
         UserResponse userResponse = mapToUserResponse(updatedUser);
         return ResponseEntity.ok(userResponse);
+    }
+
+    @DeleteMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Delete Account", description = "Delete the logged-in user's profile and all associated data")
+    @Transactional
+    public ResponseEntity<?> deleteAccount(@RequestAttribute(value = "userId", required = false) Long userId) {
+        if (userId == null) {
+            log.warn("[ProfileController] Account deletion denied: userId attribute not found in request");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "error", "Unauthorized",
+                    "message", "User session is invalid or missing"
+            ));
+        }
+
+        log.info("[ProfileController] Deleting account for userId={}", userId);
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            log.warn("[ProfileController] Account deletion failed: user id={} not found", userId);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                    "error", "Not Found",
+                    "message", "User profile not found"
+            ));
+        }
+
+        userRepository.delete(user);
+        log.info("[ProfileController] Account and all associated data deleted successfully for userId={}", userId);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Account deleted successfully"
+        ));
     }
 
     private UserResponse mapToUserResponse(User user) {

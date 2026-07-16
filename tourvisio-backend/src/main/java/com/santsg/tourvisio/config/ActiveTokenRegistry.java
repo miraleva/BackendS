@@ -13,6 +13,17 @@ public class ActiveTokenRegistry {
 
     private final Set<String> activeTokens = ConcurrentHashMap.newKeySet();
 
+    public Set<String> getActiveTokensSet() {
+        return this.activeTokens;
+    }
+
+    public void restoreActiveTokensSet(Set<String> restoredTokens) {
+        this.activeTokens.clear();
+        if (restoredTokens != null) {
+            this.activeTokens.addAll(restoredTokens);
+        }
+    }
+
     /**
      * Registers a new valid token.
      *

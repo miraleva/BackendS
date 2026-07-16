@@ -61,10 +61,12 @@ public class ChatOrchestrationService {
     // Public API
     // ─────────────────────────────────────────────────────────────────────────
 
+    @org.springframework.transaction.annotation.Transactional
     public ChatResponse orchestrate(ChatRequest request) {
         return orchestrate(request, null);
     }
 
+    @org.springframework.transaction.annotation.Transactional
     public ChatResponse orchestrate(ChatRequest request, Long userId) {
         // 1. Session yönetimi
         String sessionId = resolveSessionId(request.getSessionId());
@@ -102,6 +104,9 @@ public class ChatOrchestrationService {
                     new ChatSessionManager.MessageHistoryItem("bot", response.getReply(), java.time.Instant.now(), response.getResults()));
             sessionState.setLastMessageTimestamp(java.time.Instant.now());
         }
+
+        // Save session state to database
+        chatSessionManager.saveSession(sessionState);
 
         return response;
     }
@@ -173,7 +178,8 @@ public class ChatOrchestrationService {
             String currentIntent = hasActiveSearch ? existingCriteria.getSearchType() : null;
             extractionResult = extractionAgent.extract(userMessage, currentIntent);
         } catch (Exception e) {
-            log.warn("[Orchestration] ExtractionAgent failed or mocked, falling back to rule-based: {}", e.getMessage());
+            log.warn("[Orchestration] ExtractionAgent failed or mocked, falling back to rule-based: {}",
+                    e.getMessage());
         }
 
         if (extractionResult != null) {
