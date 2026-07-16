@@ -17,8 +17,10 @@ import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import org.springframework.http.MediaType;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -115,5 +117,52 @@ public class ProfileControllerTests {
                 .requestAttr("userId", 999999L))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Not Found"));
+    }
+
+    @Test
+    @Transactional
+    public void testChangePasswordSuccess() throws Exception {
+        // 1. Create a user
+        User user = User.builder()
+                .firstName("Test")
+                .lastName("User")
+                .email("testchangepassword@example.com")
+                .phone("905554443322")
+                .password(org.mindrot.jbcrypt.BCrypt.hashpw("oldpassword", org.mindrot.jbcrypt.BCrypt.gensalt()))
+                .build();
+        user = userRepository.save(user);
+        Long userId = user.getId();
+
+        // 2. Perform POST request to change password
+        mockMvc.perform(post("/api/profile/change-password")
+                .requestAttr("userId", userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"password\": \"newsecurepassword\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Password changed successfully"));
+
+        // 3. Verify in database
+        User updatedUser = userRepository.findById(userId).orElseThrow();
+        assertTrue(org.mindrot.jbcrypt.BCrypt.checkpw("newsecurepassword", updatedUser.getPassword()));
+    }
+
+    @Test
+    public void testChangePasswordUnauthorized() throws Exception {
+        mockMvc.perform(post("/api/profile/change-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"password\": \"newsecurepassword\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("Unauthorized"));
+    }
+
+    @Test
+    @Transactional
+    public void testChangePasswordInvalidPassword() throws Exception {
+        mockMvc.perform(post("/api/profile/change-password")
+                .requestAttr("userId", 1L)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"password\": \"123\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Bad Request"));
     }
 }

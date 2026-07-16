@@ -130,6 +130,49 @@ public class ProfileController {
         ));
     }
 
+    @PostMapping(value = "/change-password", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Change Password", description = "Change the logged-in user's password")
+    public ResponseEntity<?> changePassword(
+            @RequestAttribute(value = "userId", required = false) Long userId,
+            @RequestBody Map<String, String> requestBody) {
+        
+        if (userId == null) {
+            log.warn("[ProfileController] Password change denied: userId attribute not found in request");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "error", "Unauthorized",
+                    "message", "User session is invalid or missing"
+            ));
+        }
+
+        String password = requestBody.get("password");
+        if (password == null || password.trim().length() < 6) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Bad Request",
+                    "message", "Password must be at least 6 characters"
+            ));
+        }
+
+        log.info("[ProfileController] Changing password for userId={}", userId);
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            log.warn("[ProfileController] Password change failed: user id={} not found", userId);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                    "error", "Not Found",
+                    "message", "User profile not found"
+            ));
+        }
+
+        // Hash the new password using BCrypt
+        String hashedPassword = org.mindrot.jbcrypt.BCrypt.hashpw(password, org.mindrot.jbcrypt.BCrypt.gensalt());
+        user.setPassword(hashedPassword);
+        userRepository.save(user);
+
+        log.info("[ProfileController] Password changed successfully for userId={}", userId);
+        return ResponseEntity.ok(Map.of(
+                "message", "Password changed successfully"
+        ));
+    }
+
     private UserResponse mapToUserResponse(User user) {
         return UserResponse.builder()
                 .firstName(user.getFirstName())
