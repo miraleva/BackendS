@@ -61,12 +61,10 @@ public class ChatOrchestrationService {
     // Public API
     // ─────────────────────────────────────────────────────────────────────────
 
-    @org.springframework.transaction.annotation.Transactional
     public ChatResponse orchestrate(ChatRequest request) {
         return orchestrate(request, null);
     }
 
-    @org.springframework.transaction.annotation.Transactional
     public ChatResponse orchestrate(ChatRequest request, Long userId) {
         // 1. Session yönetimi
         String sessionId = resolveSessionId(request.getSessionId());
@@ -101,12 +99,10 @@ public class ChatOrchestrationService {
         // Record Bot Response
         if (response != null && response.getReply() != null) {
             sessionState.getMessages().add(
-                    new ChatSessionManager.MessageHistoryItem("bot", response.getReply(), java.time.Instant.now(), response.getResults()));
+                    new ChatSessionManager.MessageHistoryItem("bot", response.getReply(), java.time.Instant.now(),
+                            response.getResults()));
             sessionState.setLastMessageTimestamp(java.time.Instant.now());
         }
-
-        // Save session state to database
-        chatSessionManager.saveSession(sessionState);
 
         return response;
     }
@@ -148,7 +144,7 @@ public class ChatOrchestrationService {
                 // Selection recognized!
                 sessionState.setMode("BOOKING");
                 sessionState.setSelectedItem(matchedItem);
-                
+
                 String confirmReply = responseAgent.confirmSelection(matchedItem, existingCriteria);
                 return ChatResponse.builder()
                         .reply(confirmReply)
@@ -422,7 +418,7 @@ public class ChatOrchestrationService {
         // AI ile arama sonuçlarını özetleme
         if (searchResponse.isSuccess() && searchResponse.getResults() != null
                 && !searchResponse.getResults().isEmpty()) {
-                
+
             // Set AWAITING_CONFIRM mode
             ChatSessionManager.SessionState sessionState = chatSessionManager.getSessionState(sessionId);
             if (sessionState != null) {
@@ -467,14 +463,14 @@ public class ChatOrchestrationService {
         if (userMessage == null || userMessage.isBlank() || lastResults == null) {
             return null;
         }
-        
+
         String cleanUserMsg = userMessage.toLowerCase()
-            .replace("hoteli", "")
-            .replace("oteli", "")
-            .replace("hotel", "")
-            .replace("otel", "")
-            .trim();
-            
+                .replace("hoteli", "")
+                .replace("oteli", "")
+                .replace("hotel", "")
+                .replace("otel", "")
+                .trim();
+
         for (Object item : lastResults) {
             String itemName = "";
             if (item instanceof com.santsg.tourvisio.dto.HotelSearchResponseItem) {
@@ -482,7 +478,7 @@ public class ChatOrchestrationService {
             } else if (item instanceof com.santsg.tourvisio.dto.FlightSearchResponseItem) {
                 itemName = ((com.santsg.tourvisio.dto.FlightSearchResponseItem) item).getAirline();
             }
-            
+
             if (itemName != null && !itemName.isBlank()) {
                 String cleanItemName = itemName.toLowerCase();
                 if (userMessage.toLowerCase().contains(cleanItemName) || cleanItemName.contains(cleanUserMsg)) {

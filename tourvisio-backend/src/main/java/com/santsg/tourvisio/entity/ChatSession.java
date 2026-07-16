@@ -33,6 +33,10 @@ public class ChatSession {
     @Builder.Default
     private String chatStatus = "ACTIVE";
 
+    @Column(name = "mode", nullable = false, length = 30)
+    @Builder.Default
+    private String mode = "GATHERING";
+
     @Column(name = "last_requested_field", length = 50)
     private String lastRequestedField;
 

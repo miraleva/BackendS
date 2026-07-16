@@ -86,6 +86,10 @@ public class ChatSessionManager {
 
         public void setMode(String mode) {
             this.mode = mode;
+            if (entity != null) {
+                entity.setMode(mode);
+                sessionRepo.save(entity);
+            }
         }
 
         public java.util.List<?> getLastShownResults() {
@@ -129,6 +133,7 @@ public class ChatSessionManager {
             this.lastMessageTimestamp = entity.getLastMessageTimestamp();
             this.outOfScopeCount = entity.getOutOfScopeCount();
             this.chatStatus = entity.getChatStatus();
+            this.mode = entity.getMode() != null ? entity.getMode() : "GATHERING";
             this.lastRequestedField = entity.getLastRequestedField();
 
             // Populate existing messages into delegate
