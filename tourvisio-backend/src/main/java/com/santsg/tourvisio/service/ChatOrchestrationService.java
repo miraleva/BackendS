@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -121,7 +122,14 @@ public class ChatOrchestrationService {
         if (request.getCurrencySymbol() != null && !request.getCurrencySymbol().isBlank()) {
             existingCriteria.setCurrency(request.getCurrencySymbol());
         }
-        if (request.getCountry() != null && !request.getCountry().isBlank()) {
+        // Dil tercihi: önce bu mesajın gerçek dilini algılamayı dene (kullanıcı
+        // sohbet ortasında dil değiştirebilir). Net bir sinyal yoksa (ör. "2",
+        // bir tarih, ya da ilk mesaj boşsa) hesabın ülke ayarını varsayılan olarak kullan.
+        String detectedLanguage = detectLanguageFromMessage(request.getMessage());
+        if (detectedLanguage != null) {
+            existingCriteria.setPreferredLanguage(detectedLanguage);
+        } else if (existingCriteria.getPreferredLanguage() == null
+                && request.getCountry() != null && !request.getCountry().isBlank()) {
             existingCriteria.setPreferredLanguage(request.getCountry());
         }
         sessionStore.save(sessionId, existingCriteria);
@@ -388,6 +396,68 @@ public class ChatOrchestrationService {
             list.add(Integer.parseInt(matcher.group()));
         }
         return list;
+    }
+
+    private static final java.util.Set<String> TURKISH_WORDS = java.util.Set.of(
+            "otel", "otelde", "uçak", "ucak", "uçuş", "ucus", "istiyorum", "arıyorum", "ariyorum",
+            "gidiş", "gidis", "dönüş", "donus", "yetişkin", "yetiskin", "çocuk", "cocuk",
+            "rezervasyon", "merhaba", "selam", "lütfen", "lutfen", "tarih", "gece", "kişi", "kisi",
+            "için", "icin", "istiyoruz", "gün", "gun", "var", "yok", "evet", "hayır", "hayir");
+
+    private static final java.util.Set<String> ENGLISH_WORDS = java.util.Set.of(
+            "hotel", "flight", "fly", "want", "looking", "for", "from", "please", "need", "book",
+            "reservation", "adults", "children", "date", "hello", "hi", "the", "and", "night",
+            "nights", "trip", "travel", "search", "yes", "no", "return", "departure");
+
+    /**
+     * Kullanıcının bu mesajda hangi dili kullandığını basit bir sezgisel yöntemle
+     * tahmin eder (Gemini/OpenAI anahtarı yoksa AI tabanlı tespit mümkün değil).
+     * Net bir sinyal bulunamazsa null döner (çağıran taraf önceki tercihi korur).
+     */
+    private String detectLanguageFromMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return null;
+        }
+        // Locale.ROOT kullanılmalı: tr-TR locale'i büyük "I" harfini "ı" (noktasız)
+        // yapar, bu da İngilizce "I am ..." gibi cümlelerin yanlışlıkla Türkçe
+        // sanılmasına yol açar.
+        String lower = message.toLowerCase(Locale.ROOT);
+
+        // ç,ğ,ö,ş,ü İngilizce'de hiç geçmeyen harfler → kesin sinyal.
+        // "ı" kasıtlı olarak dışarıda bırakıldı: Türkçe klavyede İngilizce "I"
+        // yerine sıkça yanlışlıkla "ı" (noktasız) yazılıyor ("ı want fly" gibi),
+        // bu da tek başına dili yanlış Türkçe'ye çeker.
+        boolean hasUnambiguousTurkishChars = lower.chars().anyMatch(c -> "çğöşü".indexOf(c) >= 0);
+        if (hasUnambiguousTurkishChars) {
+            return "Turkish";
+        }
+
+        String[] tokens = lower.split("[^a-zçğıöşü0-9]+");
+        int turkishHits = 0;
+        int englishHits = 0;
+        for (String token : tokens) {
+            if (TURKISH_WORDS.contains(token)) {
+                turkishHits++;
+            }
+            if (ENGLISH_WORDS.contains(token)) {
+                englishHits++;
+            }
+        }
+
+        // "ı" (noktasız i) zayıf bir Türkçe sinyalidir: rakip İngilizce kelime
+        // yoksa Türkçe lehine sayılır, ama açık İngilizce kelimeler varsa yok sayılır.
+        boolean hasLoneDotlessI = englishHits == 0 && lower.chars().anyMatch(c -> c == 'ı');
+        if (hasLoneDotlessI) {
+            turkishHits++;
+        }
+
+        if (turkishHits > 0 && turkishHits >= englishHits) {
+            return "Turkish";
+        }
+        if (englishHits > 0 && englishHits > turkishHits) {
+            return "English";
+        }
+        return null;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
