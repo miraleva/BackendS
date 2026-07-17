@@ -303,6 +303,10 @@ public class ResponseAgent {
     }
 
     public String noResultsFound(SearchCriteria criteria, String userMessage) {
+        return noResultsFound(criteria, userMessage, null);
+    }
+
+    public String noResultsFound(SearchCriteria criteria, String userMessage, java.util.List<String> suggestedDates) {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
 
@@ -310,14 +314,20 @@ public class ResponseAgent {
         String adults = criteria != null && criteria.getAdultCount() != null ? String.valueOf(criteria.getAdultCount()) : "?";
         String checkIn = criteria != null && criteria.getCheckInDate() != null ? criteria.getCheckInDate().toString() : "?";
         String checkOut = criteria != null && criteria.getCheckOutDate() != null ? criteria.getCheckOutDate().toString() : "?";
-        
+        boolean hasSuggestions = suggestedDates != null && !suggestedDates.isEmpty();
+        String suggestedDatesText = hasSuggestions ? String.join(", ", suggestedDates) : null;
+
         String prompt = String.format(
                 "The user searched for a trip (Location: %s, Dates: %s to %s, Adults: %s) but no results were found in the system.\n" +
                 "Write a polite response. Start by briefly restating the key criteria (location, dates, guests) you understood from the user's request, then explain that no hotels or flights were found matching those exact criteria. " +
-                "Never give a bare 'not found' message with zero context.\n" +
+                "Never give a bare 'not found' message with zero context.%s\n" +
                 "Write the response in the language of this user message: \"%s\" (Target: %s).\n" +
                 "Return ONLY the response itself, no extra notes.",
-                location, checkIn, checkOut, adults, userMessage, targetLanguage
+                location, checkIn, checkOut, adults,
+                hasSuggestions
+                        ? " The following nearby dates ARE available for this location, so suggest the user try one of them instead: " + suggestedDatesText + "."
+                        : "",
+                userMessage, targetLanguage
         );
 
         try {
@@ -329,19 +339,21 @@ public class ResponseAgent {
             log.warn("[ResponseAgent] noResultsFound AI generation failed: {}", e.getMessage());
         }
 
-        String msgKey = "hotel.search.no.results";
-        if (criteria != null && "FLIGHT_SEARCH".equals(criteria.getSearchType())) {
-            msgKey = "flight.search.no.results";
-        }
-        String defaultMsg = messageSource.getMessage(msgKey, null, locale);
+        boolean isFlight = criteria != null && "FLIGHT_SEARCH".equals(criteria.getSearchType());
+        String msgKey = isFlight ? "flight.search.no.results" : "hotel.search.no.results";
+        String withDatesKey = isFlight ? "flight.search.no.results.with.dates" : "hotel.search.no.results.with.dates";
+        String defaultMsg = hasSuggestions
+                ? messageSource.getMessage(withDatesKey, new Object[]{suggestedDatesText}, locale)
+                : messageSource.getMessage(msgKey, null, locale);
         if (criteria != null) {
             String locationParam = criteria.getLocationOrHotelName() != null ? criteria.getLocationOrHotelName() : "?";
-            String datesParam = (criteria.getCheckInDate() != null ? criteria.getCheckInDate().toString() : "?") + " - " + 
-                                (criteria.getCheckOutDate() != null ? criteria.getCheckOutDate().toString() : "?");
+            java.time.LocalDate startDate = isFlight ? criteria.getDepartureDate() : criteria.getCheckInDate();
+            java.time.LocalDate endDate = isFlight ? criteria.getReturnDate() : criteria.getCheckOutDate();
+            String datesParam = formatDisplayDate(startDate) + " - " + formatDisplayDate(endDate);
             String adultsParam = criteria.getAdultCount() != null ? criteria.getAdultCount().toString() : "?";
             String childrenParam = criteria.getChildCount() != null ? criteria.getChildCount().toString() : "0";
-            
-            String details = messageSource.getMessage("criteria.understood", 
+
+            String details = messageSource.getMessage("criteria.understood",
                 new Object[]{locationParam, datesParam, adultsParam, childrenParam}, locale);
             return defaultMsg + " (" + details + ")";
         }
@@ -376,6 +388,13 @@ public class ResponseAgent {
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
+
+    private static final java.time.format.DateTimeFormatter DISPLAY_DATE_FORMAT =
+            java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy");
+
+    private String formatDisplayDate(java.time.LocalDate date) {
+        return date != null ? date.format(DISPLAY_DATE_FORMAT) : "?";
+    }
 
     private boolean isValidResponse(String response) {
         return response != null 

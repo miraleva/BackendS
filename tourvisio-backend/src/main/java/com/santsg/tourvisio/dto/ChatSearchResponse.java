@@ -43,4 +43,8 @@ public class ChatSearchResponse {
     @Schema(description = "Bulunan sonuçların listesi")
     @JsonProperty("results")
     private List<?> results;
+
+    @Schema(description = "Sonuç bulunamadığında, aynı lokasyon için önerilen en yakın uygun tarihler (yyyy-MM-dd)")
+    @JsonProperty("suggestedDates")
+    private List<String> suggestedDates;
 }

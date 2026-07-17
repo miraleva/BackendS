@@ -306,6 +306,7 @@ public class ChatOrchestrationService {
                     .searchType(intent)
                     .missingFields(missingFields)
                     .chatStatus("ACTIVE")
+                    .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(existingCriteria))
                     .build();
         }
 
@@ -317,6 +318,17 @@ public class ChatOrchestrationService {
         if (incoming == null || lastField == null || message == null || message.isBlank()) {
             return;
         }
+
+        // "giriş tarihi, çıkış tarihi" gibi birden fazla tarih alanı aynı anda
+        // soruluyorken, extractor.extract() (etiket-farkında, "giriş"/"çıkış"
+        // gibi kelimeleri tanır) bu mesajdan zaten BİR tarihi doğru alana
+        // atamış olabilir (örn. "giriş 28 temmuz" → checkInDate). Aşağıdaki
+        // etiketsiz (bare) "parseSingleDate" yedek mantığı bunu bilmeden aynı
+        // tarihi diğer alana da (çıkış) atayıp, üstüne doğru atanmış olanı
+        // sıfırlayabiliyordu. Bu yüzden, etiketli çıkarım bu mesajdan zaten
+        // bir tarih bulduysa, etiketsiz yedek mantığı hiç çalıştırmıyoruz.
+        boolean hotelDateAlreadyResolvedByLabel = incoming.getCheckInDate() != null || incoming.getCheckOutDate() != null;
+        boolean flightDateAlreadyResolvedByLabel = incoming.getDepartureDate() != null || incoming.getReturnDate() != null;
 
         String[] fields = lastField.split(",\\s*");
         for (String field : fields) {
@@ -340,64 +352,44 @@ public class ChatOrchestrationService {
                     break;
 
                 case "giriş tarihi":
-                    if (incoming.getCheckInDate() == null) {
-                        java.time.LocalDate d = extractor.parseSingleDate(message);
-                        if (d == null && incoming.getCheckOutDate() != null) {
-                            d = incoming.getCheckOutDate();
-                            incoming.setCheckOutDate(null);
-                        }
-                        incoming.setCheckInDate(d);
+                    if (incoming.getCheckInDate() == null && !hotelDateAlreadyResolvedByLabel) {
+                        incoming.setCheckInDate(extractor.parseSingleDate(message));
                     }
                     break;
 
                 case "çıkış tarihi":
-                    if (incoming.getCheckOutDate() == null) {
-                        java.time.LocalDate d = extractor.parseSingleDate(message);
-                        if (d == null && incoming.getCheckInDate() != null) {
-                            d = incoming.getCheckInDate();
-                        }
-                        incoming.setCheckOutDate(d);
+                    if (incoming.getCheckOutDate() == null && !hotelDateAlreadyResolvedByLabel) {
+                        incoming.setCheckOutDate(extractor.parseSingleDate(message));
                     }
-                    incoming.setCheckInDate(null);
                     break;
 
                 case "gidiş tarihi":
-                    if (incoming.getDepartureDate() == null) {
-                        java.time.LocalDate d = extractor.parseSingleDate(message);
-                        if (d == null && incoming.getReturnDate() != null) {
-                            d = incoming.getReturnDate();
-                            incoming.setReturnDate(null);
-                        }
-                        incoming.setDepartureDate(d);
+                    if (incoming.getDepartureDate() == null && !flightDateAlreadyResolvedByLabel) {
+                        incoming.setDepartureDate(extractor.parseSingleDate(message));
                     }
                     break;
 
                 case "dönüş tarihi":
-                    if (incoming.getReturnDate() == null) {
-                        java.time.LocalDate d = extractor.parseSingleDate(message);
-                        if (d == null && incoming.getDepartureDate() != null) {
-                            d = incoming.getDepartureDate();
-                        }
-                        incoming.setReturnDate(d);
+                    if (incoming.getReturnDate() == null && !flightDateAlreadyResolvedByLabel) {
+                        incoming.setReturnDate(extractor.parseSingleDate(message));
                     }
-                    incoming.setDepartureDate(null);
                     break;
 
                 case "yetişkin sayısı":
                     if (incoming.getAdultCount() == null) {
-                        incoming.setAdultCount(parseInteger(message));
+                        incoming.setAdultCount(parseCountWithLabel(message, ADULT_COUNT_LABEL_PATTERN));
                     }
                     break;
 
                 case "yolcu sayısı":
                     if (incoming.getPassengerCount() == null) {
-                        incoming.setPassengerCount(parseInteger(message));
+                        incoming.setPassengerCount(parseCountWithLabel(message, PASSENGER_COUNT_LABEL_PATTERN));
                     }
                     break;
 
                 case "oda sayısı":
                     if (incoming.getRoomCount() == null || incoming.getRoomCount() == 1) {
-                        Integer rooms = parseInteger(message);
+                        Integer rooms = parseCountWithLabel(message, ROOM_COUNT_LABEL_PATTERN);
                         if (rooms != null) {
                             incoming.setRoomCount(rooms);
                         }
@@ -406,7 +398,7 @@ public class ChatOrchestrationService {
 
                 case "çocuk sayısı":
                     if (incoming.getChildCount() == null || incoming.getChildCount() == 0) {
-                        Integer children = parseInteger(message);
+                        Integer children = parseCountWithLabel(message, CHILD_COUNT_LABEL_PATTERN);
                         if (children != null) {
                             incoming.setChildCount(children);
                         }
@@ -415,7 +407,7 @@ public class ChatOrchestrationService {
 
                 case "çocuk yaşları":
                     if (incoming.getChildAges() == null || incoming.getChildAges().isEmpty()) {
-                        incoming.setChildAges(parseIntegerList(message));
+                        incoming.setChildAges(parseChildAges(message));
                     }
                     break;
 
@@ -444,6 +436,41 @@ public class ChatOrchestrationService {
         return null;
     }
 
+    /**
+     * Yetişkin/yolcu/oda/çocuk sayısı gibi alanlar başka bir alanla (ör. tarih)
+     * aynı mesajda birlikte sorulduğunda, mesajdaki İLK sayıyı almak yanlış
+     * sonuç verir (örn. "28 temmuz, 1 yetişkin, tek yön" → tarihteki "28"
+     * yolcu sayısı sanılırdı, oysa gerçek sayı "1"dir, "yetişkin" kelimesinin
+     * hemen önünde). Bu yüzden önce ilgili anahtar kelimenin hemen önündeki
+     * sayıyı arar; bulamazsa ve mesaj tamamen sayılardan/ayraçlardan oluşuyorsa
+     * (kullanıcı sadece "3" yazdıysa) o sayıyı kullanır.
+     */
+    private static final java.util.regex.Pattern ADULT_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
+            "(\\d{1,3})\\s*(?:yetişkin|yetiskin|adult|adults)", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern PASSENGER_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
+            "(\\d{1,3})\\s*(?:yolcu|passenger|passengers|kişi|kisi|person|people|kişilik|kisilik|yetişkin|yetiskin|adult|adults)",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern ROOM_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
+            "(\\d{1,2})\\s*(?:oda|room|rooms)", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern CHILD_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
+            "(\\d{1,2})\\s*(?:çocuk|cocuk|child|children|kids)", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    private Integer parseCountWithLabel(String message, java.util.regex.Pattern labelPattern) {
+        if (message == null) return null;
+
+        java.util.regex.Matcher labelMatcher = labelPattern.matcher(message);
+        if (labelMatcher.find()) {
+            return Integer.parseInt(labelMatcher.group(1));
+        }
+
+        // Anahtar kelime bulunamadı; mesaj sadece sayılardan/ayraçlardan
+        // oluşuyorsa (örn. kullanıcı doğrudan "3" yazdıysa) o sayıyı kullan.
+        if (message.trim().matches("^[\\d\\s,.-]+$")) {
+            return parseInteger(message);
+        }
+        return null;
+    }
+
     private List<Integer> parseIntegerList(String message) {
         List<Integer> list = new java.util.ArrayList<>();
         if (message == null)
@@ -453,6 +480,43 @@ public class ChatOrchestrationService {
             list.add(Integer.parseInt(matcher.group()));
         }
         return list;
+    }
+
+    /**
+     * Çocuk yaşları için "çıkış tarihi, çocuk yaşları" gibi birden fazla alanın
+     * aynı mesajda birlikte sorulduğu durumlarda, mesajdaki HER sayıyı yaş
+     * sanmak yanlış sonuç verir (örn. "3 ağustos, 5 yaşında" → tarih içindeki
+     * "3" de yaş sanılıp [3, 5] çıkarılırdı, oysa tek çocuk yaşı 5'tir).
+     * Bu yüzden önce sadece "yaş/yaşında/years old" gibi bir yaş belirtecinin
+     * hemen öncesindeki sayı(ları) arar; hiç bulamazsa ve mesaj tamamen
+     * sayılardan oluşuyorsa (kullanıcı sadece "5, 8" gibi yazdıysa) tüm
+     * sayıları yaş kabul eder.
+     */
+    private static final java.util.regex.Pattern CHILD_AGE_CLAUSE_PATTERN = java.util.regex.Pattern.compile(
+            "((?:\\d{1,2}\\s*(?:,|ve|and)?\\s*)+)(?:yaş\\w*|yasinda|yaslarinda|years?\\s*old|y/o)",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    private List<Integer> parseChildAges(String message) {
+        List<Integer> ages = new java.util.ArrayList<>();
+        if (message == null) return ages;
+
+        java.util.regex.Matcher clauseMatcher = CHILD_AGE_CLAUSE_PATTERN.matcher(message);
+        while (clauseMatcher.find()) {
+            java.util.regex.Matcher numMatcher = java.util.regex.Pattern.compile("\\d{1,2}").matcher(clauseMatcher.group(1));
+            while (numMatcher.find()) {
+                ages.add(Integer.parseInt(numMatcher.group()));
+            }
+        }
+        if (!ages.isEmpty()) {
+            return ages;
+        }
+
+        // Yaş belirteci bulunamadı; mesaj sadece sayılardan/ayraçlardan oluşuyorsa
+        // (örn. kullanıcı doğrudan "5" ya da "5, 8" yazdıysa) tüm sayıları yaş kabul et.
+        if (message.trim().matches("^[\\d\\s,.-]+$")) {
+            return parseIntegerList(message);
+        }
+        return ages;
     }
 
     private static final java.util.Set<String> TURKISH_WORDS = java.util.Set.of(
@@ -664,7 +728,7 @@ public class ChatOrchestrationService {
                 finalReply = responseAgent.summarize(intent, "[]", searchResponse.getReply(), criteria, userMessage, totalResults, shownResults);
             }
         } else {
-            finalReply = responseAgent.noResultsFound(criteria, userMessage);
+            finalReply = responseAgent.noResultsFound(criteria, userMessage, searchResponse.getSuggestedDates());
         }
 
         return ChatResponse.builder()
@@ -675,6 +739,7 @@ public class ChatOrchestrationService {
                 .chatStatus("ACTIVE")
                 .success(searchResponse.isSuccess())
                 .results(searchResponse.getResults())
+                .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(criteria))
                 .build();
     }
 
