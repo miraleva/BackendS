@@ -55,8 +55,33 @@ public class ResponseAgent {
         return messageSource.getMessage(key, null, locale);
     }
 
+    private Locale detectFallbackLocale(String message) {
+        if (message == null || message.trim().isEmpty()) {
+            return Locale.ENGLISH;
+        }
+        String lower = message.trim().toLowerCase(Locale.ROOT);
+        
+        // Turkish
+        if (lower.contains("merhaba") || lower.contains("selam") || lower.contains("nasılsın")
+                || lower.contains("ç") || lower.contains("ş") || lower.contains("ğ") || lower.contains("ı")
+                || lower.contains("ü") || lower.contains("ö")) { // Tr also has ü and ö but usually handled together, wait, let's keep it simple
+            return Locale.forLanguageTag("tr-TR");
+        }
+        // German
+        if (lower.contains("hallo") || lower.contains("guten") || lower.contains("morgen")
+                || lower.contains("ß") || lower.contains("ä")) {
+            return Locale.GERMAN;
+        }
+        // Russian
+        if (lower.contains("привет") || lower.contains("здравствуйте") || lower.matches(".*[а-яА-Я].*")) {
+            return Locale.forLanguageTag("ru-RU");
+        }
+        
+        return Locale.ENGLISH;
+    }
+
     public String welcome(String userMessage) {
-        Locale locale = resolveLocale(null);
+        Locale locale = detectFallbackLocale(userMessage);
         String prompt = String.format(
                 "The user just started a chat and sent their first message: \"%s\".\n" +
                 "Write a warm, welcoming onboarding message as a travel assistant. " +
@@ -217,10 +242,7 @@ public class ResponseAgent {
             log.warn("[ResponseAgent] Confirm AI generation failed, using fallback: {}", e.getMessage());
         }
         
-        if ("tr".equals(locale.getLanguage())) {
-            return String.format("%s için rezervasyon işlemine geçmek ister misiniz?", itemName);
-        }
-        return String.format("Would you like to proceed with booking %s?", itemName);
+        return messageSource.getMessage("confirm.selection", new Object[]{itemName}, locale);
     }
 
     public String invalidDateRange(String errorType, SearchCriteria criteria, String userMessage) {

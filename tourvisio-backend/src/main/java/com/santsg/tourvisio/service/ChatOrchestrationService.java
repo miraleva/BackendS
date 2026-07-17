@@ -451,6 +451,14 @@ public class ChatOrchestrationService {
             "reservation", "adults", "children", "date", "hello", "hi", "the", "and", "night",
             "nights", "trip", "travel", "search", "yes", "no", "return", "departure");
 
+    private static final java.util.Set<String> GERMAN_WORDS = java.util.Set.of(
+            "hallo", "guten", "ich", "möchte", "bitte", "danke", "hotel", "flug", "buchen",
+            "erwachsene", "kinder", "ja", "nein", "für");
+
+    private static final java.util.Set<String> RUSSIAN_WORDS = java.util.Set.of(
+            "привет", "здравствуйте", "хочу", "пожалуйста", "отель", "билет", "рейс",
+            "взрослых", "детей", "да", "нет", "для");
+
     /**
      * Kullanıcının bu mesajda hangi dili kullandığını basit bir sezgisel yöntemle
      * tahmin eder (Gemini/OpenAI anahtarı yoksa AI tabanlı tespit mümkün değil).
@@ -460,45 +468,57 @@ public class ChatOrchestrationService {
         if (message == null || message.isBlank()) {
             return null;
         }
-        // Locale.ROOT kullanılmalı: tr-TR locale'i büyük "I" harfini "ı" (noktasız)
-        // yapar, bu da İngilizce "I am ..." gibi cümlelerin yanlışlıkla Türkçe
-        // sanılmasına yol açar.
         String lower = message.toLowerCase(Locale.ROOT);
 
-        // ç,ğ,ö,ş,ü İngilizce'de hiç geçmeyen harfler → kesin sinyal.
-        // "ı" kasıtlı olarak dışarıda bırakıldı: Türkçe klavyede İngilizce "I"
-        // yerine sıkça yanlışlıkla "ı" (noktasız) yazılıyor ("ı want fly" gibi),
-        // bu da tek başına dili yanlış Türkçe'ye çeker.
-        boolean hasUnambiguousTurkishChars = lower.chars().anyMatch(c -> "çğöşü".indexOf(c) >= 0);
+        if (lower.matches(".*[а-яА-ЯёЁ].*")) {
+            return "Russian";
+        }
+
+        boolean hasUnambiguousTurkishChars = lower.chars().anyMatch(c -> "çğş".indexOf(c) >= 0);
         if (hasUnambiguousTurkishChars) {
             return "Turkish";
         }
 
-        String[] tokens = lower.split("[^a-zçğıöşü0-9]+");
+        boolean hasUnambiguousGermanChars = lower.chars().anyMatch(c -> "äß".indexOf(c) >= 0);
+        if (hasUnambiguousGermanChars) {
+            return "German";
+        }
+        
+        // ö and ü are shared between Turkish and German. We don't eagerly return here to avoid false positives.
+
+        String[] tokens = lower.split("[^a-zçğıöşüäßа-яё0-9]+");
         int turkishHits = 0;
         int englishHits = 0;
+        int germanHits = 0;
+        int russianHits = 0;
+        
         for (String token : tokens) {
-            if (TURKISH_WORDS.contains(token)) {
-                turkishHits++;
-            }
-            if (ENGLISH_WORDS.contains(token)) {
-                englishHits++;
-            }
+            if (TURKISH_WORDS.contains(token)) turkishHits++;
+            if (ENGLISH_WORDS.contains(token)) englishHits++;
+            if (GERMAN_WORDS.contains(token)) germanHits++;
+            if (RUSSIAN_WORDS.contains(token)) russianHits++;
         }
 
-        // "ı" (noktasız i) zayıf bir Türkçe sinyalidir: rakip İngilizce kelime
-        // yoksa Türkçe lehine sayılır, ama açık İngilizce kelimeler varsa yok sayılır.
-        boolean hasLoneDotlessI = englishHits == 0 && lower.chars().anyMatch(c -> c == 'ı');
+        boolean hasLoneDotlessI = englishHits == 0 && germanHits == 0 && lower.chars().anyMatch(c -> c == 'ı');
         if (hasLoneDotlessI) {
             turkishHits++;
         }
+        
+        boolean hasSharedUmlauts = lower.chars().anyMatch(c -> c == 'ö' || c == 'ü');
+        if (hasSharedUmlauts) {
+            if (germanHits > turkishHits) germanHits++;
+            else turkishHits++;
+        }
 
-        if (turkishHits > 0 && turkishHits >= englishHits) {
-            return "Turkish";
-        }
-        if (englishHits > 0 && englishHits > turkishHits) {
-            return "English";
-        }
+        int maxHits = Math.max(Math.max(turkishHits, englishHits), Math.max(germanHits, russianHits));
+        
+        if (maxHits == 0) return null;
+        
+        if (maxHits == turkishHits) return "Turkish";
+        if (maxHits == germanHits) return "German";
+        if (maxHits == russianHits) return "Russian";
+        if (maxHits == englishHits) return "English";
+        
         return null;
     }
 
