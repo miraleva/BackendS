@@ -37,7 +37,7 @@ class ExtractionAgentTest {
                 """;
         when(geminiExtractionClient.complete(anyString())).thenReturn(mockResponse);
 
-        ExtractionResult result = extractionAgent.extract("Hotel in Antalya for 2 adults in EUR from July 15 to 20", null);
+        ExtractionResult result = extractionAgent.extract("Hotel in Antalya for 2 adults in EUR from July 15 to 20", null, null);
 
         assertThat(result).isNotNull();
         assertThat(result.getIntent()).isEqualTo("HOTEL_SEARCH");
@@ -54,7 +54,7 @@ class ExtractionAgentTest {
         when(geminiExtractionClient.complete(anyString())).thenReturn("[MOCK] Gemini Lite API key is not configured.");
 
         assertThrows(RuntimeException.class, () -> {
-            extractionAgent.extract("Hotel in Antalya", null);
+            extractionAgent.extract("Hotel in Antalya", null, null);
         });
     }
 
@@ -63,7 +63,7 @@ class ExtractionAgentTest {
         when(geminiExtractionClient.complete(anyString())).thenReturn("unparsable response text");
 
         assertThrows(RuntimeException.class, () -> {
-            extractionAgent.extract("Hotel in Antalya", null);
+            extractionAgent.extract("Hotel in Antalya", null, null);
         });
     }
 }

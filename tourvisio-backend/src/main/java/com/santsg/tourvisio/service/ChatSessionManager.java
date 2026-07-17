@@ -117,6 +117,25 @@ public class ChatSessionManager {
             this.lastRequestedField = lastRequestedField;
         }
 
+        private java.util.List<?> allSearchResults;
+        private int resultOffset = 0;
+
+        public java.util.List<?> getAllSearchResults() {
+            return allSearchResults;
+        }
+
+        public void setAllSearchResults(java.util.List<?> allSearchResults) {
+            this.allSearchResults = allSearchResults;
+        }
+
+        public int getResultOffset() {
+            return resultOffset;
+        }
+
+        public void setResultOffset(int resultOffset) {
+            this.resultOffset = resultOffset;
+        }
+
         public Long getUserId() {
             return userId;
         }
