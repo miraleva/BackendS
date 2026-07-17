@@ -89,27 +89,20 @@ public class SearchCriteriaExtractor {
     private static final Pattern NIGHT_PATTERN = Pattern.compile(
             "(\\d+)\\s*(?:gece|night)");
 
-    // ── Tarih: "15 Temmuz", "15 temmuz girişli", "20 temmuz çıkış" ──────────
+    // ── Tarih: "giriş tarihi 15 Temmuz", "15 temmuz girişli", "20 temmuz çıkış" ──────────
     private static final Pattern DATE_WITH_LABEL_PATTERN = Pattern.compile(
-            "(\\d{1,2})\\s+(" + String.join("|", MONTHS_BY_NAME.keySet()) + ")"
+            "(?:(giriş|giris|checkin|başlangıç|baslangic|departure|gidiş|gidis|kalkış|kalkis|hareket|çıkış|cikis|checkout|bitiş|bitis|return|dönüş|donus)\\s+(?:tarihi\\s+)?)?"
+                    + "(\\d{1,2})\\s+(" + String.join("|", MONTHS_BY_NAME.keySet()) + ")"
                     + "(?:\\s+\\d{4})?" // opsiyonel yıl
-                    + "(?:\\s*(giriş|giris|checkin|başlangıç|baslangic"
-                    + "|çıkış|cikis|checkout|bitiş|bitis))?",
-            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-
-    // ── Gidiş tarihi için "X tarihinde", "X'de git" ──────────────────────────
-    private static final Pattern DEPARTURE_DATE_PATTERN = Pattern.compile(
-            "(\\d{1,2})\\s+(" + String.join("|", MONTHS_BY_NAME.keySet()) + ")"
-                    + "(?:\\s+\\d{4})?"
-                    + "(?:\\s*(?:gidiş|gidis|kalkış|kalkis|hareket))?",
+                    + "(?:\\s*(giriş|giris|checkin|başlangıç|baslangic|departure|gidiş|gidis|kalkış|kalkis|hareket|çıkış|cikis|checkout|bitiş|bitis|return|dönüş|donus))?",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     // ── İngilizce "ay gün" sırası: "August 1st", "August 1", "Aug 5th girişli" ──
     private static final Pattern MONTH_DAY_WITH_LABEL_PATTERN = Pattern.compile(
-            "(" + String.join("|", MONTHS_BY_NAME.keySet()) + ")\\s+(\\d{1,2})(?:st|nd|rd|th)?"
+            "(?:(giriş|giris|checkin|başlangıç|baslangic|departure|gidiş|gidis|kalkış|kalkis|hareket|çıkış|cikis|checkout|bitiş|bitis|return|dönüş|donus)\\s+(?:tarihi\\s+)?)?"
+                    + "(" + String.join("|", MONTHS_BY_NAME.keySet()) + ")\\s+(\\d{1,2})(?:st|nd|rd|th)?"
                     + "(?:\\s+\\d{4})?" // opsiyonel yıl
-                    + "(?:\\s*(giriş|giris|checkin|başlangıç|baslangic|departure"
-                    + "|çıkış|cikis|checkout|bitiş|bitis|return))?",
+                    + "(?:\\s*(giriş|giris|checkin|başlangıç|baslangic|departure|gidiş|gidis|kalkış|kalkis|hareket|çıkış|cikis|checkout|bitiş|bitis|return|dönüş|donus))?",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     // ── Kalkış: "İstanbul'dan", "İstanbul dan" ───────────────────────────────
@@ -160,9 +153,9 @@ public class SearchCriteriaExtractor {
         c.setCurrency(extractCurrency(lower));
 
         if ("HOTEL_SEARCH".equals(intent)) {
-            extractHotelFields(lower, c);
+            extractHotelFields(lower, c, awaitingField);
         } else if ("FLIGHT_SEARCH".equals(intent)) {
-            extractFlightFields(lower, c);
+            extractFlightFields(lower, c, awaitingField);
         }
 
         log.debug("[Extractor] intent={} extracted={}", intent, c);
@@ -173,7 +166,7 @@ public class SearchCriteriaExtractor {
     // Hotel extraction
     // ─────────────────────────────────────────────────────────────────────────
 
-    private void extractHotelFields(String lower, SearchCriteria c) {
+    private void extractHotelFields(String lower, SearchCriteria c, String awaitingField) {
 
         // Lokasyon
         for (String city : HOTEL_CITIES) {
@@ -194,25 +187,26 @@ public class SearchCriteriaExtractor {
             c.setChildCount(Integer.parseInt(cm.group(1)));
 
         // Tarihler (giriş & çıkış)
-        extractHotelDates(lower, c);
+        extractHotelDates(lower, c, awaitingField);
     }
 
     /**
      * "15 Temmuz girişli 5 gece" veya "15 temmuz giriş 20 temmuz çıkış"
      * gibi ifadelerden checkIn ve checkOut tarihlerini çıkarır.
      */
-    private void extractHotelDates(String lower, SearchCriteria c) {
+    private void extractHotelDates(String lower, SearchCriteria c, String awaitingField) {
         List<LocalDate> dates = new java.util.ArrayList<>();
         List<String> labels = new java.util.ArrayList<>();
 
         Matcher m = DATE_WITH_LABEL_PATTERN.matcher(lower);
         while (m.find()) {
             LocalDate d = buildDate(
-                    Integer.parseInt(m.group(1)),
-                    m.group(2).toLowerCase(Locale.ROOT));
+                    Integer.parseInt(m.group(2)),
+                    m.group(3).toLowerCase(Locale.ROOT));
             if (d != null) {
                 dates.add(d);
-                labels.add(m.group(3));
+                String label = m.group(1) != null ? m.group(1) : m.group(4);
+                labels.add(label);
             }
         }
 
@@ -221,11 +215,12 @@ public class SearchCriteriaExtractor {
             Matcher mdm = MONTH_DAY_WITH_LABEL_PATTERN.matcher(lower);
             while (mdm.find()) {
                 LocalDate d = buildDate(
-                        Integer.parseInt(mdm.group(2)),
-                        mdm.group(1).toLowerCase(Locale.ROOT));
+                        Integer.parseInt(mdm.group(3)),
+                        mdm.group(2).toLowerCase(Locale.ROOT));
                 if (d != null) {
                     dates.add(d);
-                    labels.add(mdm.group(3));
+                    String label = mdm.group(1) != null ? mdm.group(1) : mdm.group(4);
+                    labels.add(label);
                 }
             }
         }
@@ -244,6 +239,18 @@ public class SearchCriteriaExtractor {
             return;
         }
 
+        // --- NEW LOGIC FOR AWAITING_FIELD Context ---
+        if (dates.size() == 1 && awaitingField != null) {
+            String lowerAwaiting = awaitingField.toLowerCase(Locale.ROOT);
+            if (lowerAwaiting.contains("giriş tarihi") || lowerAwaiting.contains("checkindate")) {
+                c.setCheckInDate(dates.get(0));
+                return;
+            } else if (lowerAwaiting.contains("çıkış tarihi") || lowerAwaiting.contains("checkoutdate")) {
+                c.setCheckOutDate(dates.get(0));
+                return;
+            }
+        }
+
         boolean hasExplicitLabel = false;
         for (String label : labels) {
             if (label != null && !label.isBlank()) {
@@ -256,10 +263,20 @@ public class SearchCriteriaExtractor {
             for (int i = 0; i < dates.size(); i++) {
                 LocalDate d = dates.get(i);
                 String label = labels.get(i);
-                if (label != null && (label.contains("çıkış") || label.contains("cikis") || label.contains("checkout") || label.contains("bitiş") || label.contains("bitis"))) {
+                if (label != null && (label.contains("çıkış") || label.contains("cikis") || label.contains("checkout") || label.contains("bitiş") || label.contains("bitis") || label.contains("return") || label.contains("dönüş") || label.contains("donus"))) {
                     c.setCheckOutDate(d);
-                } else {
+                } else if (label != null) {
                     c.setCheckInDate(d);
+                } else {
+                    if (c.getCheckInDate() == null && c.getCheckOutDate() != null) {
+                         if (d.isBefore(c.getCheckOutDate())) {
+                             c.setCheckInDate(d);
+                         }
+                    } else if (c.getCheckOutDate() == null && c.getCheckInDate() != null) {
+                         if (d.isAfter(c.getCheckInDate())) {
+                             c.setCheckOutDate(d);
+                         }
+                    }
                 }
             }
         } else {
@@ -283,7 +300,7 @@ public class SearchCriteriaExtractor {
     // Flight extraction
     // ─────────────────────────────────────────────────────────────────────────
 
-    private void extractFlightFields(String lower, SearchCriteria c) {
+    private void extractFlightFields(String lower, SearchCriteria c, String awaitingField) {
 
         // Yolcu sayısı
         Matcher pm = PASSENGER_PATTERN.matcher(lower);
@@ -341,36 +358,97 @@ public class SearchCriteriaExtractor {
             }
         }
 
-        
-        List<LocalDate> flightDates = extractNumericDates(lower);
-        if (flightDates.isEmpty()) {
-            Matcher datM = DEPARTURE_DATE_PATTERN.matcher(lower);
-            if (datM.find()) {
-                LocalDate d = buildDate(Integer.parseInt(datM.group(1)), datM.group(2).toLowerCase(Locale.ROOT));
-                if (d != null)
-                    flightDates.add(d);
+        extractFlightDates(lower, c, awaitingField);
+    }
+
+    private void extractFlightDates(String lower, SearchCriteria c, String awaitingField) {
+        List<LocalDate> dates = new java.util.ArrayList<>();
+        List<String> labels = new java.util.ArrayList<>();
+
+        Matcher m = DATE_WITH_LABEL_PATTERN.matcher(lower);
+        while (m.find()) {
+            LocalDate d = buildDate(
+                    Integer.parseInt(m.group(2)),
+                    m.group(3).toLowerCase(Locale.ROOT));
+            if (d != null) {
+                dates.add(d);
+                String label = m.group(1) != null ? m.group(1) : m.group(4);
+                labels.add(label);
             }
-            if (flightDates.isEmpty()) {
-                // "August 1st" gibi İngilizce "ay gün" sırasını dene
-                Matcher mdm = MONTH_DAY_WITH_LABEL_PATTERN.matcher(lower);
-                if (mdm.find()) {
-                    LocalDate d = buildDate(Integer.parseInt(mdm.group(2)), mdm.group(1).toLowerCase(Locale.ROOT));
-                    if (d != null)
-                        flightDates.add(d);
-                }
-            }
-            if ("ROUND_TRIP".equals(c.getTripType())) {
-                List<LocalDate> labelDates = extractAllDates(lower);
-                if (labelDates.size() >= 2) {
-                    flightDates = labelDates;
+        }
+
+        if (dates.isEmpty()) {
+            Matcher mdm = MONTH_DAY_WITH_LABEL_PATTERN.matcher(lower);
+            while (mdm.find()) {
+                LocalDate d = buildDate(
+                        Integer.parseInt(mdm.group(3)),
+                        mdm.group(2).toLowerCase(Locale.ROOT));
+                if (d != null) {
+                    dates.add(d);
+                    String label = mdm.group(1) != null ? mdm.group(1) : mdm.group(4);
+                    labels.add(label);
                 }
             }
         }
 
-        if (!flightDates.isEmpty()) {
-            if ("ROUND_TRIP".equals(c.getTripType()) && flightDates.size() >= 2) {
-                LocalDate d1 = flightDates.get(0);
-                LocalDate d2 = flightDates.get(1);
+        if (dates.isEmpty()) {
+            List<LocalDate> numericDates = extractNumericDates(lower);
+            if (!numericDates.isEmpty()) {
+                dates.addAll(numericDates);
+                for (int i = 0; i < numericDates.size(); i++) {
+                    labels.add(null);
+                }
+            }
+        }
+
+        if (dates.isEmpty()) {
+            return;
+        }
+
+        // --- NEW LOGIC FOR AWAITING_FIELD Context ---
+        if (dates.size() == 1 && awaitingField != null) {
+            String lowerAwaiting = awaitingField.toLowerCase(Locale.ROOT);
+            if (lowerAwaiting.contains("gidiş tarihi") || lowerAwaiting.contains("departuredate")) {
+                c.setDepartureDate(dates.get(0));
+                return;
+            } else if (lowerAwaiting.contains("dönüş tarihi") || lowerAwaiting.contains("returndate")) {
+                c.setReturnDate(dates.get(0));
+                return;
+            }
+        }
+
+        boolean hasExplicitLabel = false;
+        for (String label : labels) {
+            if (label != null && !label.isBlank()) {
+                hasExplicitLabel = true;
+                break;
+            }
+        }
+
+        if (hasExplicitLabel) {
+            for (int i = 0; i < dates.size(); i++) {
+                LocalDate d = dates.get(i);
+                String label = labels.get(i);
+                if (label != null && (label.contains("çıkış") || label.contains("cikis") || label.contains("checkout") || label.contains("bitiş") || label.contains("bitis") || label.contains("dönüş") || label.contains("donus") || label.contains("return"))) {
+                    c.setReturnDate(d);
+                } else if (label != null) {
+                    c.setDepartureDate(d);
+                } else {
+                    if (c.getDepartureDate() == null && c.getReturnDate() != null) {
+                         if (d.isBefore(c.getReturnDate())) {
+                             c.setDepartureDate(d);
+                         }
+                    } else if (c.getReturnDate() == null && c.getDepartureDate() != null) {
+                         if (d.isAfter(c.getDepartureDate())) {
+                             c.setReturnDate(d);
+                         }
+                    }
+                }
+            }
+        } else {
+            if (dates.size() >= 2) {
+                LocalDate d1 = dates.get(0);
+                LocalDate d2 = dates.get(1);
                 if (d1.isAfter(d2)) {
                     c.setDepartureDate(d2);
                     c.setReturnDate(d1);
@@ -378,8 +456,8 @@ public class SearchCriteriaExtractor {
                     c.setDepartureDate(d1);
                     c.setReturnDate(d2);
                 }
-            } else {
-                c.setDepartureDate(flightDates.get(0));
+            } else if (dates.size() == 1) {
+                c.setDepartureDate(dates.get(0));
             }
         }
     }
@@ -418,8 +496,8 @@ public class SearchCriteriaExtractor {
         Matcher m = DATE_WITH_LABEL_PATTERN.matcher(lower);
         while (m.find()) {
             LocalDate d = buildDate(
-                    Integer.parseInt(m.group(1)),
-                    m.group(2).toLowerCase(Locale.ROOT));
+                    Integer.parseInt(m.group(2)),
+                    m.group(3).toLowerCase(Locale.ROOT));
             if (d != null)
                 dates.add(d);
         }
@@ -428,8 +506,8 @@ public class SearchCriteriaExtractor {
             Matcher mdm = MONTH_DAY_WITH_LABEL_PATTERN.matcher(lower);
             while (mdm.find()) {
                 LocalDate d = buildDate(
-                        Integer.parseInt(mdm.group(2)),
-                        mdm.group(1).toLowerCase(Locale.ROOT));
+                        Integer.parseInt(mdm.group(3)),
+                        mdm.group(2).toLowerCase(Locale.ROOT));
                 if (d != null)
                     dates.add(d);
             }
@@ -479,7 +557,7 @@ public class SearchCriteriaExtractor {
         // 2. Try word date
         Matcher m = DATE_WITH_LABEL_PATTERN.matcher(lower);
         if (m.find()) {
-            return buildDate(Integer.parseInt(m.group(1)), m.group(2).toLowerCase(Locale.ROOT));
+            return buildDate(Integer.parseInt(m.group(2)), m.group(3).toLowerCase(Locale.ROOT));
         }
         
         return null;
