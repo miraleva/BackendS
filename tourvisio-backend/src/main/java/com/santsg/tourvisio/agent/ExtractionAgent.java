@@ -31,7 +31,7 @@ public class ExtractionAgent {
      * @return The extraction result.
      * @throws RuntimeException on API failure, mock responses, or JSON parsing failures.
      */
-    public ExtractionResult extract(String message, String currentIntent) {
+    public ExtractionResult extract(String message, String currentIntent, String awaitingField) {
         if (message == null || message.trim().isEmpty()) {
             SearchCriteria emptyCriteria = new SearchCriteria();
             return new ExtractionResult("UNKNOWN", emptyCriteria);
@@ -48,7 +48,7 @@ public class ExtractionAgent {
                   "criteria": {
                     // For HOTEL_SEARCH:
                     "locationOrHotelName": "city or hotel name (e.g. Antalya)",
-                    "checkInDate": "check-in date in YYYY-MM-DD format. Today's date is %s. If only month/day (e.g. 15 July) is specified, use the correct year based on today's date.",
+                    "checkInDate": "check-in date in YYYY-MM-DD format. Today's date is %s. Handle multiple formats robustly (e.g. '13.6.26' -> '2026-06-13', '13/04/2027', '12-08-2026'). If only month/day (e.g. 15 July, haziran 13) is specified, resolve to the nearest future occurrence using today's date.",
                     "checkOutDate": "check-out date in YYYY-MM-DD format. If night count is given, calculate check-out by adding it to check-in.",
                     "adultCount": integer,
                     "childCount": integer,
@@ -60,8 +60,8 @@ public class ExtractionAgent {
                     // For FLIGHT_SEARCH:
                     "departureLocation": "departure location (e.g. Istanbul)",
                     "arrivalLocation": "arrival location (e.g. Antalya)",
-                    "departureDate": "departure date in YYYY-MM-DD format.",
-                    "returnDate": "return date in YYYY-MM-DD format.",
+                    "departureDate": "departure date in YYYY-MM-DD format. Handle multiple formats robustly like checkInDate.",
+                    "returnDate": "return date in YYYY-MM-DD format. Handle multiple formats robustly like checkOutDate.",
                     "passengerCount": integer,
                     "tripType": "ONE_WAY" or "ROUND_TRIP",
                     "currency": currency (TRY, EUR, USD, GBP)
@@ -69,20 +69,25 @@ public class ExtractionAgent {
                 }
                 """.formatted(todayStr);
 
+        String awaitingFieldContext = "";
+        if (awaitingField != null && !awaitingField.trim().isEmpty()) {
+            awaitingFieldContext = String.format("\nThe assistant just asked the user for: [%s]. Interpret the user's reply primarily as an answer to THIS field, not as new unrelated criteria (e.g. dates), unless the message clearly indicates a topic change.", awaitingField);
+        }
+
         String prompt = """
                 Extract travel criteria and identify user intent from the message below.
                 Return the output strictly as a single JSON object matching the schema. Do not add any markdown blocks (like ```json), notes, or extra text.
                 If some criteria fields are not found in the message, omit them or set them to null.
 
                 Today's Date: %s
-                Active Intent Context: %s
+                Active Intent Context: %s%s
                 User Message: "%s"
 
                 Expected JSON Schema:
                 %s
 
                 Response (JSON only):"""
-                .formatted(todayStr, activeIntentContext, message, schemaDescription);
+                .formatted(todayStr, activeIntentContext, awaitingFieldContext, message, schemaDescription);
 
         String response = geminiExtractionClient.complete(prompt);
 
@@ -112,6 +117,10 @@ public class ExtractionAgent {
             }
             if (result.getCriteria() != null) {
                 result.getCriteria().setSearchType(result.getIntent());
+                log.info("[ExtractionAgent] Parsed message: \"{}\"", message);
+                log.info("[ExtractionAgent] -> checkInDate: {}", result.getCriteria().getCheckInDate());
+                log.info("[ExtractionAgent] -> checkOutDate: {}", result.getCriteria().getCheckOutDate());
+                log.info("[ExtractionAgent] -> childAges: {}", result.getCriteria().getChildAges());
             }
             log.debug("[ExtractionAgent] Extraction successful: {}", result);
             return result;
