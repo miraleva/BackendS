@@ -165,4 +165,99 @@ public class ProfileControllerTests {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Bad Request"));
     }
+
+    @Test
+    @Transactional
+    public void testDeleteChatSessionSuccess() throws Exception {
+        // 1. Create User
+        User user = User.builder()
+                .firstName("Test")
+                .lastName("User")
+                .email("testdeletesession@example.com")
+                .phone("905554443325")
+                .password("password")
+                .build();
+        user = userRepository.save(user);
+        Long userId = user.getId();
+
+        // 2. Create ChatSession
+        ChatSession session = ChatSession.builder()
+                .id("session-delete-success-123")
+                .user(user)
+                .title("Delete Test Session")
+                .chatStatus("ACTIVE")
+                .lastMessageTimestamp(Instant.now())
+                .build();
+        session = chatSessionRepository.save(session);
+        String sessionId = session.getId();
+
+        // 3. Create ChatMessage
+        ChatMessage message = ChatMessage.builder()
+                .session(session)
+                .sender("user")
+                .text("Hello delete test")
+                .timestamp(Instant.now())
+                .build();
+        message = chatMessageRepository.save(message);
+        Long messageId = message.getId();
+        
+        session.setMessages(new java.util.ArrayList<>(java.util.List.of(message)));
+        chatSessionRepository.save(session);
+
+        // 4. Perform DELETE request
+        mockMvc.perform(delete("/api/chat/sessions/" + sessionId)
+                .requestAttr("userId", userId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Session deleted successfully"));
+
+        // 5. Verify deletion
+        assertFalse(chatSessionRepository.findById(sessionId).isPresent());
+        assertFalse(chatMessageRepository.findById(messageId).isPresent());
+    }
+
+    @Test
+    public void testDeleteChatSessionUnauthorized() throws Exception {
+        mockMvc.perform(delete("/api/chat/sessions/some-session-id"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("Unauthorized"));
+    }
+
+    @Test
+    @Transactional
+    public void testDeleteChatSessionForbidden() throws Exception {
+        // 1. Create User A and User B
+        User userA = User.builder()
+                .firstName("User")
+                .lastName("A")
+                .email("usera@example.com")
+                .phone("905554443326")
+                .password("password")
+                .build();
+        userA = userRepository.save(userA);
+
+        User userB = User.builder()
+                .firstName("User")
+                .lastName("B")
+                .email("userb@example.com")
+                .phone("905554443327")
+                .password("password")
+                .build();
+        userB = userRepository.save(userB);
+
+        // 2. Create ChatSession for User A
+        ChatSession session = ChatSession.builder()
+                .id("session-forbidden-test-123")
+                .user(userA)
+                .title("A's Session")
+                .chatStatus("ACTIVE")
+                .lastMessageTimestamp(Instant.now())
+                .build();
+        session = chatSessionRepository.save(session);
+        String sessionId = session.getId();
+
+        // 3. Perform DELETE request by User B
+        mockMvc.perform(delete("/api/chat/sessions/" + sessionId)
+                .requestAttr("userId", userB.getId()))
+                .andExpect(status().isForbidden());
+    }
 }
