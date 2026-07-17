@@ -87,11 +87,15 @@ public class SearchCriteria {
             this.checkOutDate = incoming.getCheckOutDate();
         if (incoming.getAdultCount() != null)
             this.adultCount = incoming.getAdultCount();
-        if (incoming.getChildCount() != null) {
-            this.childCount = incoming.getChildCount();
-        }
+        // childAges dolu geldiğinde çocuk sayısı ondan türetilir (tutarlılık için).
+        // childCount, sadece pozitif bir değer geldiğinde uygulanır — LLM tabanlı
+        // çıkarım, çocuktan hiç bahsetmeyen mesajlarda da "childCount": 0 döndürebiliyor;
+        // bunu uygulamak önceki turda öğrenilmiş gerçek çocuk sayısını sıfırlardı.
         if (incoming.getChildAges() != null && !incoming.getChildAges().isEmpty()) {
             this.childAges = incoming.getChildAges();
+            this.childCount = incoming.getChildAges().size();
+        } else if (incoming.getChildCount() != null && incoming.getChildCount() > 0) {
+            this.childCount = incoming.getChildCount();
         }
         if (incoming.getNationality() != null)
             this.nationality = incoming.getNationality();

@@ -47,10 +47,13 @@ public class TourVisioRequestMapper {
                         .type(locationType)
                         .build();
 
-        // Room criteria — childAges destekli
-        List<Integer> childAges = request.getChildAges() != null
-                ? request.getChildAges()
-                : new ArrayList<>();
+        // TourVisio'da ayrı bir "çocuk" kavramı yok; çocuklar yetişkin sayısına
+        // eklenerek gönderilir. Gerçek çocuk sayısı (gösterim için) SearchCriteria/
+        // ChatCriteriaSummary üzerinde ayrı tutulmaya devam eder, sadece TourVisio'ya
+        // giden istek buradan etkilenir.
+        int childCountForTourVisio = request.getChildAges() != null && !request.getChildAges().isEmpty()
+                ? request.getChildAges().size()
+                : (request.getChildCount() != null ? request.getChildCount() : 0);
 
         // roomCount kadar oda oluştur (yoksa 1)
         int roomCount = request.getRoomCount() != null && request.getRoomCount() > 0
@@ -60,8 +63,8 @@ public class TourVisioRequestMapper {
         for (int i = 0; i < roomCount; i++) {
             TourVisioHotelSearchRequest.RoomCriteria room =
                     TourVisioHotelSearchRequest.RoomCriteria.builder()
-                            .adult(request.getAdultCount())
-                            .childAges(i == 0 ? childAges : new ArrayList<>()) // Çocuklar 1. odaya
+                            .adult(request.getAdultCount() + (i == 0 ? childCountForTourVisio : 0))
+                            .childAges(new ArrayList<>())
                             .build();
             rooms.add(room);
         }
@@ -115,19 +118,23 @@ public class TourVisioRequestMapper {
                         .type(locationType)
                         .build();
 
-        // childAges
-        List<Integer> childAges = criteria.getChildAges() != null
-                ? criteria.getChildAges() : new ArrayList<>();
+        // TourVisio'da ayrı bir "çocuk" kavramı yok; çocuklar yetişkin sayısına
+        // eklenerek gönderilir (gerçek çocuk sayısı gösterim için SearchCriteria'da kalır).
+        int childCountForTourVisio = criteria.getChildAges() != null && !criteria.getChildAges().isEmpty()
+                ? criteria.getChildAges().size()
+                : (criteria.getChildCount() != null ? criteria.getChildCount() : 0);
 
         // Oda kriterleri (varsayılan 1 oda)
         int roomCount = criteria.getRoomCount() != null && criteria.getRoomCount() > 0
                 ? criteria.getRoomCount() : 1;
 
+        int baseAdultCount = criteria.getAdultCount() != null ? criteria.getAdultCount() : 2;
+
         List<TourVisioHotelSearchRequest.RoomCriteria> rooms = new ArrayList<>();
         for (int i = 0; i < roomCount; i++) {
             rooms.add(TourVisioHotelSearchRequest.RoomCriteria.builder()
-                    .adult(criteria.getAdultCount() != null ? criteria.getAdultCount() : 2)
-                    .childAges(i == 0 ? childAges : new ArrayList<>())
+                    .adult(baseAdultCount + (i == 0 ? childCountForTourVisio : 0))
+                    .childAges(new ArrayList<>())
                     .build());
         }
 
