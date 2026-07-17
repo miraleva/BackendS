@@ -1,11 +1,14 @@
 package com.santsg.tourvisio.service;
 
+import com.santsg.tourvisio.dto.PassengerPrefillResponse;
 import com.santsg.tourvisio.dto.PassengerRequest;
 import com.santsg.tourvisio.dto.ReservationRequest;
 import com.santsg.tourvisio.entity.Passenger;
 import com.santsg.tourvisio.entity.Reservation;
+import com.santsg.tourvisio.entity.User;
 import com.santsg.tourvisio.exception.ResourceNotFoundException;
 import com.santsg.tourvisio.repository.ReservationRepository;
+import com.santsg.tourvisio.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
@@ -16,9 +19,37 @@ import java.util.UUID;
 public class ReservationService {
 
     private final ReservationRepository reservationRepository;
+    private final UserRepository userRepository;
 
-    public ReservationService(ReservationRepository reservationRepository) {
+    public ReservationService(ReservationRepository reservationRepository,
+                              UserRepository userRepository) {
         this.reservationRepository = reservationRepository;
+        this.userRepository = userRepository;
+    }
+
+    /**
+     * Oturum açmış kullanıcının profil bilgilerini döner; bu veriler rezervasyon
+     * formunu önceden doldurmak (pre-fill) için kullanılır.
+     *
+     * <p>Kullanıcı bulunamazsa boş bir {@link PassengerPrefillResponse} döner;
+     * hata fırlatılmaz — eksik alanlar kullanıcı tarafından doldurulur.</p>
+     *
+     * @param userId JWT'den çözümlenen kullanıcı kimliği
+     * @return profil bilgileriyle dolu (veya boş) DTO
+     */
+    public PassengerPrefillResponse getPrefillData(Long userId) {
+        if (userId == null) {
+            return PassengerPrefillResponse.builder().build();
+        }
+
+        return userRepository.findById(userId)
+                .map(user -> PassengerPrefillResponse.builder()
+                        .firstName(user.getFirstName())
+                        .lastName(user.getLastName())
+                        .email(user.getEmail())
+                        .phoneNumber(user.getPhone())
+                        .build())
+                .orElseGet(() -> PassengerPrefillResponse.builder().build());
     }
 
     @Transactional

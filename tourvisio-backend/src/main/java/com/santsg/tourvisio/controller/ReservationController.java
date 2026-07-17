@@ -1,5 +1,6 @@
 package com.santsg.tourvisio.controller;
 
+import com.santsg.tourvisio.dto.PassengerPrefillResponse;
 import com.santsg.tourvisio.dto.ReservationRequest;
 import com.santsg.tourvisio.entity.Reservation;
 import com.santsg.tourvisio.service.ReservationService;
@@ -20,6 +21,20 @@ public class ReservationController {
 
     public ReservationController(ReservationService reservationService) {
         this.reservationService = reservationService;
+    }
+
+    @GetMapping("/prefill")
+    @Operation(
+        summary = "Get passenger prefill data",
+        description = "Returns the authenticated user's profile fields (first name, last name, " +
+                      "email, phone) to pre-populate the reservation passenger form. " +
+                      "Requires a valid Bearer token. Fields absent from the user's profile " +
+                      "are returned as null and must be filled in by the user."
+    )
+    public ResponseEntity<PassengerPrefillResponse> getPrefillData(
+            @RequestAttribute(value = "userId", required = false) Long userId) {
+        PassengerPrefillResponse prefill = reservationService.getPrefillData(userId);
+        return ResponseEntity.ok(prefill);
     }
 
     @PostMapping
