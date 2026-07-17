@@ -1,5 +1,7 @@
 package com.santsg.tourvisio.controller;
  
+import com.santsg.tourvisio.chat.ChatSessionStore;
+import com.santsg.tourvisio.dto.ChatCriteriaSummary;
 import com.santsg.tourvisio.dto.ChatRequest;
 import com.santsg.tourvisio.dto.ChatResponse;
 import com.santsg.tourvisio.service.ChatOrchestrationService;
@@ -32,10 +34,13 @@ public class ChatController {
  
     private final ChatOrchestrationService orchestrationService;
     private final ChatSessionManager chatSessionManager;
- 
-    public ChatController(ChatOrchestrationService orchestrationService, ChatSessionManager chatSessionManager) {
+    private final ChatSessionStore chatSessionStore;
+
+    public ChatController(ChatOrchestrationService orchestrationService, ChatSessionManager chatSessionManager,
+            ChatSessionStore chatSessionStore) {
         this.orchestrationService = orchestrationService;
         this.chatSessionManager = chatSessionManager;
+        this.chatSessionStore = chatSessionStore;
     }
 
     /**
@@ -136,5 +141,22 @@ public class ChatController {
             );
         }
         return ResponseEntity.ok(state.getMessages());
+    }
+
+    @GetMapping(value = "/sessions/{id}/criteria", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Bir oturum için o ana kadar toplanmış arama kriterlerini döner (sağ panel için)")
+    public ResponseEntity<ChatCriteriaSummary> getSessionCriteria(
+            @PathVariable String id,
+            @RequestAttribute(value = "userId", required = false) Long userId) {
+        ChatSessionManager.SessionState state = chatSessionManager.getSessionState(id);
+        if (state == null) {
+            throw new ResourceNotFoundException("Session not found: " + id);
+        }
+        if (userId == null || !userId.equals(state.getUserId())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN, "Access denied to session: " + id
+            );
+        }
+        return ResponseEntity.ok(ChatCriteriaSummary.from(chatSessionStore.getOrCreate(id)));
     }
 }

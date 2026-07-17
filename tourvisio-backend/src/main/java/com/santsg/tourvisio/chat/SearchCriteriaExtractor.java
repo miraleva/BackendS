@@ -138,7 +138,12 @@ public class SearchCriteriaExtractor {
         if (message == null || message.isBlank())
             return new SearchCriteria();
 
-        String lower = message.toLowerCase(Locale.ROOT);
+        // Locale.ROOT, Türkçe'nin büyük "İ" (noktalı I, U+0130) harfini "i̇" (i +
+        // birleşik nokta işareti) yapar — bu da "İstanbul" gibi kelimelerin
+        // "istanbul" alt-dizisiyle eşleşmesini bozar. Şehir/anahtar kelime
+        // listelerimiz düz ASCII "i" kullandığından, hem "İ" hem "I" harfini
+        // küçültmeden önce düz "i"ye normalize ediyoruz.
+        String lower = message.replace('İ', 'i').replace('I', 'i').toLowerCase(Locale.ROOT);
         SearchCriteria c = new SearchCriteria();
         c.setSearchType(intent);
 
@@ -317,7 +322,8 @@ public class SearchCriteriaExtractor {
         if (c.getDepartureLocation() == null || c.getArrivalLocation() == null) {
             for (String city : FLIGHT_CITIES) {
                 if (lower.contains(city)) {
-                    if (c.getDepartureLocation() == null) {
+                    if (c.getDepartureLocation() == null
+                            && !city.equalsIgnoreCase(c.getArrivalLocation())) {
                         c.setDepartureLocation(capitalize(city));
                     } else if (c.getArrivalLocation() == null
                             && !city.equalsIgnoreCase(c.getDepartureLocation())) {
