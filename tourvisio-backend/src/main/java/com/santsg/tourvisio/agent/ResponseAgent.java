@@ -347,8 +347,9 @@ public class ResponseAgent {
                 : messageSource.getMessage(msgKey, null, locale);
         if (criteria != null) {
             String locationParam = criteria.getLocationOrHotelName() != null ? criteria.getLocationOrHotelName() : "?";
-            String datesParam = (criteria.getCheckInDate() != null ? criteria.getCheckInDate().toString() : "?") + " - " +
-                                (criteria.getCheckOutDate() != null ? criteria.getCheckOutDate().toString() : "?");
+            java.time.LocalDate startDate = isFlight ? criteria.getDepartureDate() : criteria.getCheckInDate();
+            java.time.LocalDate endDate = isFlight ? criteria.getReturnDate() : criteria.getCheckOutDate();
+            String datesParam = formatDisplayDate(startDate) + " - " + formatDisplayDate(endDate);
             String adultsParam = criteria.getAdultCount() != null ? criteria.getAdultCount().toString() : "?";
             String childrenParam = criteria.getChildCount() != null ? criteria.getChildCount().toString() : "0";
 
@@ -387,6 +388,13 @@ public class ResponseAgent {
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
+
+    private static final java.time.format.DateTimeFormatter DISPLAY_DATE_FORMAT =
+            java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy");
+
+    private String formatDisplayDate(java.time.LocalDate date) {
+        return date != null ? date.format(DISPLAY_DATE_FORMAT) : "?";
+    }
 
     private boolean isValidResponse(String response) {
         return response != null 
