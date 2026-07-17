@@ -418,7 +418,7 @@ public class ChatOrchestrationService {
 
                 case "çocuk yaşları":
                     if (incoming.getChildAges() == null || incoming.getChildAges().isEmpty()) {
-                        incoming.setChildAges(parseIntegerList(message));
+                        incoming.setChildAges(parseChildAges(message));
                     }
                     break;
 
@@ -456,6 +456,43 @@ public class ChatOrchestrationService {
             list.add(Integer.parseInt(matcher.group()));
         }
         return list;
+    }
+
+    /**
+     * Çocuk yaşları için "çıkış tarihi, çocuk yaşları" gibi birden fazla alanın
+     * aynı mesajda birlikte sorulduğu durumlarda, mesajdaki HER sayıyı yaş
+     * sanmak yanlış sonuç verir (örn. "3 ağustos, 5 yaşında" → tarih içindeki
+     * "3" de yaş sanılıp [3, 5] çıkarılırdı, oysa tek çocuk yaşı 5'tir).
+     * Bu yüzden önce sadece "yaş/yaşında/years old" gibi bir yaş belirtecinin
+     * hemen öncesindeki sayı(ları) arar; hiç bulamazsa ve mesaj tamamen
+     * sayılardan oluşuyorsa (kullanıcı sadece "5, 8" gibi yazdıysa) tüm
+     * sayıları yaş kabul eder.
+     */
+    private static final java.util.regex.Pattern CHILD_AGE_CLAUSE_PATTERN = java.util.regex.Pattern.compile(
+            "((?:\\d{1,2}\\s*(?:,|ve|and)?\\s*)+)(?:yaş\\w*|yasinda|yaslarinda|years?\\s*old|y/o)",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    private List<Integer> parseChildAges(String message) {
+        List<Integer> ages = new java.util.ArrayList<>();
+        if (message == null) return ages;
+
+        java.util.regex.Matcher clauseMatcher = CHILD_AGE_CLAUSE_PATTERN.matcher(message);
+        while (clauseMatcher.find()) {
+            java.util.regex.Matcher numMatcher = java.util.regex.Pattern.compile("\\d{1,2}").matcher(clauseMatcher.group(1));
+            while (numMatcher.find()) {
+                ages.add(Integer.parseInt(numMatcher.group()));
+            }
+        }
+        if (!ages.isEmpty()) {
+            return ages;
+        }
+
+        // Yaş belirteci bulunamadı; mesaj sadece sayılardan/ayraçlardan oluşuyorsa
+        // (örn. kullanıcı doğrudan "5" ya da "5, 8" yazdıysa) tüm sayıları yaş kabul et.
+        if (message.trim().matches("^[\\d\\s,.-]+$")) {
+            return parseIntegerList(message);
+        }
+        return ages;
     }
 
     private static final java.util.Set<String> TURKISH_WORDS = java.util.Set.of(
@@ -684,7 +721,7 @@ public class ChatOrchestrationService {
                         totalResults, shownResults);
             }
         } else {
-            finalReply = responseAgent.noResultsFound(criteria, userMessage);
+            finalReply = responseAgent.noResultsFound(criteria, userMessage, searchResponse.getSuggestedDates());
         }
 
         return ChatResponse.builder()

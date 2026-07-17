@@ -18,6 +18,21 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class GetCheckInDatesResponse {
 
-    @JsonProperty("dates")
-    private List<String> dates;
+    @JsonProperty("body")
+    private Body body;
+
+    /** Diğer TourVisio çağırımlarıyla tutarlılık için düz erişim; body.dates'e delege eder. */
+    public List<String> getDates() {
+        return body != null ? body.getDates() : null;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Body {
+        @JsonProperty("dates")
+        private List<String> dates;
+    }
 }
