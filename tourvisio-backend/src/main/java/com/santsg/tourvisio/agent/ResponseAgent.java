@@ -30,7 +30,7 @@ public class ResponseAgent {
 
     public String decline(SearchCriteria criteria, boolean isTerminated) {
         Locale locale = resolveLocale(criteria);
-        String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
+        String targetLanguage = resolveLanguageName(criteria);
         String targetCountry = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "United Kingdom";
 
         String prompt = String.format(
@@ -57,7 +57,7 @@ public class ResponseAgent {
 
     public String clarify(SearchCriteria criteria) {
         Locale locale = resolveLocale(criteria);
-        String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
+        String targetLanguage = resolveLanguageName(criteria);
         String targetCountry = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "United Kingdom";
 
         String prompt = String.format(
@@ -81,7 +81,7 @@ public class ResponseAgent {
 
     public String askMissing(List<String> missingFields, SearchCriteria criteria) {
         Locale locale = resolveLocale(criteria);
-        String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
+        String targetLanguage = resolveLanguageName(criteria);
         String targetCountry = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "United Kingdom";
 
         String fieldsCsv = String.join(", ", missingFields);
@@ -122,8 +122,12 @@ public class ResponseAgent {
     }
 
     public String summarize(String intent, String resultsJson, String defaultReply, SearchCriteria criteria) {
+        return summarize(intent, resultsJson, defaultReply, criteria, null);
+    }
+
+    public String summarize(String intent, String resultsJson, String defaultReply, SearchCriteria criteria, String userMessage) {
         Locale locale = resolveLocale(criteria);
-        String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
+        String targetLanguage = resolveLanguageName(criteria);
         String targetCountry = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "United Kingdom";
 
         String prompt = String.format(
@@ -153,36 +157,58 @@ public class ResponseAgent {
         return messageSource.getMessage("search.success.fallback", null, locale);
     }
 
+    public String confirmSelection(Object selectedItem, SearchCriteria criteria) {
+        Locale locale = resolveLocale(criteria);
+        String itemName = "";
+        if (selectedItem instanceof com.santsg.tourvisio.dto.HotelSearchResponseItem) {
+            itemName = ((com.santsg.tourvisio.dto.HotelSearchResponseItem) selectedItem).getName();
+        } else if (selectedItem instanceof com.santsg.tourvisio.dto.FlightSearchResponseItem) {
+            itemName = ((com.santsg.tourvisio.dto.FlightSearchResponseItem) selectedItem).getAirline() + " flight";
+        }
+        
+        String prompt = String.format(
+            "You are a helpful travel assistant. The user has selected '%s' from the search results. " +
+            "Please ask them politely if they would like to proceed with booking this option. " +
+            "Ensure the response is natural and written in %s.",
+            itemName, locale.getDisplayLanguage(Locale.ENGLISH));
+            
+        try {
+            String aiResponse = geminiClient.generate(prompt);
+            if (isValidResponse(aiResponse)) {
+                return aiResponse.trim();
+            }
+        } catch (Exception e) {
+            log.warn("[ResponseAgent] Confirm AI generation failed, using fallback: {}", e.getMessage());
+        }
+        
+        if ("tr".equals(locale.getLanguage())) {
+            return String.format("%s için rezervasyon işlemine geçmek ister misiniz?", itemName);
+        }
+        return String.format("Would you like to proceed with booking %s?", itemName);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
     private boolean isValidResponse(String response) {
-        return response != null && !response.trim().isEmpty() && !response.trim().startsWith("[MOCK]");
+        return response != null 
+                && !response.trim().isEmpty() 
+                && !response.trim().startsWith("[MOCK]")
+                && !response.contains("Gemini service could not be reached");
     }
 
     private Locale resolveLocale(SearchCriteria criteria) {
-        if (criteria == null) {
-            return Locale.ENGLISH;
-        }
-        String lang = criteria.getPreferredLanguage();
-        if (lang == null || lang.isBlank()) {
-            return Locale.ENGLISH;
-        }
-        String normalized = lang.trim().toLowerCase();
-        if (normalized.startsWith("tr") || normalized.contains("turkish")) {
-            return Locale.forLanguageTag("tr-TR");
-        }
-        if (normalized.startsWith("de") || normalized.contains("german")) {
-            return Locale.GERMAN;
-        }
-        if (normalized.startsWith("ru") || normalized.contains("russian")) {
-            return Locale.forLanguageTag("ru-RU");
-        }
-        if (normalized.startsWith("en") || normalized.contains("english")) {
-            return Locale.ENGLISH;
-        }
-        return Locale.ENGLISH;
+        return com.santsg.tourvisio.util.LocaleResolver.resolveLocale(criteria);
+    }
+
+    /**
+     * Locale kodunu (veya ülke adını) AI prompt'ları için okunabilir bir dil
+     * adına çevirir. criteria.getPreferredLanguage() ham haliyle (ör. "Turkey")
+     * prompt'a verildiğinde model karışabiliyor; bunun yerine dil adını kullanıyoruz.
+     */
+    private String resolveLanguageName(SearchCriteria criteria) {
+        return com.santsg.tourvisio.util.LocaleResolver.resolveLanguageName(criteria);
     }
 
     private String getFieldKey(String field) {

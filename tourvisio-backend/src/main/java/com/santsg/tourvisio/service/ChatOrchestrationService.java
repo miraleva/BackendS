@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -61,10 +62,12 @@ public class ChatOrchestrationService {
     // Public API
     // ─────────────────────────────────────────────────────────────────────────
 
+    @org.springframework.transaction.annotation.Transactional
     public ChatResponse orchestrate(ChatRequest request) {
         return orchestrate(request, null);
     }
 
+    @org.springframework.transaction.annotation.Transactional
     public ChatResponse orchestrate(ChatRequest request, Long userId) {
         // 1. Session yönetimi
         String sessionId = resolveSessionId(request.getSessionId());
@@ -83,7 +86,7 @@ public class ChatOrchestrationService {
         String userMessage = request.getMessage();
         if (userMessage != null && !userMessage.isBlank()) {
             sessionState.getMessages()
-                    .add(new ChatSessionManager.MessageHistoryItem("user", userMessage, java.time.Instant.now()));
+                    .add(new ChatSessionManager.MessageHistoryItem("user", userMessage, java.time.Instant.now(), null));
             sessionState.setLastMessageTimestamp(java.time.Instant.now());
             if ("New Chat Session".equals(sessionState.getTitle())) {
                 String title = userMessage;
@@ -99,9 +102,12 @@ public class ChatOrchestrationService {
         // Record Bot Response
         if (response != null && response.getReply() != null) {
             sessionState.getMessages().add(
-                    new ChatSessionManager.MessageHistoryItem("bot", response.getReply(), java.time.Instant.now()));
+                    new ChatSessionManager.MessageHistoryItem("bot", response.getReply(), java.time.Instant.now(), response.getResults()));
             sessionState.setLastMessageTimestamp(java.time.Instant.now());
         }
+
+        // Save session state to database
+        chatSessionManager.saveSession(sessionState);
 
         return response;
     }
@@ -118,7 +124,14 @@ public class ChatOrchestrationService {
         if (request.getCurrencySymbol() != null && !request.getCurrencySymbol().isBlank()) {
             existingCriteria.setCurrency(request.getCurrencySymbol());
         }
-        if (request.getCountry() != null && !request.getCountry().isBlank()) {
+        // Dil tercihi: önce bu mesajın gerçek dilini algılamayı dene (kullanıcı
+        // sohbet ortasında dil değiştirebilir). Net bir sinyal yoksa (ör. "2",
+        // bir tarih, ya da ilk mesaj boşsa) hesabın ülke ayarını varsayılan olarak kullan.
+        String detectedLanguage = detectLanguageFromMessage(request.getMessage());
+        if (detectedLanguage != null) {
+            existingCriteria.setPreferredLanguage(detectedLanguage);
+        } else if (existingCriteria.getPreferredLanguage() == null
+                && request.getCountry() != null && !request.getCountry().isBlank()) {
             existingCriteria.setPreferredLanguage(request.getCountry());
         }
         sessionStore.save(sessionId, existingCriteria);
@@ -136,6 +149,30 @@ public class ChatOrchestrationService {
 
         String userMessage = request.getMessage();
 
+        // 2.5 AWAITING_CONFIRM mode check
+        if ("AWAITING_CONFIRM".equals(sessionState.getMode()) && sessionState.getLastShownResults() != null) {
+            Object matchedItem = matchSelectedItem(userMessage, sessionState.getLastShownResults());
+            if (matchedItem != null) {
+                // Selection recognized!
+                sessionState.setMode("BOOKING");
+                sessionState.setSelectedItem(matchedItem);
+                
+                String confirmReply = responseAgent.confirmSelection(matchedItem, existingCriteria);
+                return ChatResponse.builder()
+                        .reply(confirmReply)
+                        .sessionId(sessionId)
+                        .searchType(existingCriteria.getSearchType())
+                        .missingFields(java.util.List.of())
+                        .chatStatus("BOOKING")
+                        .selectedItem(matchedItem)
+                        .build();
+            } else {
+                // Not a match, reset back to GATHERING
+                sessionState.setMode("GATHERING");
+                sessionState.setLastShownResults(null);
+            }
+        }
+
         // 3. Aktif arama session'ı var mı?
         boolean hasActiveSearch = existingCriteria.getSearchType() != null;
 
@@ -149,7 +186,8 @@ public class ChatOrchestrationService {
             String currentIntent = hasActiveSearch ? existingCriteria.getSearchType() : null;
             extractionResult = extractionAgent.extract(userMessage, currentIntent);
         } catch (Exception e) {
-            log.warn("[Orchestration] ExtractionAgent failed or mocked, falling back to rule-based: {}", e.getMessage());
+            log.warn("[Orchestration] ExtractionAgent failed or mocked, falling back to rule-based: {}",
+                    e.getMessage());
         }
 
         if (extractionResult != null) {
@@ -220,7 +258,7 @@ public class ChatOrchestrationService {
         }
 
         // 8. Tüm bilgiler tamam → arama servisine yönlendir
-        return readyToSearchResponse(sessionId, intent, existingCriteria, userMessage);
+        return readyToSearchResponse(sessionId, intent, existingCriteria);
     }
 
     private void adjustIncomingCriteria(SearchCriteria incoming, String lastField, String message) {
@@ -362,6 +400,68 @@ public class ChatOrchestrationService {
         return list;
     }
 
+    private static final java.util.Set<String> TURKISH_WORDS = java.util.Set.of(
+            "otel", "otelde", "uçak", "ucak", "uçuş", "ucus", "istiyorum", "arıyorum", "ariyorum",
+            "gidiş", "gidis", "dönüş", "donus", "yetişkin", "yetiskin", "çocuk", "cocuk",
+            "rezervasyon", "merhaba", "selam", "lütfen", "lutfen", "tarih", "gece", "kişi", "kisi",
+            "için", "icin", "istiyoruz", "gün", "gun", "var", "yok", "evet", "hayır", "hayir");
+
+    private static final java.util.Set<String> ENGLISH_WORDS = java.util.Set.of(
+            "hotel", "flight", "fly", "want", "looking", "for", "from", "please", "need", "book",
+            "reservation", "adults", "children", "date", "hello", "hi", "the", "and", "night",
+            "nights", "trip", "travel", "search", "yes", "no", "return", "departure");
+
+    /**
+     * Kullanıcının bu mesajda hangi dili kullandığını basit bir sezgisel yöntemle
+     * tahmin eder (Gemini/OpenAI anahtarı yoksa AI tabanlı tespit mümkün değil).
+     * Net bir sinyal bulunamazsa null döner (çağıran taraf önceki tercihi korur).
+     */
+    private String detectLanguageFromMessage(String message) {
+        if (message == null || message.isBlank()) {
+            return null;
+        }
+        // Locale.ROOT kullanılmalı: tr-TR locale'i büyük "I" harfini "ı" (noktasız)
+        // yapar, bu da İngilizce "I am ..." gibi cümlelerin yanlışlıkla Türkçe
+        // sanılmasına yol açar.
+        String lower = message.toLowerCase(Locale.ROOT);
+
+        // ç,ğ,ö,ş,ü İngilizce'de hiç geçmeyen harfler → kesin sinyal.
+        // "ı" kasıtlı olarak dışarıda bırakıldı: Türkçe klavyede İngilizce "I"
+        // yerine sıkça yanlışlıkla "ı" (noktasız) yazılıyor ("ı want fly" gibi),
+        // bu da tek başına dili yanlış Türkçe'ye çeker.
+        boolean hasUnambiguousTurkishChars = lower.chars().anyMatch(c -> "çğöşü".indexOf(c) >= 0);
+        if (hasUnambiguousTurkishChars) {
+            return "Turkish";
+        }
+
+        String[] tokens = lower.split("[^a-zçğıöşü0-9]+");
+        int turkishHits = 0;
+        int englishHits = 0;
+        for (String token : tokens) {
+            if (TURKISH_WORDS.contains(token)) {
+                turkishHits++;
+            }
+            if (ENGLISH_WORDS.contains(token)) {
+                englishHits++;
+            }
+        }
+
+        // "ı" (noktasız i) zayıf bir Türkçe sinyalidir: rakip İngilizce kelime
+        // yoksa Türkçe lehine sayılır, ama açık İngilizce kelimeler varsa yok sayılır.
+        boolean hasLoneDotlessI = englishHits == 0 && lower.chars().anyMatch(c -> c == 'ı');
+        if (hasLoneDotlessI) {
+            turkishHits++;
+        }
+
+        if (turkishHits > 0 && turkishHits >= englishHits) {
+            return "Turkish";
+        }
+        if (englishHits > 0 && englishHits > turkishHits) {
+            return "English";
+        }
+        return null;
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Private helpers
     // ─────────────────────────────────────────────────────────────────────────
@@ -371,8 +471,7 @@ public class ChatOrchestrationService {
      */
     private ChatResponse readyToSearchResponse(String sessionId,
             String intent,
-            SearchCriteria criteria,
-            String userMessage) {
+            SearchCriteria criteria) {
 
         ChatSearchResponse searchResponse;
         if ("HOTEL_SEARCH".equals(intent)) {
@@ -393,90 +492,19 @@ public class ChatOrchestrationService {
         // AI ile arama sonuçlarını özetleme
         if (searchResponse.isSuccess() && searchResponse.getResults() != null
                 && !searchResponse.getResults().isEmpty()) {
+                
+            // Set AWAITING_CONFIRM mode
+            ChatSessionManager.SessionState sessionState = chatSessionManager.getSessionState(sessionId);
+            if (sessionState != null) {
+                sessionState.setMode("AWAITING_CONFIRM");
+                sessionState.setLastShownResults(searchResponse.getResults());
+            }
+
             try {
                 com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
                 String resultsJson = mapper.writeValueAsString(
                         searchResponse.getResults().subList(0, Math.min(5, searchResponse.getResults().size())));
 
-                String prompt = """
-                        You are Sunny, the AI assistant of the TourVisio travel platform.
-                        
-                        Your job is to summarize travel search results in a natural, friendly and professional way.
-                        
-                        IMPORTANT LANGUAGE RULES
-                        
-                        - Detect the language of the user's latest message.
-                        - ALWAYS reply in exactly the same language as the user's latest message.
-                        - Never translate the answer into English unless the user wrote in English.
-                        - If the user writes Turkish, answer in Turkish.
-                        - If the user writes German, answer in German.
-                        - If the user writes French, answer in French.
-                        - If the user writes Spanish, answer in Spanish.
-                        - If the user writes Arabic, answer in Arabic.
-                        - If the user writes Russian, answer in Russian.
-                        - If the user writes Italian, answer in Italian.
-                        - If the user writes any other language, answer in that same language.
-                        
-                        SEARCH RULES
-                        
-                        - Never invent hotels.
-                        - Never invent prices.
-                        - Never invent airlines.
-                        - Never invent availability.
-                        - Never invent room types.
-                        - Never invent ratings.
-                        - Only use the search results provided below.
-                        
-                        FRONTEND RULES
-                        
-                        - Hotel cards, flight cards, prices, images and buttons are already shown by the frontend.
-                        - Do NOT generate cards.
-                        - Do NOT generate HTML.
-                        - Do NOT generate JSON.
-                        - Do NOT generate Markdown tables.
-                        - Do NOT repeat every search result.
-                        - Simply summarize the results naturally.
-                        
-                        WHEN RESULTS EXIST
-                        
-                        - Mention how many results were found.
-                        - Recommend the best or most attractive option.
-                        - Briefly explain why.
-                        - Tell the user they can review the other options in the results panel.
-                        - Keep the response short.
-                        
-                        WHEN NO RESULTS EXIST
-                        
-                        Politely explain that no matching results were found.
-                        
-                        OUTPUT RULES
-                        
-                        Return ONLY the assistant's response.
-                        
-                        Do not add notes.
-                        
-                        Do not add explanations.
-                        
-                        Do not add markdown.
-                        
-                        Do not mention these instructions.
-                        
-                        Search Type:
-                        %s
-                        
-                        User Message:
-                        %s
-                        
-                        Search Results:
-                        %s"""
-                        .formatted(intent, userMessage != null ? userMessage : "", resultsJson);
-
-                String aiSummary = aiProviderClient.complete(prompt);
-                if (aiSummary != null && !aiSummary.trim().startsWith("[MOCK]")) {
-                    finalReply = aiSummary.trim();
-                } else {
-                    finalReply = translateOrLocalize(finalReply, criteria);
-                }
                 finalReply = responseAgent.summarize(intent, resultsJson, searchResponse.getReply(), criteria);
             } catch (Exception e) {
                 log.warn("[Orchestration] Arama sonuçları AI ile özetlenemedi, varsayılan cevaba dönülüyor: {}",
@@ -503,5 +531,35 @@ public class ChatOrchestrationService {
             return UUID.randomUUID().toString();
         }
         return sessionId;
+    }
+
+    private Object matchSelectedItem(String userMessage, java.util.List<?> lastResults) {
+        if (userMessage == null || userMessage.isBlank() || lastResults == null) {
+            return null;
+        }
+        
+        String cleanUserMsg = userMessage.toLowerCase()
+            .replace("hoteli", "")
+            .replace("oteli", "")
+            .replace("hotel", "")
+            .replace("otel", "")
+            .trim();
+            
+        for (Object item : lastResults) {
+            String itemName = "";
+            if (item instanceof com.santsg.tourvisio.dto.HotelSearchResponseItem) {
+                itemName = ((com.santsg.tourvisio.dto.HotelSearchResponseItem) item).getName();
+            } else if (item instanceof com.santsg.tourvisio.dto.FlightSearchResponseItem) {
+                itemName = ((com.santsg.tourvisio.dto.FlightSearchResponseItem) item).getAirline();
+            }
+            
+            if (itemName != null && !itemName.isBlank()) {
+                String cleanItemName = itemName.toLowerCase();
+                if (userMessage.toLowerCase().contains(cleanItemName) || cleanItemName.contains(cleanUserMsg)) {
+                    return item;
+                }
+            }
+        }
+        return null;
     }
 }

@@ -49,6 +49,7 @@ public class TourVisioAutocompleteResponse {
         private State state;
         private Hotel hotel;
         private Country country;
+        private Airport airport;
         private int provider;
 
         @Data
@@ -87,6 +88,16 @@ public class TourVisioAutocompleteResponse {
         @AllArgsConstructor
         @JsonIgnoreProperties(ignoreUnknown = true)
         public static class Country {
+            private String id;
+            private String name;
+        }
+
+        @Data
+        @Builder
+        @NoArgsConstructor
+        @AllArgsConstructor
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public static class Airport {
             private String id;
             private String name;
         }

@@ -37,7 +37,6 @@ import java.util.regex.Pattern;
 public class SearchCriteriaExtractor {
 
     private static final Logger log = LoggerFactory.getLogger(SearchCriteriaExtractor.class);
-    private static final Locale TR = Locale.forLanguageTag("tr-TR");
     private static final int CURRENT_YEAR = LocalDate.now().getYear();
 
     public SearchCriteriaExtractor() {
@@ -84,7 +83,7 @@ public class SearchCriteriaExtractor {
     private static final Pattern CHILD_PATTERN = Pattern.compile(
             "(\\d+)\\s*(?:çocuk|cocuk|child|kids)");
     private static final Pattern PASSENGER_PATTERN = Pattern.compile(
-            "(\\d+)\\s*(?:yolcu|kişi|kisi|passenger|kişilik|kisilik)");
+            "(\\d+)\\s*(?:yolcu|kişi|kisi|passenger|passengers|person|people|kişilik|kisilik)");
 
     // ── Gece sayısı ───────────────────────────────────────────────────────────
     private static final Pattern NIGHT_PATTERN = Pattern.compile(
@@ -103,6 +102,14 @@ public class SearchCriteriaExtractor {
             "(\\d{1,2})\\s+(" + String.join("|", MONTHS_BY_NAME.keySet()) + ")"
                     + "(?:\\s+\\d{4})?"
                     + "(?:\\s*(?:gidiş|gidis|kalkış|kalkis|hareket))?",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+
+    // ── İngilizce "ay gün" sırası: "August 1st", "August 1", "Aug 5th girişli" ──
+    private static final Pattern MONTH_DAY_WITH_LABEL_PATTERN = Pattern.compile(
+            "(" + String.join("|", MONTHS_BY_NAME.keySet()) + ")\\s+(\\d{1,2})(?:st|nd|rd|th)?"
+                    + "(?:\\s+\\d{4})?" // opsiyonel yıl
+                    + "(?:\\s*(giriş|giris|checkin|başlangıç|baslangic|departure"
+                    + "|çıkış|cikis|checkout|bitiş|bitis|return))?",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     // ── Kalkış: "İstanbul'dan", "İstanbul dan" ───────────────────────────────
@@ -131,7 +138,7 @@ public class SearchCriteriaExtractor {
         if (message == null || message.isBlank())
             return new SearchCriteria();
 
-        String lower = message.toLowerCase(TR);
+        String lower = message.toLowerCase(Locale.ROOT);
         SearchCriteria c = new SearchCriteria();
         c.setSearchType(intent);
 
@@ -188,10 +195,24 @@ public class SearchCriteriaExtractor {
         while (m.find()) {
             LocalDate d = buildDate(
                     Integer.parseInt(m.group(1)),
-                    m.group(2).toLowerCase(TR));
+                    m.group(2).toLowerCase(Locale.ROOT));
             if (d != null) {
                 dates.add(d);
                 labels.add(m.group(3));
+            }
+        }
+
+        if (dates.isEmpty()) {
+            // "August 1st" gibi İngilizce "ay gün" sırasını dene
+            Matcher mdm = MONTH_DAY_WITH_LABEL_PATTERN.matcher(lower);
+            while (mdm.find()) {
+                LocalDate d = buildDate(
+                        Integer.parseInt(mdm.group(2)),
+                        mdm.group(1).toLowerCase(Locale.ROOT));
+                if (d != null) {
+                    dates.add(d);
+                    labels.add(mdm.group(3));
+                }
             }
         }
 
@@ -257,11 +278,13 @@ public class SearchCriteriaExtractor {
 
         // Trip type
         if (lower.contains("tek yön") || lower.contains("tek yon")
-                || lower.contains("tek-yön") || lower.contains("gidiş sadece")) {
+                || lower.contains("tek-yön") || lower.contains("gidiş sadece")
+                || lower.contains("one way") || lower.contains("one-way") || lower.contains("oneway")) {
             c.setTripType("ONE_WAY");
         } else if (lower.contains("gidiş dönüş") || lower.contains("gidis donus")
                 || lower.contains("gidiş-dönüş") || lower.contains("gidis-donus")
-                || lower.contains("gidiş ve dönüş")) {
+                || lower.contains("gidiş ve dönüş")
+                || lower.contains("round trip") || lower.contains("round-trip") || lower.contains("roundtrip")) {
             c.setTripType("ROUND_TRIP");
         }
 
@@ -269,7 +292,7 @@ public class SearchCriteriaExtractor {
         Matcher depM = DEPARTURE_CITY_PATTERN.matcher(lower);
         while (depM.find()) {
             String candidate = depM.group(1);
-            if (FLIGHT_CITIES.contains(candidate.toLowerCase(TR))) {
+            if (FLIGHT_CITIES.contains(candidate.toLowerCase(Locale.ROOT))) {
                 c.setDepartureLocation(capitalize(candidate));
                 break;
             }
@@ -279,11 +302,11 @@ public class SearchCriteriaExtractor {
         Matcher arrM = ARRIVAL_CITY_PATTERN.matcher(lower);
         while (arrM.find()) {
             String candidate = arrM.group(1);
-            String cLower = candidate.toLowerCase(TR);
+            String cLower = candidate.toLowerCase(Locale.ROOT);
             if (FLIGHT_CITIES.contains(cLower)
                     && !cLower.equals(
                             c.getDepartureLocation() != null
-                                    ? c.getDepartureLocation().toLowerCase(TR)
+                                    ? c.getDepartureLocation().toLowerCase(Locale.ROOT)
                                     : "")) {
                 c.setArrivalLocation(capitalize(candidate));
                 break;
@@ -309,9 +332,18 @@ public class SearchCriteriaExtractor {
         if (flightDates.isEmpty()) {
             Matcher datM = DEPARTURE_DATE_PATTERN.matcher(lower);
             if (datM.find()) {
-                LocalDate d = buildDate(Integer.parseInt(datM.group(1)), datM.group(2).toLowerCase(TR));
+                LocalDate d = buildDate(Integer.parseInt(datM.group(1)), datM.group(2).toLowerCase(Locale.ROOT));
                 if (d != null)
                     flightDates.add(d);
+            }
+            if (flightDates.isEmpty()) {
+                // "August 1st" gibi İngilizce "ay gün" sırasını dene
+                Matcher mdm = MONTH_DAY_WITH_LABEL_PATTERN.matcher(lower);
+                if (mdm.find()) {
+                    LocalDate d = buildDate(Integer.parseInt(mdm.group(2)), mdm.group(1).toLowerCase(Locale.ROOT));
+                    if (d != null)
+                        flightDates.add(d);
+                }
             }
             if ("ROUND_TRIP".equals(c.getTripType())) {
                 List<LocalDate> labelDates = extractAllDates(lower);
@@ -346,7 +378,7 @@ public class SearchCriteriaExtractor {
         Matcher m = CURRENCY_PATTERN.matcher(lower);
         if (!m.find())
             return null;
-        return switch (m.group(1).toLowerCase(TR)) {
+        return switch (m.group(1).toLowerCase(Locale.ROOT)) {
             case "tl", "try", "türk lirası", "turk lirasi", "lira" -> "TRY";
             case "eur", "euro" -> "EUR";
             case "usd", "dolar" -> "USD";
@@ -356,7 +388,7 @@ public class SearchCriteriaExtractor {
     }
 
     private LocalDate buildDate(int day, String monthTr) {
-        Integer monthNum = MONTHS_BY_NAME.get(monthTr.toLowerCase(TR));
+        Integer monthNum = MONTHS_BY_NAME.get(monthTr.toLowerCase(Locale.ROOT));
         if (monthNum == null)
             return null;
         try {
@@ -368,14 +400,25 @@ public class SearchCriteriaExtractor {
     }
 
     private List<LocalDate> extractAllDates(String lower) {
-        Matcher m = DATE_WITH_LABEL_PATTERN.matcher(lower);
         List<LocalDate> dates = new java.util.ArrayList<>();
+        Matcher m = DATE_WITH_LABEL_PATTERN.matcher(lower);
         while (m.find()) {
             LocalDate d = buildDate(
                     Integer.parseInt(m.group(1)),
-                    m.group(2).toLowerCase(TR));
+                    m.group(2).toLowerCase(Locale.ROOT));
             if (d != null)
                 dates.add(d);
+        }
+        if (dates.isEmpty()) {
+            // "August 1st" gibi İngilizce "ay gün" sırasını dene
+            Matcher mdm = MONTH_DAY_WITH_LABEL_PATTERN.matcher(lower);
+            while (mdm.find()) {
+                LocalDate d = buildDate(
+                        Integer.parseInt(mdm.group(2)),
+                        mdm.group(1).toLowerCase(Locale.ROOT));
+                if (d != null)
+                    dates.add(d);
+            }
         }
         return dates;
     }
@@ -406,12 +449,12 @@ public class SearchCriteriaExtractor {
     private String capitalize(String s) {
         if (s == null || s.isBlank())
             return s;
-        return Character.toUpperCase(s.charAt(0)) + s.substring(1).toLowerCase(TR);
+        return Character.toUpperCase(s.charAt(0)) + s.substring(1).toLowerCase(Locale.ROOT);
     }
 
     public LocalDate parseSingleDate(String text) {
         if (text == null || text.isBlank()) return null;
-        String lower = text.toLowerCase(TR);
+        String lower = text.toLowerCase(Locale.ROOT);
         
         // 1. Try numeric date
         List<LocalDate> numericDates = extractNumericDates(lower);
@@ -422,7 +465,7 @@ public class SearchCriteriaExtractor {
         // 2. Try word date
         Matcher m = DATE_WITH_LABEL_PATTERN.matcher(lower);
         if (m.find()) {
-            return buildDate(Integer.parseInt(m.group(1)), m.group(2).toLowerCase(TR));
+            return buildDate(Integer.parseInt(m.group(1)), m.group(2).toLowerCase(Locale.ROOT));
         }
         
         return null;
@@ -430,7 +473,7 @@ public class SearchCriteriaExtractor {
 
     public String parseLocation(String text, boolean isFlight) {
         if (text == null || text.isBlank()) return null;
-        String lower = text.toLowerCase(TR);
+        String lower = text.toLowerCase(Locale.ROOT);
         List<String> cities = isFlight ? FLIGHT_CITIES : HOTEL_CITIES;
         for (String city : cities) {
             if (lower.contains(city)) {
@@ -447,12 +490,12 @@ public class SearchCriteriaExtractor {
 
     public String parseCurrency(String text) {
         if (text == null || text.isBlank()) return null;
-        return extractCurrency(text.toLowerCase(TR));
+        return extractCurrency(text.toLowerCase(Locale.ROOT));
     }
 
     public String parseTripType(String text) {
         if (text == null) return null;
-        String lower = text.toLowerCase(TR);
+        String lower = text.toLowerCase(Locale.ROOT);
         if (lower.contains("tek") || lower.contains("one")) {
             return "ONE_WAY";
         }

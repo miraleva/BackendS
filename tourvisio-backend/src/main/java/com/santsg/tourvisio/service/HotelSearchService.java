@@ -5,11 +5,14 @@ import com.santsg.tourvisio.client.TourVisioHotelApiClient;
 import com.santsg.tourvisio.dto.ChatSearchResponse;
 import com.santsg.tourvisio.dto.HotelSearchRequest;
 import com.santsg.tourvisio.dto.HotelSearchResponseItem;
+import com.santsg.tourvisio.util.LocaleResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class HotelSearchService {
@@ -17,9 +20,11 @@ public class HotelSearchService {
     private static final Logger log = LoggerFactory.getLogger(HotelSearchService.class);
 
     private final TourVisioHotelApiClient hotelApiClient;
+    private final MessageSource messageSource;
 
-    public HotelSearchService(TourVisioHotelApiClient hotelApiClient) {
+    public HotelSearchService(TourVisioHotelApiClient hotelApiClient, MessageSource messageSource) {
         this.hotelApiClient = hotelApiClient;
+        this.messageSource = messageSource;
     }
 
     /**
@@ -35,6 +40,7 @@ public class HotelSearchService {
      * TourVisio API çağrılır ve sonuçlar ChatSearchResponse olarak döner.
      */
     public ChatSearchResponse searchFromCriteria(SearchCriteria criteria) {
+        Locale locale = LocaleResolver.resolveLocale(criteria);
         try {
             // Önce SearchCriteria'dan doğrudan arama yap
             // (culture, dil, para birimi criteria'dan okunur)
@@ -42,7 +48,7 @@ public class HotelSearchService {
 
             if (results == null || results.isEmpty()) {
                 return ChatSearchResponse.builder()
-                        .reply("Belirttiğiniz kriterlere uygun otel bulunamadı. Farklı tarih veya lokasyon deneyebilirsiniz.")
+                        .reply(messageSource.getMessage("hotel.search.no.results", null, locale))
                         .searchType("HOTEL_SEARCH")
                         .success(true)
                         .results(List.of())
@@ -61,9 +67,8 @@ public class HotelSearchService {
                     best.getPrice() != null ? best.getPrice() : 0.0,
                     currency);
 
-            String reply = String.format(
-                    "%s için %d otel bulundu. En iyi teklif: %s",
-                    location, results.size(), bestInfo);
+            String reply = messageSource.getMessage("hotel.search.success",
+                    new Object[]{results.size(), location, bestInfo}, locale);
 
             return ChatSearchResponse.builder()
                     .reply(reply)
@@ -75,7 +80,7 @@ public class HotelSearchService {
         } catch (Exception e) {
             log.error("[HotelSearchService] Otel aramasında hata: {}", e.getMessage(), e);
             return ChatSearchResponse.builder()
-                    .reply("Otel arama servisi şu anda kullanılamıyor, lütfen daha sonra tekrar deneyin.")
+                    .reply(messageSource.getMessage("hotel.search.error", null, locale))
                     .searchType("HOTEL_SEARCH")
                     .success(false)
                     .results(List.of())
