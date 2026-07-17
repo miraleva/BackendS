@@ -180,7 +180,7 @@ public class ChatOrchestrationService {
         // Try extracting via AI Agent first
         try {
             String currentIntent = hasActiveSearch ? existingCriteria.getSearchType() : null;
-            extractionResult = extractionAgent.extract(userMessage, currentIntent);
+            extractionResult = extractionAgent.extract(userMessage, currentIntent, sessionState.getLastRequestedField());
         } catch (Exception e) {
             log.warn("[Orchestration] ExtractionAgent failed or mocked, falling back to rule-based: {}",
                     e.getMessage());
@@ -197,7 +197,7 @@ public class ChatOrchestrationService {
             } else {
                 intent = intentDetectionService.detectIntent(userMessage);
             }
-            incoming = extractor.extract(userMessage, intent);
+            incoming = extractor.extract(userMessage, intent, sessionState.getLastRequestedField());
         }
 
         // Handle OUT_OF_SCOPE and UNKNOWN immediately if this is a new search session
@@ -275,7 +275,7 @@ public class ChatOrchestrationService {
         List<String> missingFields = missingFieldsService.getMissingFields(existingCriteria);
 
         if (!missingFields.isEmpty()) {
-            sessionState.setLastRequestedField(missingFields.get(0));
+            sessionState.setLastRequestedField(String.join(", ", missingFields));
             String replyText = responseAgent.askMissing(missingFields, existingCriteria);
             return ChatResponse.builder()
                     .reply(replyText)
@@ -295,116 +295,119 @@ public class ChatOrchestrationService {
             return;
         }
 
-        switch (lastField) {
-            case "konum veya otel adı":
-                if (incoming.getLocationOrHotelName() == null) {
-                    incoming.setLocationOrHotelName(extractor.parseLocation(message, false));
-                }
-                break;
-
-            case "kalkış noktası":
-                if (incoming.getDepartureLocation() == null) {
-                    incoming.setDepartureLocation(extractor.parseLocation(message, true));
-                }
-                break;
-
-            case "varış noktası":
-                if (incoming.getArrivalLocation() == null) {
-                    incoming.setArrivalLocation(extractor.parseLocation(message, true));
-                }
-                break;
-
-            case "giriş tarihi":
-                if (incoming.getCheckInDate() == null) {
-                    java.time.LocalDate d = extractor.parseSingleDate(message);
-                    if (d == null && incoming.getCheckOutDate() != null) {
-                        d = incoming.getCheckOutDate();
-                        incoming.setCheckOutDate(null);
+        String[] fields = lastField.split(",\\s*");
+        for (String field : fields) {
+            switch (field) {
+                case "konum veya otel adı":
+                    if (incoming.getLocationOrHotelName() == null) {
+                        incoming.setLocationOrHotelName(extractor.parseLocation(message, false));
                     }
-                    incoming.setCheckInDate(d);
-                }
-                break;
+                    break;
 
-            case "çıkış tarihi":
-                if (incoming.getCheckOutDate() == null) {
-                    java.time.LocalDate d = extractor.parseSingleDate(message);
-                    if (d == null && incoming.getCheckInDate() != null) {
-                        d = incoming.getCheckInDate();
+                case "kalkış noktası":
+                    if (incoming.getDepartureLocation() == null) {
+                        incoming.setDepartureLocation(extractor.parseLocation(message, true));
                     }
-                    incoming.setCheckOutDate(d);
-                }
-                incoming.setCheckInDate(null);
-                break;
+                    break;
 
-            case "gidiş tarihi":
-                if (incoming.getDepartureDate() == null) {
-                    java.time.LocalDate d = extractor.parseSingleDate(message);
-                    if (d == null && incoming.getReturnDate() != null) {
-                        d = incoming.getReturnDate();
-                        incoming.setReturnDate(null);
+                case "varış noktası":
+                    if (incoming.getArrivalLocation() == null) {
+                        incoming.setArrivalLocation(extractor.parseLocation(message, true));
                     }
-                    incoming.setDepartureDate(d);
-                }
-                break;
+                    break;
 
-            case "dönüş tarihi":
-                if (incoming.getReturnDate() == null) {
-                    java.time.LocalDate d = extractor.parseSingleDate(message);
-                    if (d == null && incoming.getDepartureDate() != null) {
-                        d = incoming.getDepartureDate();
+                case "giriş tarihi":
+                    if (incoming.getCheckInDate() == null) {
+                        java.time.LocalDate d = extractor.parseSingleDate(message);
+                        if (d == null && incoming.getCheckOutDate() != null) {
+                            d = incoming.getCheckOutDate();
+                            incoming.setCheckOutDate(null);
+                        }
+                        incoming.setCheckInDate(d);
                     }
-                    incoming.setReturnDate(d);
-                }
-                incoming.setDepartureDate(null);
-                break;
+                    break;
 
-            case "yetişkin sayısı":
-                if (incoming.getAdultCount() == null) {
-                    incoming.setAdultCount(parseInteger(message));
-                }
-                break;
-
-            case "yolcu sayısı":
-                if (incoming.getPassengerCount() == null) {
-                    incoming.setPassengerCount(parseInteger(message));
-                }
-                break;
-
-            case "oda sayısı":
-                if (incoming.getRoomCount() == null || incoming.getRoomCount() == 1) {
-                    Integer rooms = parseInteger(message);
-                    if (rooms != null) {
-                        incoming.setRoomCount(rooms);
+                case "çıkış tarihi":
+                    if (incoming.getCheckOutDate() == null) {
+                        java.time.LocalDate d = extractor.parseSingleDate(message);
+                        if (d == null && incoming.getCheckInDate() != null) {
+                            d = incoming.getCheckInDate();
+                        }
+                        incoming.setCheckOutDate(d);
                     }
-                }
-                break;
+                    incoming.setCheckInDate(null);
+                    break;
 
-            case "çocuk sayısı":
-                if (incoming.getChildCount() == null || incoming.getChildCount() == 0) {
-                    Integer children = parseInteger(message);
-                    if (children != null) {
-                        incoming.setChildCount(children);
+                case "gidiş tarihi":
+                    if (incoming.getDepartureDate() == null) {
+                        java.time.LocalDate d = extractor.parseSingleDate(message);
+                        if (d == null && incoming.getReturnDate() != null) {
+                            d = incoming.getReturnDate();
+                            incoming.setReturnDate(null);
+                        }
+                        incoming.setDepartureDate(d);
                     }
-                }
-                break;
+                    break;
 
-            case "çocuk yaşları":
-                if (incoming.getChildAges() == null || incoming.getChildAges().isEmpty()) {
-                    incoming.setChildAges(parseIntegerList(message));
-                }
-                break;
+                case "dönüş tarihi":
+                    if (incoming.getReturnDate() == null) {
+                        java.time.LocalDate d = extractor.parseSingleDate(message);
+                        if (d == null && incoming.getDepartureDate() != null) {
+                            d = incoming.getDepartureDate();
+                        }
+                        incoming.setReturnDate(d);
+                    }
+                    incoming.setDepartureDate(null);
+                    break;
 
-            case "para birimi":
-                if (incoming.getCurrency() == null) {
-                    incoming.setCurrency(extractor.parseCurrency(message));
-                }
-                break;
+                case "yetişkin sayısı":
+                    if (incoming.getAdultCount() == null) {
+                        incoming.setAdultCount(parseInteger(message));
+                    }
+                    break;
 
-            case "tek yön / gidiş-dönüş":
-                if (incoming.getTripType() == null) {
-                    incoming.setTripType(extractor.parseTripType(message));
-                }
-                break;
+                case "yolcu sayısı":
+                    if (incoming.getPassengerCount() == null) {
+                        incoming.setPassengerCount(parseInteger(message));
+                    }
+                    break;
+
+                case "oda sayısı":
+                    if (incoming.getRoomCount() == null || incoming.getRoomCount() == 1) {
+                        Integer rooms = parseInteger(message);
+                        if (rooms != null) {
+                            incoming.setRoomCount(rooms);
+                        }
+                    }
+                    break;
+
+                case "çocuk sayısı":
+                    if (incoming.getChildCount() == null || incoming.getChildCount() == 0) {
+                        Integer children = parseInteger(message);
+                        if (children != null) {
+                            incoming.setChildCount(children);
+                        }
+                    }
+                    break;
+
+                case "çocuk yaşları":
+                    if (incoming.getChildAges() == null || incoming.getChildAges().isEmpty()) {
+                        incoming.setChildAges(parseIntegerList(message));
+                    }
+                    break;
+
+                case "para birimi":
+                    if (incoming.getCurrency() == null) {
+                        incoming.setCurrency(extractor.parseCurrency(message));
+                    }
+                    break;
+
+                case "tek yön / gidiş-dönüş":
+                    if (incoming.getTripType() == null) {
+                        incoming.setTripType(extractor.parseTripType(message));
+                    }
+                    break;
+            }
         }
     }
 
@@ -440,6 +443,14 @@ public class ChatOrchestrationService {
             String intent,
             SearchCriteria criteria,
             String userMessage) {
+
+        log.info("[Orchestration] Executing Search to TourVisio API with Final Criteria: Location={}, CheckIn={}, CheckOut={}, Adults={}, Children={}, ChildAges={}",
+                criteria.getLocationOrHotelName(),
+                criteria.getCheckInDate(),
+                criteria.getCheckOutDate(),
+                criteria.getAdultCount(),
+                criteria.getChildCount(),
+                criteria.getChildAges());
 
         ChatSearchResponse searchResponse;
         if ("HOTEL_SEARCH".equals(intent)) {

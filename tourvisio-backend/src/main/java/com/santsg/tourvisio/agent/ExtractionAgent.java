@@ -31,7 +31,7 @@ public class ExtractionAgent {
      * @return The extraction result.
      * @throws RuntimeException on API failure, mock responses, or JSON parsing failures.
      */
-    public ExtractionResult extract(String message, String currentIntent) {
+    public ExtractionResult extract(String message, String currentIntent, String awaitingField) {
         if (message == null || message.trim().isEmpty()) {
             SearchCriteria emptyCriteria = new SearchCriteria();
             return new ExtractionResult("UNKNOWN", emptyCriteria);
@@ -69,20 +69,25 @@ public class ExtractionAgent {
                 }
                 """.formatted(todayStr);
 
+        String awaitingFieldContext = "";
+        if (awaitingField != null && !awaitingField.trim().isEmpty()) {
+            awaitingFieldContext = String.format("\nThe assistant just asked the user for: [%s]. Interpret the user's reply primarily as an answer to THIS field, not as new unrelated criteria (e.g. dates), unless the message clearly indicates a topic change.", awaitingField);
+        }
+
         String prompt = """
                 Extract travel criteria and identify user intent from the message below.
                 Return the output strictly as a single JSON object matching the schema. Do not add any markdown blocks (like ```json), notes, or extra text.
                 If some criteria fields are not found in the message, omit them or set them to null.
 
                 Today's Date: %s
-                Active Intent Context: %s
+                Active Intent Context: %s%s
                 User Message: "%s"
 
                 Expected JSON Schema:
                 %s
 
                 Response (JSON only):"""
-                .formatted(todayStr, activeIntentContext, message, schemaDescription);
+                .formatted(todayStr, activeIntentContext, awaitingFieldContext, message, schemaDescription);
 
         String response = geminiExtractionClient.complete(prompt);
 
@@ -112,6 +117,10 @@ public class ExtractionAgent {
             }
             if (result.getCriteria() != null) {
                 result.getCriteria().setSearchType(result.getIntent());
+                log.info("[ExtractionAgent] Parsed message: \"{}\"", message);
+                log.info("[ExtractionAgent] -> checkInDate: {}", result.getCriteria().getCheckInDate());
+                log.info("[ExtractionAgent] -> checkOutDate: {}", result.getCriteria().getCheckOutDate());
+                log.info("[ExtractionAgent] -> childAges: {}", result.getCriteria().getChildAges());
             }
             log.debug("[ExtractionAgent] Extraction successful: {}", result);
             return result;

@@ -307,7 +307,17 @@ public class ResponseAgent {
             log.warn("[ResponseAgent] noResultsFound AI generation failed: {}", e.getMessage());
         }
 
-        return messageSource.getMessage("search.no.results", null, locale);
+        String defaultMsg = messageSource.getMessage("search.no.results", null, locale);
+        if (criteria != null) {
+            String details = String.format(" (Anlaşılan Kriterler: Konum: %s, Tarih: %s - %s, Yetişkin: %s, Çocuk: %s)",
+                    criteria.getLocationOrHotelName() != null ? criteria.getLocationOrHotelName() : "?",
+                    criteria.getCheckInDate() != null ? criteria.getCheckInDate() : "?",
+                    criteria.getCheckOutDate() != null ? criteria.getCheckOutDate() : "?",
+                    criteria.getAdultCount() != null ? criteria.getAdultCount() : "?",
+                    criteria.getChildCount() != null ? criteria.getChildCount() : "0");
+            return defaultMsg + details;
+        }
+        return defaultMsg;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

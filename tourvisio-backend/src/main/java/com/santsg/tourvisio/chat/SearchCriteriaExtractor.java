@@ -127,13 +127,27 @@ public class SearchCriteriaExtractor {
      * @param intent  IntentDetectionService'in ürettiği intent (HOTEL_SEARCH /
      *                FLIGHT_SEARCH)
      */
-    public SearchCriteria extract(String message, String intent) {
+    public SearchCriteria extract(String message, String intent, String awaitingField) {
         if (message == null || message.isBlank())
             return new SearchCriteria();
 
         String lower = message.toLowerCase(TR);
         SearchCriteria c = new SearchCriteria();
         c.setSearchType(intent);
+
+        // --- NEW LOGIC FOR ITEM 5 ---
+        if (awaitingField != null && awaitingField.contains("çocuk yaş") && lower.matches("^[\\d\\s,.-]+$")) {
+            List<Integer> ages = new java.util.ArrayList<>();
+            Matcher m = Pattern.compile("\\d+").matcher(lower);
+            while (m.find()) {
+                ages.add(Integer.parseInt(m.group()));
+            }
+            if (!ages.isEmpty()) {
+                c.setChildAges(ages);
+                return c;
+            }
+        }
+        // -----------------------------
 
         // ── Para birimi ───────────────────────────────────────────────────
         c.setCurrency(extractCurrency(lower));
