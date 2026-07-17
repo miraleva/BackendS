@@ -53,4 +53,7 @@ public class ChatResponse {
 
     @Schema(description = "Seçilen ve onay bekleyen öğe")
     private Object selectedItem;
+
+    @Schema(description = "O ana kadar toplanmış arama kriterlerinin özeti (sağ panel için)")
+    private ChatCriteriaSummary criteria;
 }

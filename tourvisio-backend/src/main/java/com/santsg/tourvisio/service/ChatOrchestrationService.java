@@ -308,6 +308,7 @@ public class ChatOrchestrationService {
                     .searchType(intent)
                     .missingFields(missingFields)
                     .chatStatus("ACTIVE")
+                    .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(existingCriteria))
                     .build();
         }
 
@@ -694,6 +695,7 @@ public class ChatOrchestrationService {
                 .chatStatus("ACTIVE")
                 .success(searchResponse.isSuccess())
                 .results(searchResponse.getResults())
+                .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(criteria))
                 .build();
     }
 
