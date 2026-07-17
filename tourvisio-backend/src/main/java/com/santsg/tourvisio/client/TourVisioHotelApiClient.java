@@ -13,8 +13,13 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -600,7 +605,9 @@ public class TourVisioHotelApiClient {
         if (config.isMockMode()) {
             log.info("[HotelApiClient] Mock mod aktif — mock check-in tarihleri dönülüyor.");
             return GetCheckInDatesResponse.builder()
-                    .dates(List.of("2026-07-15T00:00:00+03:00", "2026-07-20T00:00:00+03:00", "2026-07-25T00:00:00+03:00"))
+                    .body(GetCheckInDatesResponse.Body.builder()
+                            .dates(List.of("2026-07-15T00:00:00+03:00", "2026-07-20T00:00:00+03:00", "2026-07-25T00:00:00+03:00"))
+                            .build())
                     .build();
         }
 
@@ -621,8 +628,86 @@ public class TourVisioHotelApiClient {
         } catch (Exception e) {
             log.error("[HotelApiClient] GetCheckInDates API exception — falling back to mock: {}", e.getMessage());
             return GetCheckInDatesResponse.builder()
-                    .dates(List.of("2026-07-15T00:00:00+03:00", "2026-07-20T00:00:00+03:00"))
+                    .body(GetCheckInDatesResponse.Body.builder()
+                            .dates(List.of("2026-07-15T00:00:00+03:00", "2026-07-20T00:00:00+03:00"))
+                            .build())
                     .build();
+        }
+    }
+
+    /**
+     * Bir lokasyon için TourVisio'nun bildirdiği uygun check-in tarihlerinden,
+     * istenen tarihe en yakın olanları döner. Otel araması sonuçsuz kaldığında
+     * "en yakın uygun tarihler" önerisi için kullanılır. Herhangi bir adımda
+     * hata olursa (lokasyon çözümlenemezse, API'ye ulaşılamazsa) boş liste
+     * döner — bu metod arama akışını kesmemeli, sadece ek bir öneri sunar.
+     */
+    public List<LocalDate> getNearestCheckInDates(String locationQuery, LocalDate requestedDate, int limit) {
+        GetCheckInDatesRequest request = null;
+
+        if (!config.isMockMode()) {
+            if (!config.isConfigured()) {
+                return List.of();
+            }
+            String token;
+            try {
+                token = authService.getToken();
+            } catch (Exception e) {
+                log.warn("[HotelApiClient] Alternatif tarih önerisi için token alınamadı: {}", e.getMessage());
+                return List.of();
+            }
+            HttpHeaders headers = createAuthHeaders(token);
+            AutocompleteResult autoResult;
+            try {
+                autoResult = resolveLocation(locationQuery, headers);
+            } catch (Exception e) {
+                log.warn("[HotelApiClient] Alternatif tarih önerisi için lokasyon çözümlenemedi: {}", e.getMessage());
+                return List.of();
+            }
+            request = GetCheckInDatesRequest.builder()
+                    .productType(2)
+                    .includeSubLocations(true)
+                    .arrivalLocations(List.of(
+                            GetCheckInDatesRequest.ArrivalLocation.builder()
+                                    .id(autoResult.id)
+                                    .type(autoResult.type)
+                                    .build()))
+                    .build();
+        }
+
+        GetCheckInDatesResponse response;
+        try {
+            response = getCheckInDates(request);
+        } catch (Exception e) {
+            log.warn("[HotelApiClient] Alternatif tarih önerisi alınamadı: {}", e.getMessage());
+            return List.of();
+        }
+
+        if (response == null || response.getDates() == null || response.getDates().isEmpty()) {
+            return List.of();
+        }
+
+        List<LocalDate> parsedDates = response.getDates().stream()
+                .map(this::parseDateSafely)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        LocalDate reference = requestedDate != null ? requestedDate : LocalDate.now();
+
+        return parsedDates.stream()
+                .sorted(Comparator.comparingLong(d -> Math.abs(ChronoUnit.DAYS.between(reference, d))))
+                .limit(limit)
+                .sorted()
+                .collect(Collectors.toList());
+    }
+
+    private LocalDate parseDateSafely(String raw) {
+        if (raw == null || raw.length() < 10) return null;
+        try {
+            return LocalDate.parse(raw.substring(0, 10));
+        } catch (DateTimeParseException e) {
+            return null;
         }
     }
 
