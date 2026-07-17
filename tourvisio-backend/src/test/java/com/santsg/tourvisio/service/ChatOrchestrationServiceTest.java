@@ -4,12 +4,14 @@ import com.santsg.tourvisio.chat.ChatSessionStore;
 import com.santsg.tourvisio.chat.CriteriaMissingFieldsService;
 import com.santsg.tourvisio.chat.SearchCriteria;
 import com.santsg.tourvisio.chat.SearchCriteriaExtractor;
+import com.santsg.tourvisio.chat.SearchCriteriaValidator;
 import com.santsg.tourvisio.agent.ExtractionAgent;
 import com.santsg.tourvisio.agent.ExtractionResult;
 import com.santsg.tourvisio.agent.ResponseAgent;
 import com.santsg.tourvisio.dto.ChatRequest;
 import com.santsg.tourvisio.dto.ChatResponse;
 import com.santsg.tourvisio.dto.ChatSearchResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -20,6 +22,8 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -41,8 +45,16 @@ class ChatOrchestrationServiceTest {
         @Mock
         private FlightSearchService flightSearchService;
 
+        @Mock
+        private SearchCriteriaValidator criteriaValidator;
+
         @InjectMocks
         private ChatOrchestrationService orchestrationService;
+
+        @BeforeEach
+        void setUp() {
+                lenient().when(criteriaValidator.validate(any())).thenReturn(new SearchCriteriaValidator.ValidationResult(true, null));
+        }
 
         @Test
         void orchestrate_shouldUseHotelSearchServiceWhenCriteriaAreComplete() {
@@ -56,7 +68,7 @@ class ChatOrchestrationServiceTest {
                                 chatSessionManager,
                                 sessionStore,
                                 extractor,
-                                missingFieldsService,
+                                missingFieldsService, criteriaValidator,
                                 extractionAgent,
                                 responseAgent,
                                 hotelSearchService,
@@ -69,10 +81,10 @@ class ChatOrchestrationServiceTest {
                 criteria.setAdultCount(2);
                 criteria.setCurrency("EUR");
 
-                when(extractionAgent.extract(any(), any()))
+                when(extractionAgent.extract(any(), any(), any()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", criteria));
 
-                when(responseAgent.summarize(any(), any(), any(), any()))
+                when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
                                 .thenReturn("Found suitable hotels for Antalya");
 
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
@@ -106,7 +118,7 @@ class ChatOrchestrationServiceTest {
                                 chatSessionManager,
                                 sessionStore,
                                 extractor,
-                                missingFieldsService,
+                                missingFieldsService, criteriaValidator,
                                 extractionAgent,
                                 responseAgent,
                                 hotelSearchService,
@@ -135,7 +147,7 @@ class ChatOrchestrationServiceTest {
                                 chatSessionManager,
                                 sessionStore,
                                 extractor,
-                                missingFieldsService,
+                                missingFieldsService, criteriaValidator,
                                 extractionAgent,
                                 responseAgent,
                                 hotelSearchService,
@@ -152,10 +164,10 @@ class ChatOrchestrationServiceTest {
                 criteria.setCheckOutDate(java.time.LocalDate.of(2026, 7, 20));
                 criteria.setCurrency("EUR");
 
-                when(extractionAgent.extract(any(), any()))
+                when(extractionAgent.extract(any(), any(), any()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", new SearchCriteria()));
 
-                when(responseAgent.summarize(any(), any(), any(), any()))
+                when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
                                 .thenReturn("Found suitable hotels");
 
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
@@ -186,7 +198,7 @@ class ChatOrchestrationServiceTest {
                                 chatSessionManager,
                                 sessionStore,
                                 extractor,
-                                missingFieldsService,
+                                missingFieldsService, criteriaValidator,
                                 extractionAgent,
                                 responseAgent,
                                 hotelSearchService,
@@ -203,10 +215,10 @@ class ChatOrchestrationServiceTest {
                 criteria.setAdultCount(2);
                 criteria.setCurrency("EUR");
 
-                when(extractionAgent.extract(any(), any()))
+                when(extractionAgent.extract(any(), any(), any()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", new SearchCriteria()));
 
-                when(responseAgent.summarize(any(), any(), any(), any()))
+                when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
                                 .thenReturn("Found suitable hotels");
 
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
