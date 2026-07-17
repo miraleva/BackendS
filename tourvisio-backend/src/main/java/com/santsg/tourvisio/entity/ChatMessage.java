@@ -23,11 +23,22 @@ public class ChatMessage {
     @Column(nullable = false, length = 10)
     private String sender; // "user" or "bot"
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "message_text", columnDefinition = "TEXT")
     private String text;
 
     private Instant timestamp;
 
     @Column(name = "results_json", columnDefinition = "TEXT")
     private String resultsJson;
+
+    @Column(name = "created_at")
+    private Instant createdAt;
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = Instant.now();
+        if (this.timestamp == null) {
+            this.timestamp = Instant.now();
+        }
+    }
 }

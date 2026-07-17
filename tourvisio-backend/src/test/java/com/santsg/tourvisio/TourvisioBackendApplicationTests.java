@@ -185,7 +185,7 @@ class TourvisioBackendApplicationTests {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.searchType", equalTo("FLIGHT_SEARCH")))
 				.andExpect(jsonPath("$.missingFields", hasSize(0)))
-				.andExpect(jsonPath("$.reply", containsString("uçuşlar bulundu")))
+				.andExpect(jsonPath("$.reply", containsString("uçuş bulundu")))
 				.andExpect(jsonPath("$.chatStatus", equalTo("ACTIVE")));
 	}
 

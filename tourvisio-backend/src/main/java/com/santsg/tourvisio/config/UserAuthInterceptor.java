@@ -38,6 +38,15 @@ public class UserAuthInterceptor implements HandlerInterceptor {
             return true;
         }
 
+        // ─────────────────────────────────────────────────────────────────────────
+        // YENİ EKLEDİĞİMİZ KISIM: Şifremi Unuttum ve Sıfırlama bypass kontrolleri
+        // ─────────────────────────────────────────────────────────────────────────
+        String requestURI = request.getRequestURI();
+        if (requestURI.contains("/api/auth/forgot-password") || requestURI.contains("/api/auth/reset-password")) {
+            return true; // Token aramadan bu endpoint'lerin geçmesine izin ver
+        }
+        // ─────────────────────────────────────────────────────────────────────────
+
         // Get Authorization header
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
 
@@ -63,6 +72,10 @@ public class UserAuthInterceptor implements HandlerInterceptor {
         }
 
         // Return 401 Unauthorized if token is missing or invalid
+        // Manually add CORS headers because short-circuiting MVC preHandle bypasses CorsFilter/registry
+        response.setHeader("Access-Control-Allow-Origin", "*");
+        response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        response.setHeader("Access-Control-Allow-Headers", "*");
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");

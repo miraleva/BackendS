@@ -30,7 +30,7 @@ public class ResponseAgent {
 
     public String decline(SearchCriteria criteria, boolean isTerminated) {
         Locale locale = resolveLocale(criteria);
-        String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
+        String targetLanguage = resolveLanguageName(criteria);
         String targetCountry = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "United Kingdom";
 
         String prompt = String.format(
@@ -80,7 +80,7 @@ public class ResponseAgent {
 
     public String clarify(SearchCriteria criteria) {
         Locale locale = resolveLocale(criteria);
-        String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
+        String targetLanguage = resolveLanguageName(criteria);
         String targetCountry = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "United Kingdom";
 
         String prompt = String.format(
@@ -104,7 +104,7 @@ public class ResponseAgent {
 
     public String askMissing(List<String> missingFields, SearchCriteria criteria) {
         Locale locale = resolveLocale(criteria);
-        String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
+        String targetLanguage = resolveLanguageName(criteria);
         String targetCountry = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "United Kingdom";
 
         String fieldsCsv = String.join(", ", missingFields);
@@ -145,9 +145,9 @@ public class ResponseAgent {
         }
     }
 
-    public String summarize(String intent, String resultsJson, String defaultReply, SearchCriteria criteria, int totalResults, int shownResults) {
+    public String summarize(String intent, String resultsJson, String defaultReply, SearchCriteria criteria, String userMessage, int totalResults, int shownResults) {
         Locale locale = resolveLocale(criteria);
-        String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
+        String targetLanguage = resolveLanguageName(criteria);
         String targetCountry = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "United Kingdom";
 
         String childNote = "";
@@ -307,7 +307,11 @@ public class ResponseAgent {
             log.warn("[ResponseAgent] noResultsFound AI generation failed: {}", e.getMessage());
         }
 
-        String defaultMsg = messageSource.getMessage("search.no.results", null, locale);
+        String msgKey = "hotel.search.no.results";
+        if (criteria != null && "FLIGHT_SEARCH".equals(criteria.getSearchType())) {
+            msgKey = "flight.search.no.results";
+        }
+        String defaultMsg = messageSource.getMessage(msgKey, null, locale);
         if (criteria != null) {
             String details = String.format(" (Anlaşılan Kriterler: Konum: %s, Tarih: %s - %s, Yetişkin: %s, Çocuk: %s)",
                     criteria.getLocationOrHotelName() != null ? criteria.getLocationOrHotelName() : "?",
@@ -332,27 +336,16 @@ public class ResponseAgent {
     }
 
     private Locale resolveLocale(SearchCriteria criteria) {
-        if (criteria == null) {
-            return Locale.ENGLISH;
-        }
-        String lang = criteria.getPreferredLanguage();
-        if (lang == null || lang.isBlank()) {
-            return Locale.ENGLISH;
-        }
-        String normalized = lang.trim().toLowerCase();
-        if (normalized.startsWith("tr") || normalized.contains("turkish") || normalized.contains("turkey") || normalized.contains("türkiye")) {
-            return Locale.forLanguageTag("tr-TR");
-        }
-        if (normalized.startsWith("de") || normalized.contains("german") || normalized.contains("germany")) {
-            return Locale.GERMAN;
-        }
-        if (normalized.startsWith("ru") || normalized.contains("russian") || normalized.contains("russia")) {
-            return Locale.forLanguageTag("ru-RU");
-        }
-        if (normalized.startsWith("en") || normalized.contains("english")) {
-            return Locale.ENGLISH;
-        }
-        return Locale.ENGLISH;
+        return com.santsg.tourvisio.util.LocaleResolver.resolveLocale(criteria);
+    }
+
+    /**
+     * Locale kodunu (veya ülke adını) AI prompt'ları için okunabilir bir dil
+     * adına çevirir. criteria.getPreferredLanguage() ham haliyle (ör. "Turkey")
+     * prompt'a verildiğinde model karışabiliyor; bunun yerine dil adını kullanıyoruz.
+     */
+    private String resolveLanguageName(SearchCriteria criteria) {
+        return com.santsg.tourvisio.util.LocaleResolver.resolveLanguageName(criteria);
     }
 
     private String getFieldKey(String field) {
