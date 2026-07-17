@@ -185,6 +185,21 @@ public class ChatOrchestrationService {
         SearchCriteria incoming = null;
         ExtractionResult extractionResult = null;
 
+        // 3.5 Pagination (More Results) Check
+        if ("AWAITING_CONFIRM".equals(sessionState.getMode()) && 
+            sessionState.getAllSearchResults() != null && !sessionState.getAllSearchResults().isEmpty()) {
+            
+            String lowerMsg = userMessage.toLowerCase(Locale.ROOT);
+            boolean isMoreRequest = lowerMsg.contains("başka seçenek") || lowerMsg.contains("başka otel") || lowerMsg.contains("başka uçuş")
+                    || lowerMsg.contains("başka var mı") || lowerMsg.contains("diğer seçenek") || lowerMsg.contains("diğerlerini")
+                    || lowerMsg.contains("daha fazla") || lowerMsg.contains("show more") || lowerMsg.contains("more results") 
+                    || lowerMsg.contains("other options") || lowerMsg.contains("more options");
+                    
+            if (isMoreRequest) {
+                return paginateResults(sessionId, sessionState, existingCriteria, userMessage);
+            }
+        }
+
         // Try extracting via AI Agent first
         try {
             String currentIntent = hasActiveSearch ? existingCriteria.getSearchType() : null;
@@ -526,6 +541,57 @@ public class ChatOrchestrationService {
     // Private helpers
     // ─────────────────────────────────────────────────────────────────────────
 
+    private ChatResponse paginateResults(String sessionId, ChatSessionManager.SessionState sessionState,
+            SearchCriteria criteria, String userMessage) {
+
+        List<?> allResults = sessionState.getAllSearchResults();
+        int totalSize = allResults.size();
+        int newOffset = sessionState.getResultOffset() + 10;
+        String intent = criteria != null ? criteria.getSearchType() : "UNKNOWN";
+
+        if (newOffset >= totalSize) {
+            String reply = responseAgent.noMoreResults(criteria, userMessage);
+            return ChatResponse.builder()
+                    .reply(reply)
+                    .sessionId(sessionId)
+                    .searchType(intent)
+                    .missingFields(List.of())
+                    .chatStatus("ACTIVE")
+                    .success(false)
+                    .results(sessionState.getLastShownResults())
+                    .build();
+        }
+
+        // Slice new batch
+        List<?> slicedResults = allResults.subList(newOffset, Math.min(newOffset + 10, totalSize));
+        sessionState.setResultOffset(newOffset);
+        sessionState.setLastShownResults(slicedResults);
+        
+        String finalReply;
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            int shownResults = slicedResults.size();
+            String resultsJson = mapper.writeValueAsString(slicedResults);
+            
+            // Re-use summarize, pass the new batch
+            finalReply = responseAgent.summarize(intent, resultsJson, "Here are the next options:", criteria, userMessage, totalSize, shownResults);
+        } catch (Exception e) {
+            log.warn("[Orchestration] Pagination AI summarize failed: {}", e.getMessage());
+            int shownResults = slicedResults.size();
+            finalReply = responseAgent.summarize(intent, "[]", "Here are the next options:", criteria, userMessage, totalSize, shownResults);
+        }
+
+        return ChatResponse.builder()
+                .reply(finalReply)
+                .sessionId(sessionId)
+                .searchType(intent)
+                .missingFields(List.of())
+                .chatStatus("ACTIVE")
+                .success(true)
+                .results(slicedResults)
+                .build();
+    }
+
     /**
      * Tüm kriterler tamamlandığında ilgili arama servisini çağırır.
      */
@@ -562,26 +628,39 @@ public class ChatOrchestrationService {
         if (searchResponse.isSuccess() && searchResponse.getResults() != null
                 && !searchResponse.getResults().isEmpty()) {
                 
-            // Set AWAITING_CONFIRM mode
             ChatSessionManager.SessionState sessionState = chatSessionManager.getSessionState(sessionId);
+            List<?> fullResults = searchResponse.getResults();
+            List<?> slicedResults = fullResults;
+            
             if (sessionState != null) {
+                // Set AWAITING_CONFIRM mode
                 sessionState.setMode("AWAITING_CONFIRM");
-                sessionState.setLastShownResults(searchResponse.getResults());
+                sessionState.setAllSearchResults(fullResults);
+                sessionState.setResultOffset(0);
+                
+                int totalSize = fullResults.size();
+                slicedResults = fullResults.subList(0, Math.min(10, totalSize));
+                sessionState.setLastShownResults(slicedResults);
+            } else {
+                int totalSize = fullResults.size();
+                slicedResults = fullResults.subList(0, Math.min(10, totalSize));
             }
+            
+            // Set sliced results onto the response
+            searchResponse.setResults((List)slicedResults);
 
             try {
                 com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                int totalResults = searchResponse.getResults().size();
-                int shownResults = Math.min(5, totalResults);
-                String resultsJson = mapper.writeValueAsString(
-                        searchResponse.getResults().subList(0, shownResults));
+                int totalResults = fullResults.size();
+                int shownResults = slicedResults.size();
+                String resultsJson = mapper.writeValueAsString(slicedResults);
 
                 finalReply = responseAgent.summarize(intent, resultsJson, searchResponse.getReply(), criteria, userMessage, totalResults, shownResults);
             } catch (Exception e) {
                 log.warn("[Orchestration] Arama sonuçları AI ile özetlenemedi, varsayılan cevaba dönülüyor: {}",
                         e.getMessage());
-                int totalResults = searchResponse.getResults().size();
-                int shownResults = Math.min(5, totalResults);
+                int totalResults = fullResults.size();
+                int shownResults = slicedResults.size();
                 finalReply = responseAgent.summarize(intent, "[]", searchResponse.getReply(), criteria, userMessage, totalResults, shownResults);
             }
         } else {

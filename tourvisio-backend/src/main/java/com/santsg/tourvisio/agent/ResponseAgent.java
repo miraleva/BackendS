@@ -348,6 +348,31 @@ public class ResponseAgent {
         return defaultMsg;
     }
 
+    public String noMoreResults(SearchCriteria criteria, String userMessage) {
+        Locale locale = resolveLocale(criteria);
+        String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
+
+        String prompt = String.format(
+                "The user is asking for more search results, but there are no further options available in the current search. " +
+                "Write a polite response explaining that there are no additional results left to show for their current criteria, and suggest they might want to change their dates, location, or other preferences to see different options.\n" +
+                "Write the response in the language of this user message: \"%s\" (Target: %s).\n" +
+                "Return ONLY the response itself, no extra notes.",
+                userMessage, targetLanguage
+        );
+
+        try {
+            String aiResponse = geminiClient.generate(prompt);
+            if (isValidResponse(aiResponse)) {
+                return aiResponse.trim();
+            }
+        } catch (Exception e) {
+            log.warn("[ResponseAgent] noMoreResults AI generation failed: {}", e.getMessage());
+        }
+
+        // Fallback to the regular no results found message if AI fails
+        return noResultsFound(criteria, userMessage);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
