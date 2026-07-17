@@ -335,13 +335,15 @@ public class ResponseAgent {
         }
         String defaultMsg = messageSource.getMessage(msgKey, null, locale);
         if (criteria != null) {
-            String details = String.format(" (Anlaşılan Kriterler: Konum: %s, Tarih: %s - %s, Yetişkin: %s, Çocuk: %s)",
-                    criteria.getLocationOrHotelName() != null ? criteria.getLocationOrHotelName() : "?",
-                    criteria.getCheckInDate() != null ? criteria.getCheckInDate() : "?",
-                    criteria.getCheckOutDate() != null ? criteria.getCheckOutDate() : "?",
-                    criteria.getAdultCount() != null ? criteria.getAdultCount() : "?",
-                    criteria.getChildCount() != null ? criteria.getChildCount() : "0");
-            return defaultMsg + details;
+            String locationParam = criteria.getLocationOrHotelName() != null ? criteria.getLocationOrHotelName() : "?";
+            String datesParam = (criteria.getCheckInDate() != null ? criteria.getCheckInDate().toString() : "?") + " - " + 
+                                (criteria.getCheckOutDate() != null ? criteria.getCheckOutDate().toString() : "?");
+            String adultsParam = criteria.getAdultCount() != null ? criteria.getAdultCount().toString() : "?";
+            String childrenParam = criteria.getChildCount() != null ? criteria.getChildCount().toString() : "0";
+            
+            String details = messageSource.getMessage("criteria.understood", 
+                new Object[]{locationParam, datesParam, adultsParam, childrenParam}, locale);
+            return defaultMsg + " (" + details + ")";
         }
         return defaultMsg;
     }
@@ -373,19 +375,32 @@ public class ResponseAgent {
     private String getFieldKey(String field) {
         if (field == null) return null;
         switch (field.trim()) {
-            case "konum veya otel adı": return "field.locationOrHotelName";
-            case "giriş tarihi": return "field.checkInDate";
-            case "çıkış tarihi": return "field.checkOutDate";
-            case "yetişkin sayısı": return "field.adultCount";
-            case "çocuk sayısı": return "field.childCount";
-            case "çocuk yaşları": return "field.childAges";
-            case "para birimi": return "field.currency";
-            case "kalkış noktası": return "field.departureLocation";
-            case "varış noktası": return "field.arrivalLocation";
-            case "gidiş tarihi": return "field.departureDate";
-            case "yolcu sayısı": return "field.passengerCount";
-            case "tek yön / gidiş-dönüş": return "field.tripType";
-            case "dönüş tarihi": return "field.returnDate";
+            case "konum veya otel adı":
+            case "locationOrHotelName": return "field.locationOrHotelName";
+            case "giriş tarihi":
+            case "checkInDate": return "field.checkInDate";
+            case "çıkış tarihi":
+            case "checkOutDate": return "field.checkOutDate";
+            case "yetişkin sayısı":
+            case "adultCount": return "field.adultCount";
+            case "çocuk sayısı":
+            case "childCount": return "field.childCount";
+            case "çocuk yaşları":
+            case "childAges": return "field.childAges";
+            case "para birimi":
+            case "currency": return "field.currency";
+            case "kalkış noktası":
+            case "departureLocation": return "field.departureLocation";
+            case "varış noktası":
+            case "arrivalLocation": return "field.arrivalLocation";
+            case "gidiş tarihi":
+            case "departureDate": return "field.departureDate";
+            case "yolcu sayısı":
+            case "passengerCount": return "field.passengerCount";
+            case "tek yön / gidiş-dönüş":
+            case "tripType": return "field.tripType";
+            case "dönüş tarihi":
+            case "returnDate": return "field.returnDate";
             default: return null;
         }
     }
