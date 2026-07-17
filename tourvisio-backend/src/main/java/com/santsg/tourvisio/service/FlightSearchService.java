@@ -12,6 +12,7 @@ import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -27,6 +28,7 @@ public class FlightSearchService {
     /** Sonuç bulunamadığında denenecek gün ofsetleri, isteğe en yakından uzağa doğru. */
     private static final int[] NEARBY_DATE_OFFSETS = {1, -1, 2, -2, 3, -3};
     private static final int MAX_SUGGESTED_DATES = 3;
+    private static final DateTimeFormatter DISPLAY_DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
     private final TourVisioFlightApiClient flightApiClient;
     private final MessageSource messageSource;
@@ -101,7 +103,9 @@ public class FlightSearchService {
 
         String reply;
         if (!suggestedDates.isEmpty()) {
-            String datesText = String.join(", ", suggestedDates);
+            String datesText = nearbyDates.stream()
+                    .map(DISPLAY_DATE_FORMAT::format)
+                    .collect(Collectors.joining(", "));
             reply = messageSource.getMessage("flight.search.no.results.with.dates", new Object[]{datesText}, locale);
         } else {
             reply = messageSource.getMessage("flight.search.no.results", null, locale);

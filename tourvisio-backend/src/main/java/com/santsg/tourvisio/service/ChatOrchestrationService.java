@@ -319,6 +319,17 @@ public class ChatOrchestrationService {
             return;
         }
 
+        // "giriş tarihi, çıkış tarihi" gibi birden fazla tarih alanı aynı anda
+        // soruluyorken, extractor.extract() (etiket-farkında, "giriş"/"çıkış"
+        // gibi kelimeleri tanır) bu mesajdan zaten BİR tarihi doğru alana
+        // atamış olabilir (örn. "giriş 28 temmuz" → checkInDate). Aşağıdaki
+        // etiketsiz (bare) "parseSingleDate" yedek mantığı bunu bilmeden aynı
+        // tarihi diğer alana da (çıkış) atayıp, üstüne doğru atanmış olanı
+        // sıfırlayabiliyordu. Bu yüzden, etiketli çıkarım bu mesajdan zaten
+        // bir tarih bulduysa, etiketsiz yedek mantığı hiç çalıştırmıyoruz.
+        boolean hotelDateAlreadyResolvedByLabel = incoming.getCheckInDate() != null || incoming.getCheckOutDate() != null;
+        boolean flightDateAlreadyResolvedByLabel = incoming.getDepartureDate() != null || incoming.getReturnDate() != null;
+
         String[] fields = lastField.split(",\\s*");
         for (String field : fields) {
             switch (field) {
@@ -341,47 +352,27 @@ public class ChatOrchestrationService {
                     break;
 
                 case "giriş tarihi":
-                    if (incoming.getCheckInDate() == null) {
-                        java.time.LocalDate d = extractor.parseSingleDate(message);
-                        if (d == null && incoming.getCheckOutDate() != null) {
-                            d = incoming.getCheckOutDate();
-                            incoming.setCheckOutDate(null);
-                        }
-                        incoming.setCheckInDate(d);
+                    if (incoming.getCheckInDate() == null && !hotelDateAlreadyResolvedByLabel) {
+                        incoming.setCheckInDate(extractor.parseSingleDate(message));
                     }
                     break;
 
                 case "çıkış tarihi":
-                    if (incoming.getCheckOutDate() == null) {
-                        java.time.LocalDate d = extractor.parseSingleDate(message);
-                        if (d == null && incoming.getCheckInDate() != null) {
-                            d = incoming.getCheckInDate();
-                        }
-                        incoming.setCheckOutDate(d);
+                    if (incoming.getCheckOutDate() == null && !hotelDateAlreadyResolvedByLabel) {
+                        incoming.setCheckOutDate(extractor.parseSingleDate(message));
                     }
-                    incoming.setCheckInDate(null);
                     break;
 
                 case "gidiş tarihi":
-                    if (incoming.getDepartureDate() == null) {
-                        java.time.LocalDate d = extractor.parseSingleDate(message);
-                        if (d == null && incoming.getReturnDate() != null) {
-                            d = incoming.getReturnDate();
-                            incoming.setReturnDate(null);
-                        }
-                        incoming.setDepartureDate(d);
+                    if (incoming.getDepartureDate() == null && !flightDateAlreadyResolvedByLabel) {
+                        incoming.setDepartureDate(extractor.parseSingleDate(message));
                     }
                     break;
 
                 case "dönüş tarihi":
-                    if (incoming.getReturnDate() == null) {
-                        java.time.LocalDate d = extractor.parseSingleDate(message);
-                        if (d == null && incoming.getDepartureDate() != null) {
-                            d = incoming.getDepartureDate();
-                        }
-                        incoming.setReturnDate(d);
+                    if (incoming.getReturnDate() == null && !flightDateAlreadyResolvedByLabel) {
+                        incoming.setReturnDate(extractor.parseSingleDate(message));
                     }
-                    incoming.setDepartureDate(null);
                     break;
 
                 case "yetişkin sayısı":
