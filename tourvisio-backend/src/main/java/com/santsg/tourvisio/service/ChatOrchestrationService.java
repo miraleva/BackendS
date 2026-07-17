@@ -386,19 +386,19 @@ public class ChatOrchestrationService {
 
                 case "yetişkin sayısı":
                     if (incoming.getAdultCount() == null) {
-                        incoming.setAdultCount(parseInteger(message));
+                        incoming.setAdultCount(parseCountWithLabel(message, ADULT_COUNT_LABEL_PATTERN));
                     }
                     break;
 
                 case "yolcu sayısı":
                     if (incoming.getPassengerCount() == null) {
-                        incoming.setPassengerCount(parseInteger(message));
+                        incoming.setPassengerCount(parseCountWithLabel(message, PASSENGER_COUNT_LABEL_PATTERN));
                     }
                     break;
 
                 case "oda sayısı":
                     if (incoming.getRoomCount() == null || incoming.getRoomCount() == 1) {
-                        Integer rooms = parseInteger(message);
+                        Integer rooms = parseCountWithLabel(message, ROOM_COUNT_LABEL_PATTERN);
                         if (rooms != null) {
                             incoming.setRoomCount(rooms);
                         }
@@ -407,7 +407,7 @@ public class ChatOrchestrationService {
 
                 case "çocuk sayısı":
                     if (incoming.getChildCount() == null || incoming.getChildCount() == 0) {
-                        Integer children = parseInteger(message);
+                        Integer children = parseCountWithLabel(message, CHILD_COUNT_LABEL_PATTERN);
                         if (children != null) {
                             incoming.setChildCount(children);
                         }
@@ -441,6 +441,41 @@ public class ChatOrchestrationService {
         java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\d+").matcher(message);
         if (matcher.find()) {
             return Integer.parseInt(matcher.group());
+        }
+        return null;
+    }
+
+    /**
+     * Yetişkin/yolcu/oda/çocuk sayısı gibi alanlar başka bir alanla (ör. tarih)
+     * aynı mesajda birlikte sorulduğunda, mesajdaki İLK sayıyı almak yanlış
+     * sonuç verir (örn. "28 temmuz, 1 yetişkin, tek yön" → tarihteki "28"
+     * yolcu sayısı sanılırdı, oysa gerçek sayı "1"dir, "yetişkin" kelimesinin
+     * hemen önünde). Bu yüzden önce ilgili anahtar kelimenin hemen önündeki
+     * sayıyı arar; bulamazsa ve mesaj tamamen sayılardan/ayraçlardan oluşuyorsa
+     * (kullanıcı sadece "3" yazdıysa) o sayıyı kullanır.
+     */
+    private static final java.util.regex.Pattern ADULT_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
+            "(\\d{1,3})\\s*(?:yetişkin|yetiskin|adult|adults)", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern PASSENGER_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
+            "(\\d{1,3})\\s*(?:yolcu|passenger|passengers|kişi|kisi|person|people|kişilik|kisilik|yetişkin|yetiskin|adult|adults)",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern ROOM_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
+            "(\\d{1,2})\\s*(?:oda|room|rooms)", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern CHILD_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
+            "(\\d{1,2})\\s*(?:çocuk|cocuk|child|children|kids)", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    private Integer parseCountWithLabel(String message, java.util.regex.Pattern labelPattern) {
+        if (message == null) return null;
+
+        java.util.regex.Matcher labelMatcher = labelPattern.matcher(message);
+        if (labelMatcher.find()) {
+            return Integer.parseInt(labelMatcher.group(1));
+        }
+
+        // Anahtar kelime bulunamadı; mesaj sadece sayılardan/ayraçlardan
+        // oluşuyorsa (örn. kullanıcı doğrudan "3" yazdıysa) o sayıyı kullan.
+        if (message.trim().matches("^[\\d\\s,.-]+$")) {
+            return parseInteger(message);
         }
         return null;
     }
