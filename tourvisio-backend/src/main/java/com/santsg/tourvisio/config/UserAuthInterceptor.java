@@ -39,11 +39,13 @@ public class UserAuthInterceptor implements HandlerInterceptor {
         }
 
         // ─────────────────────────────────────────────────────────────────────────
-        // YENİ EKLEDİĞİMİZ KISIM: Şifremi Unuttum ve Sıfırlama bypass kontrolleri
+        // YENİ EKLEDİĞİMİZ KISIM: Şifremi Unuttum, Sıfırlama ve Admin Giriş bypass kontrolleri
         // ─────────────────────────────────────────────────────────────────────────
         String requestURI = request.getRequestURI();
-        if (requestURI.contains("/api/auth/forgot-password") || requestURI.contains("/api/auth/reset-password")) {
-            return true; // Token aramadan bu endpoint'lerin geçmesine izin ver
+        if (requestURI.contains("/api/auth/forgot-password") || 
+            requestURI.contains("/api/auth/reset-password") ||
+            requestURI.contains("/api/auth/admin-login")) { // BU SATIR SAYESİNDE INTERCEPTOR ENGELLENMEYECEK!
+            return true; 
         }
         // ─────────────────────────────────────────────────────────────────────────
 

@@ -5,6 +5,7 @@ import com.santsg.tourvisio.dto.auth.LoginRequest;
 import com.santsg.tourvisio.dto.auth.LoginResponse;
 import com.santsg.tourvisio.dto.auth.SignupRequest;
 import com.santsg.tourvisio.dto.auth.UserResponse;
+import com.santsg.tourvisio.dto.auth.AdminLoginRequest;
 import com.santsg.tourvisio.entity.User;
 import com.santsg.tourvisio.repository.UserRepository;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,24 +13,27 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.mindrot.jbcrypt.BCrypt;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
-@Tag(name = "User Authentication", description = "Endpoints for user signup and login")
+@CrossOrigin(origins = "*") // CORS hatasını önlemek için eklendi!
+@Tag(name = "User Authentication", description = "Endpoints for user signup, login and admin login")
 @Slf4j
 public class AuthController {
 
     private final UserRepository userRepository;
     private final JwtProvider jwtProvider;
+
+    // application.properties dosyasındaki "sanny.admin.password" değerini okur. 
+    // Bulamazsa varsayılan olarak "admin2026" şifresini geçerli kılar.
+    private final String correctAdminPassword = "admin2026";
 
     public AuthController(UserRepository userRepository, JwtProvider jwtProvider) {
         this.userRepository = userRepository;
@@ -50,7 +54,7 @@ public class AuthController {
             ));
         }
 
-        // Validate email and phone uniqueness (collect all conflicts, not just the first)
+        // Validate email and phone uniqueness
         boolean emailExists = userRepository.existsByEmail(request.getEmail());
         boolean phoneExists = userRepository.existsByPhone(request.getPhone());
 
@@ -148,5 +152,39 @@ public class AuthController {
                 .build();
 
         return ResponseEntity.ok(loginResponse);
+    }
+
+    @PostMapping(value = "/admin-login", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Admin Login", description = "Authenticate admin password and provide a temporary token")
+    public ResponseEntity<?> adminLogin(@Valid @RequestBody AdminLoginRequest request) {
+        log.info("[AuthController] Admin login attempt received");
+
+        if (request.getPassword() == null || request.getPassword().trim().isEmpty()) {
+            log.warn("[AuthController] Admin login failed: Password field is empty");
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Bad Request",
+                    "message", "Password cannot be empty"
+            ));
+        }
+
+        // Check if the provided password matches the application.properties password
+        if (request.getPassword().equals(correctAdminPassword)) {
+            log.info("[AuthController] Admin login successful!");
+            
+            // Temporary token for frontend
+            String adminToken = "sanny-admin-secure-jwt-token-2026"; 
+
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "token", adminToken,
+                    "message", "Admin login successful"
+            ));
+        } else {
+            log.warn("[AuthController] Admin login failed: Invalid admin password");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "error", "Unauthorized",
+                    "message", "Invalid admin password"
+            ));
+        }
     }
 }
