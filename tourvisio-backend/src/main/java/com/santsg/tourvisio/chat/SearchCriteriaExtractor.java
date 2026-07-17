@@ -83,7 +83,7 @@ public class SearchCriteriaExtractor {
     private static final Pattern CHILD_PATTERN = Pattern.compile(
             "(\\d+)\\s*(?:çocuk|cocuk|child|kids)");
     private static final Pattern PASSENGER_PATTERN = Pattern.compile(
-            "(\\d+)\\s*(?:yolcu|kişi|kisi|passenger|passengers|person|people|kişilik|kisilik)");
+            "(\\d+)\\s*(?:yolcu|kişi|kisi|passenger|passengers|person|people|kişilik|kisilik|yetişkin|yetiskin|adult|adults)");
 
     // ── Gece sayısı ───────────────────────────────────────────────────────────
     private static final Pattern NIGHT_PATTERN = Pattern.compile(
