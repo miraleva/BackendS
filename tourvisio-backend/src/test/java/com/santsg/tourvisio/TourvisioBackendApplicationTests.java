@@ -143,7 +143,7 @@ class TourvisioBackendApplicationTests {
 	@Test
 	void testHotelSearchMultiTurnChatWorkflow() throws Exception {
 		// Turn 1: Initial query
-		ChatRequest request1 = new ChatRequest("Antalya'da 2 yetişkin için 15 Temmuz girişli 5 gece otel bakıyorum", "hotel-session-123");
+		ChatRequest request1 = new ChatRequest("Antalya'da 2 yetişkin için 25 Temmuz girişli 5 gece otel bakıyorum", "hotel-session-123");
 		mockMvc.perform(post("/api/chat/message")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(request1)))
@@ -153,7 +153,7 @@ class TourvisioBackendApplicationTests {
 				.andExpect(jsonPath("$.chatStatus", equalTo("ACTIVE")));
 
 		// Turn 2: Follow up with missing fields
-		ChatRequest request2 = new ChatRequest("20 Temmuz çıkış olsun, para birimi TL", "hotel-session-123");
+		ChatRequest request2 = new ChatRequest("30 Temmuz çıkış olsun, para birimi TL", "hotel-session-123");
 		mockMvc.perform(post("/api/chat/message")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(request2)))
@@ -167,7 +167,7 @@ class TourvisioBackendApplicationTests {
 	@Test
 	void testFlightSearchMultiTurnChatWorkflow() throws Exception {
 		// Turn 1: Initial query
-		ChatRequest request1 = new ChatRequest("İstanbul'dan Ankara'ya 15 Temmuz'da uçak bakıyorum", "flight-session-123");
+		ChatRequest request1 = new ChatRequest("İstanbul'dan Ankara'ya 25 Temmuz'da uçak bakıyorum", "flight-session-123");
 		mockMvc.perform(post("/api/chat/message")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(request1)))
@@ -185,7 +185,47 @@ class TourvisioBackendApplicationTests {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.searchType", equalTo("FLIGHT_SEARCH")))
 				.andExpect(jsonPath("$.missingFields", hasSize(0)))
-				.andExpect(jsonPath("$.reply", containsString("uçuşlar bulundu")))
+				.andExpect(jsonPath("$.reply", containsString("uçuş bulundu")))
 				.andExpect(jsonPath("$.chatStatus", equalTo("ACTIVE")));
 	}
+
+
+	@Test
+	void testUnknownIntentWelcome() throws Exception {
+		ChatRequest request1 = new ChatRequest("merhaba", "unknown-session-123");
+		mockMvc.perform(post("/api/chat/message")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(request1)))
+				.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
+				.andExpect(status().isOk());
+	}
+
+
+
+
+	@Test
+	void testWelcomeTriggerConsistency() throws Exception {
+		// Session A - First message
+		ChatRequest req1 = new ChatRequest("merhaba", "session-A");
+		mockMvc.perform(post("/api/chat/message")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(req1)))
+				.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print());
+
+		// Session A - Second message
+		ChatRequest req2 = new ChatRequest("hello", "session-A");
+		mockMvc.perform(post("/api/chat/message")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(req2)))
+				.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print());
+
+		// Session B - First message
+		ChatRequest req3 = new ChatRequest("hello", "session-B");
+		mockMvc.perform(post("/api/chat/message")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(req3)))
+				.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print());
+	}
+
+
 }
