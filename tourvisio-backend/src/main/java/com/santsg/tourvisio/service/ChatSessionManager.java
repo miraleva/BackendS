@@ -95,6 +95,17 @@ public class ChatSessionManager {
         public String getLastRequestedField() { return lastRequestedField; }
         public void setLastRequestedField(String lastRequestedField) { this.lastRequestedField = lastRequestedField; }
 
+        /**
+         * Son arama sonuçsuz mu kaldı? Kullanıcı hiçbir yeni kriter vermeden
+         * "en yakın tarih ne var" gibi bir soru sorduğunda, aynı (zaten
+         * başarısız olduğu bilinen) tarihi tekrar aramak yerine doğrudan
+         * yakın tarih önerisine atlamak için kullanılır.
+         */
+        private boolean lastSearchHadNoResults = false;
+
+        public boolean isLastSearchHadNoResults() { return lastSearchHadNoResults; }
+        public void setLastSearchHadNoResults(boolean lastSearchHadNoResults) { this.lastSearchHadNoResults = lastSearchHadNoResults; }
+
         private java.util.List<?> allSearchResults;
         private int resultOffset = 0;
 
