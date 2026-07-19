@@ -140,18 +140,18 @@ public class ChatOrchestrationService {
         }
         sessionStore.save(sessionId, existingCriteria);
 
+        String userMessage = request.getMessage();
+
         // 2. Oturum sonlandırılmışsa erken çık
         if ("TERMINATED".equals(sessionState.getChatStatus())) {
             return ChatResponse.builder()
-                    .reply(responseAgent.decline(existingCriteria, true))
+                    .reply(responseAgent.decline(existingCriteria, true, userMessage))
                     .sessionId(sessionId)
                     .searchType("OUT_OF_SCOPE")
                     .missingFields(List.of())
                     .chatStatus("TERMINATED")
                     .build();
         }
-
-        String userMessage = request.getMessage();
 
         // 2.5 AWAITING_CONFIRM mode check
         if ("AWAITING_CONFIRM".equals(sessionState.getMode()) && sessionState.getLastShownResults() != null) {
@@ -161,7 +161,7 @@ public class ChatOrchestrationService {
                 sessionState.setMode("BOOKING");
                 sessionState.setSelectedItem(matchedItem);
                 
-                String confirmReply = responseAgent.confirmSelection(matchedItem, existingCriteria);
+                String confirmReply = responseAgent.confirmSelection(matchedItem, existingCriteria, userMessage);
                 return ChatResponse.builder()
                         .reply(confirmReply)
                         .sessionId(sessionId)
@@ -229,7 +229,7 @@ public class ChatOrchestrationService {
                 sessionState.incrementOutOfScopeCount();
                 String chatStatus = sessionState.getChatStatus();
                 return ChatResponse.builder()
-                        .reply(responseAgent.decline(existingCriteria, "TERMINATED".equals(chatStatus)))
+                        .reply(responseAgent.decline(existingCriteria, "TERMINATED".equals(chatStatus), userMessage))
                         .sessionId(sessionId)
                         .searchType("OUT_OF_SCOPE")
                         .missingFields(List.of())
@@ -249,7 +249,7 @@ public class ChatOrchestrationService {
                             .build();
                 }
                 return ChatResponse.builder()
-                        .reply(responseAgent.clarify(existingCriteria))
+                        .reply(responseAgent.clarify(existingCriteria, userMessage))
                         .sessionId(sessionId)
                         .searchType("UNKNOWN")
                         .missingFields(List.of())
@@ -299,7 +299,7 @@ public class ChatOrchestrationService {
 
         if (!missingFields.isEmpty()) {
             sessionState.setLastRequestedField(String.join(", ", missingFields));
-            String replyText = responseAgent.askMissing(missingFields, existingCriteria);
+            String replyText = responseAgent.askMissing(missingFields, existingCriteria, userMessage);
             return ChatResponse.builder()
                     .reply(replyText)
                     .sessionId(sessionId)
@@ -308,6 +308,31 @@ public class ChatOrchestrationService {
                     .chatStatus("ACTIVE")
                     .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(existingCriteria))
                     .build();
+        }
+
+        // 8.5 Kullanıcı yeni bir kriter vermeden (ör. "en yakın tarih ne var") sadece
+        // yakın tarih önerisi istiyor ve son arama zaten sonuçsuz kaldıysa, aynı
+        // (başarısız olduğu zaten bilinen) tarihi tekrar aramadan doğrudan yakın
+        // tarihlere bakıyoruz — bir gereksiz arama isteği daha az, daha hızlı cevap.
+        if (sessionState.isLastSearchHadNoResults() && hasNoNewSearchCriteria(incoming)) {
+            ChatSearchResponse nearbyResponse = null;
+            if ("HOTEL_SEARCH".equals(intent)) {
+                nearbyResponse = hotelSearchService.suggestNearbyDatesOnly(existingCriteria);
+            } else if ("FLIGHT_SEARCH".equals(intent)) {
+                nearbyResponse = flightSearchService.suggestNearbyDatesOnly(existingCriteria);
+            }
+            if (nearbyResponse != null) {
+                return ChatResponse.builder()
+                        .reply(nearbyResponse.getReply())
+                        .sessionId(sessionId)
+                        .searchType(intent)
+                        .missingFields(List.of())
+                        .chatStatus("ACTIVE")
+                        .success(false)
+                        .results(List.of())
+                        .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(existingCriteria))
+                        .build();
+            }
         }
 
         // 9. Tüm bilgiler tamam → arama servisine yönlendir
@@ -630,20 +655,9 @@ public class ChatOrchestrationService {
         List<?> slicedResults = allResults.subList(newOffset, Math.min(newOffset + 10, totalSize));
         sessionState.setResultOffset(newOffset);
         sessionState.setLastShownResults(slicedResults);
-        
-        String finalReply;
-        try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            int shownResults = slicedResults.size();
-            String resultsJson = mapper.writeValueAsString(slicedResults);
-            
-            // Re-use summarize, pass the new batch
-            finalReply = responseAgent.summarize(intent, resultsJson, "Here are the next options:", criteria, userMessage, totalSize, shownResults);
-        } catch (Exception e) {
-            log.warn("[Orchestration] Pagination AI summarize failed: {}", e.getMessage());
-            int shownResults = slicedResults.size();
-            finalReply = responseAgent.summarize(intent, "[]", "Here are the next options:", criteria, userMessage, totalSize, shownResults);
-        }
+
+        // Sonuçlar zaten kart olarak gösteriliyor — ayrıca metin özeti yazdırmıyoruz.
+        String finalReply = "";
 
         return ChatResponse.builder()
                 .reply(finalReply)
@@ -687,21 +701,22 @@ public class ChatOrchestrationService {
         }
 
         String finalReply = searchResponse.getReply();
+        ChatSessionManager.SessionState sessionState = chatSessionManager.getSessionState(sessionId);
 
         // AI ile arama sonuçlarını özetleme
         if (searchResponse.isSuccess() && searchResponse.getResults() != null
                 && !searchResponse.getResults().isEmpty()) {
-                
-            ChatSessionManager.SessionState sessionState = chatSessionManager.getSessionState(sessionId);
+
             List<?> fullResults = searchResponse.getResults();
             List<?> slicedResults = fullResults;
-            
+
             if (sessionState != null) {
                 // Set AWAITING_CONFIRM mode
                 sessionState.setMode("AWAITING_CONFIRM");
                 sessionState.setAllSearchResults(fullResults);
                 sessionState.setResultOffset(0);
-                
+                sessionState.setLastSearchHadNoResults(false);
+
                 int totalSize = fullResults.size();
                 slicedResults = fullResults.subList(0, Math.min(10, totalSize));
                 sessionState.setLastShownResults(slicedResults);
@@ -709,25 +724,17 @@ public class ChatOrchestrationService {
                 int totalSize = fullResults.size();
                 slicedResults = fullResults.subList(0, Math.min(10, totalSize));
             }
-            
+
             // Set sliced results onto the response
             searchResponse.setResults((List)slicedResults);
 
-            try {
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                int totalResults = fullResults.size();
-                int shownResults = slicedResults.size();
-                String resultsJson = mapper.writeValueAsString(slicedResults);
-
-                finalReply = responseAgent.summarize(intent, resultsJson, searchResponse.getReply(), criteria, userMessage, totalResults, shownResults);
-            } catch (Exception e) {
-                log.warn("[Orchestration] Arama sonuçları AI ile özetlenemedi, varsayılan cevaba dönülüyor: {}",
-                        e.getMessage());
-                int totalResults = fullResults.size();
-                int shownResults = slicedResults.size();
-                finalReply = responseAgent.summarize(intent, "[]", searchResponse.getReply(), criteria, userMessage, totalResults, shownResults);
-            }
+            // Sonuçlar zaten kart olarak gösteriliyor — ayrıca metin özeti yazdırmıyoruz
+            // (AI çağrısı da atlanmış oluyor: daha hızlı yanıt, daha az kota kullanımı).
+            finalReply = "";
         } else {
+            if (sessionState != null) {
+                sessionState.setLastSearchHadNoResults(true);
+            }
             finalReply = responseAgent.noResultsFound(criteria, userMessage, searchResponse.getSuggestedDates());
         }
 
@@ -741,6 +748,29 @@ public class ChatOrchestrationService {
                 .results(searchResponse.getResults())
                 .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(criteria))
                 .build();
+    }
+
+    /**
+     * Bu mesajdan (adjustIncomingCriteria sonrası) hiçbir yeni arama bilgisi
+     * çıkarılmadı mı? "en yakın tarih ne var" gibi salt soru niteliğindeki
+     * mesajlarda true döner — bu durumda üst katman aynı aramayı tekrarlamak
+     * yerine doğrudan yakın tarih önerisine geçebilir.
+     */
+    private boolean hasNoNewSearchCriteria(SearchCriteria incoming) {
+        if (incoming == null) return true;
+        return incoming.getLocationOrHotelName() == null
+                && incoming.getCheckInDate() == null
+                && incoming.getCheckOutDate() == null
+                && incoming.getAdultCount() == null
+                && (incoming.getChildCount() == null || incoming.getChildCount() == 0)
+                && (incoming.getChildAges() == null || incoming.getChildAges().isEmpty())
+                && incoming.getDepartureLocation() == null
+                && incoming.getArrivalLocation() == null
+                && incoming.getDepartureDate() == null
+                && incoming.getReturnDate() == null
+                && incoming.getPassengerCount() == null
+                && incoming.getTripType() == null
+                && incoming.getRoomCount() == null;
     }
 
     private String resolveSessionId(String sessionId) {

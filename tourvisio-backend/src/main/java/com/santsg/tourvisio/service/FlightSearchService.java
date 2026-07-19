@@ -88,6 +88,25 @@ public class FlightSearchService {
     }
 
     /**
+     * Kullanıcı yeni bir kriter vermeden (ör. "en yakın tarih ne var") sadece
+     * yakın tarih önerisi istediğinde çağrılır. Zaten başarısız olduğu bilinen
+     * orijinal tarihi tekrar aramadan, doğrudan yakın tarihleri dener.
+     */
+    public ChatSearchResponse suggestNearbyDatesOnly(SearchCriteria criteria) {
+        Locale locale = LocaleResolver.resolveLocale(criteria);
+        FlightSearchRequest request = criteria.toFlightSearchRequest();
+        if (request == null) {
+            return ChatSearchResponse.builder()
+                    .reply(messageSource.getMessage("flight.search.missing.info", null, locale))
+                    .searchType("FLIGHT_SEARCH")
+                    .success(false)
+                    .results(List.of())
+                    .build();
+        }
+        return buildNoResultsResponse(request, locale);
+    }
+
+    /**
      * Kriterlere uygun uçuş bulunamadığında, TourVisio'da uçuşlar için otelin
      * "getcheckindates" API'sine denk bir tarih-uygunluk servisi olmadığından,
      * istenen tarihe yakın birkaç günü (±1, ±2, ±3) gerçek pricesearch çağrısıyla

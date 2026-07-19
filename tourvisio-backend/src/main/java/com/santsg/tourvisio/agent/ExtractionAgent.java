@@ -3,9 +3,10 @@ package com.santsg.tourvisio.agent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.santsg.tourvisio.chat.SearchCriteria;
-import com.santsg.tourvisio.client.GeminiExtractionClient;
+import com.santsg.tourvisio.client.AIFallbackChain;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -15,10 +16,11 @@ public class ExtractionAgent {
 
     private static final Logger log = LoggerFactory.getLogger(ExtractionAgent.class);
 
-    private final GeminiExtractionClient geminiExtractionClient;
+    /** Gemini Lite → OpenRouter (ücretsiz) fallback zinciri. Bkz. {@code AIProviderConfig}. */
+    private final AIFallbackChain geminiExtractionClient;
     private final ObjectMapper objectMapper;
 
-    public ExtractionAgent(GeminiExtractionClient geminiExtractionClient) {
+    public ExtractionAgent(@Qualifier("extractionAiChain") AIFallbackChain geminiExtractionClient) {
         this.geminiExtractionClient = geminiExtractionClient;
         this.objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
     }
@@ -48,8 +50,8 @@ public class ExtractionAgent {
                   "criteria": {
                     // For HOTEL_SEARCH:
                     "locationOrHotelName": "city or hotel name (e.g. Antalya)",
-                    "checkInDate": "check-in date in YYYY-MM-DD format. Today's date is %s. Handle multiple formats robustly (e.g. '13.6.26' -> '2026-06-13', '13/04/2027', '12-08-2026'). If only month/day (e.g. 15 July, haziran 13) is specified, resolve to the nearest future occurrence using today's date.",
-                    "checkOutDate": "check-out date in YYYY-MM-DD format. If night count is given, calculate check-out by adding it to check-in.",
+                    "checkInDate": "check-in date in YYYY-MM-DD format, ONLY if the user's message contains an actual date reference (a specific date, weekday, or relative expression like 'tomorrow'/'yarın'/'next week'). Today's date is %s, used only to resolve relative/partial dates. Handle multiple formats robustly (e.g. '13.6.26' -> '2026-06-13', '13/04/2027', '12-08-2026'). If only month/day (e.g. 15 July, haziran 13) is specified, resolve to the nearest future occurrence using today's date. NEVER output today's date as checkInDate just because no date was mentioned — leave it null/omitted instead.",
+                    "checkOutDate": "check-out date in YYYY-MM-DD format. If night count is given, calculate check-out by adding it to check-in. Same 'only if explicitly mentioned' rule as checkInDate applies.",
                     "adultCount": integer,
                     "childCount": integer,
                     "childAges": array of integers,
@@ -60,8 +62,8 @@ public class ExtractionAgent {
                     // For FLIGHT_SEARCH:
                     "departureLocation": "departure location (e.g. Istanbul)",
                     "arrivalLocation": "arrival location (e.g. Antalya)",
-                    "departureDate": "departure date in YYYY-MM-DD format. Handle multiple formats robustly like checkInDate.",
-                    "returnDate": "return date in YYYY-MM-DD format. Handle multiple formats robustly like checkOutDate.",
+                    "departureDate": "departure date in YYYY-MM-DD format. Same 'only if explicitly mentioned' rule as checkInDate applies.",
+                    "returnDate": "return date in YYYY-MM-DD format. Same 'only if explicitly mentioned' rule as checkOutDate applies.",
                     "passengerCount": integer,
                     "tripType": "ONE_WAY" or "ROUND_TRIP",
                     "currency": currency (TRY, EUR, USD, GBP)
@@ -78,6 +80,13 @@ public class ExtractionAgent {
                 Extract travel criteria and identify user intent from the message below.
                 Return the output strictly as a single JSON object matching the schema. Do not add any markdown blocks (like ```json), notes, or extra text.
                 If some criteria fields are not found in the message, omit them or set them to null.
+
+                IMPORTANT: Only extract a date field (checkInDate, checkOutDate, departureDate, returnDate) if the
+                user's message actually contains a date, weekday, or relative time expression. Vague requests like
+                "what's the nearest available date", "en yakın tarih ne var", "suggest a date", or "hangi tarihler
+                uygun" are QUESTIONS about availability, not date values — do NOT fill in today's date or any other
+                date for these; leave the date fields null/omitted and set intent to UNKNOWN if nothing else in the
+                message provides new search criteria.
 
                 Today's Date: %s
                 Active Intent Context: %s%s
