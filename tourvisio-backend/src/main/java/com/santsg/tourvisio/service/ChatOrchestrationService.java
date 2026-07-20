@@ -203,7 +203,8 @@ public class ChatOrchestrationService {
         // Try extracting via AI Agent first
         try {
             String currentIntent = hasActiveSearch ? existingCriteria.getSearchType() : null;
-            extractionResult = extractionAgent.extract(userMessage, currentIntent, sessionState.getLastRequestedField());
+            extractionResult = extractionAgent.extract(userMessage, currentIntent, sessionState.getLastRequestedField(),
+                    hasActiveSearch ? existingCriteria : null);
         } catch (Exception e) {
             log.warn("[Orchestration] ExtractionAgent failed or mocked, falling back to rule-based: {}",
                     e.getMessage());
@@ -267,6 +268,11 @@ public class ChatOrchestrationService {
 
         // 6. Yeni kriterler önceki session kriterleri üzerine birleştir
         existingCriteria.mergeWith(incoming);
+        // Bebek/çocuk/yetişkin yaş yeniden-sınıflandırma notu varsa bir kez tüketilir
+        // (aşağıdaki cevaplardan hangisi dönerse ona eklenir), tekrar gösterilmemesi
+        // için criteria üzerinden temizlenir.
+        String reclassificationNote = existingCriteria.getReclassificationNote();
+        existingCriteria.setReclassificationNote(null);
         sessionStore.save(sessionId, existingCriteria);
 
         log.debug("[Orchestration] Birleştirilmiş kriterler: {}", existingCriteria);
@@ -300,6 +306,7 @@ public class ChatOrchestrationService {
         if (!missingFields.isEmpty()) {
             sessionState.setLastRequestedField(String.join(", ", missingFields));
             String replyText = responseAgent.askMissing(missingFields, existingCriteria, userMessage);
+            replyText = prependNote(reclassificationNote, replyText);
             return ChatResponse.builder()
                     .reply(replyText)
                     .sessionId(sessionId)
@@ -323,7 +330,7 @@ public class ChatOrchestrationService {
             }
             if (nearbyResponse != null) {
                 return ChatResponse.builder()
-                        .reply(nearbyResponse.getReply())
+                        .reply(prependNote(reclassificationNote, nearbyResponse.getReply()))
                         .sessionId(sessionId)
                         .searchType(intent)
                         .missingFields(List.of())
@@ -336,7 +343,15 @@ public class ChatOrchestrationService {
         }
 
         // 9. Tüm bilgiler tamam → arama servisine yönlendir
-        return readyToSearchResponse(sessionId, intent, existingCriteria, userMessage);
+        return readyToSearchResponse(sessionId, intent, existingCriteria, userMessage, reclassificationNote);
+    }
+
+    /** Bebek/çocuk/yetişkin yeniden-sınıflandırma notu varsa cevabın başına ekler. */
+    private String prependNote(String note, String reply) {
+        if (note == null || note.isBlank()) {
+            return reply;
+        }
+        return (reply == null || reply.isBlank()) ? note : note + "\n\n" + reply;
     }
 
     private void adjustIncomingCriteria(SearchCriteria incoming, String lastField, String message) {
@@ -436,6 +451,24 @@ public class ChatOrchestrationService {
                     }
                     break;
 
+                case "bebek sayısı":
+                    if (incoming.getInfantCount() == null || incoming.getInfantCount() == 0) {
+                        Integer infants = parseCountWithLabel(message, INFANT_COUNT_LABEL_PATTERN);
+                        if (infants != null) {
+                            incoming.setInfantCount(infants);
+                        }
+                    }
+                    break;
+
+                case "bebek yaşları":
+                    // Hangi listeye (infantAges/childAges) yazıldığı önemli değil —
+                    // SearchCriteria.reconcileAgeBuckets() gerçek yaşa göre zaten
+                    // doğru kovaya taşıyacak.
+                    if (incoming.getInfantAges() == null || incoming.getInfantAges().isEmpty()) {
+                        incoming.setInfantAges(parseChildAges(message));
+                    }
+                    break;
+
                 case "para birimi":
                     if (incoming.getCurrency() == null) {
                         incoming.setCurrency(extractor.parseCurrency(message));
@@ -479,6 +512,8 @@ public class ChatOrchestrationService {
             "(\\d{1,2})\\s*(?:oda|room|rooms)", java.util.regex.Pattern.CASE_INSENSITIVE);
     private static final java.util.regex.Pattern CHILD_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
             "(\\d{1,2})\\s*(?:çocuk|cocuk|child|children|kids)", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern INFANT_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
+            "(\\d{1,2})\\s*(?:bebek|infant|infants|baby|babies)", java.util.regex.Pattern.CASE_INSENSITIVE);
 
     private Integer parseCountWithLabel(String message, java.util.regex.Pattern labelPattern) {
         if (message == null) return null;
@@ -676,7 +711,8 @@ public class ChatOrchestrationService {
     private ChatResponse readyToSearchResponse(String sessionId,
             String intent,
             SearchCriteria criteria,
-            String userMessage) {
+            String userMessage,
+            String reclassificationNote) {
 
         log.info("[Orchestration] Executing Search to TourVisio API with Final Criteria: Location={}, CheckIn={}, CheckOut={}, Adults={}, Children={}, ChildAges={}",
                 criteria.getLocationOrHotelName(),
@@ -737,6 +773,8 @@ public class ChatOrchestrationService {
             }
             finalReply = responseAgent.noResultsFound(criteria, userMessage, searchResponse.getSuggestedDates());
         }
+
+        finalReply = prependNote(reclassificationNote, finalReply);
 
         return ChatResponse.builder()
                 .reply(finalReply)

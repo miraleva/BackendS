@@ -27,6 +27,7 @@ public class ChatCriteriaSummary {
     private LocalDate checkOutDate;
     private Integer adultCount;
     private Integer childCount;
+    private Integer infantCount;
 
     private String departureLocation;
     private String arrivalLocation;
@@ -47,6 +48,7 @@ public class ChatCriteriaSummary {
                 .checkOutDate(criteria.getCheckOutDate())
                 .adultCount(criteria.getAdultCount())
                 .childCount(criteria.getChildCount())
+                .infantCount(criteria.getInfantCount())
                 .departureLocation(criteria.getDepartureLocation())
                 .arrivalLocation(criteria.getArrivalLocation())
                 .departureDate(criteria.getDepartureDate())

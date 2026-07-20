@@ -459,6 +459,10 @@ public class ResponseAgent {
             case "childCount": return "field.childCount";
             case "çocuk yaşları":
             case "childAges": return "field.childAges";
+            case "bebek sayısı":
+            case "infantCount": return "field.infantCount";
+            case "bebek yaşları":
+            case "infantAges": return "field.infantAges";
             case "para birimi":
             case "currency": return "field.currency";
             case "kalkış noktası":

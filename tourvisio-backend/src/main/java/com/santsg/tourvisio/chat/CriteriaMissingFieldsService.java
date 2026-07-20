@@ -34,6 +34,9 @@ public class CriteriaMissingFieldsService {
             if (criteria.getChildCount()   != null
                     && criteria.getChildCount() > 0
                     && criteria.getChildAges().isEmpty())     missing.add("çocuk yaşları");
+            if (criteria.getInfantCount()  != null
+                    && criteria.getInfantCount() > 0
+                    && criteria.getInfantAges().isEmpty())    missing.add("bebek yaşları");
             if (isBlank(criteria.getCurrency()))              missing.add("para birimi");
 
         } else if ("FLIGHT_SEARCH".equals(searchType)) {

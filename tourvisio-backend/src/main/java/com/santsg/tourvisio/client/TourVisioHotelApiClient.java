@@ -325,6 +325,7 @@ public class TourVisioHotelApiClient {
                 .offerId(offerId)
                 .thumbnail(thumbnail)
                 .roomName(roomName)
+                .provider(hotel.getProvider())
                 .build();
     }
 
@@ -409,6 +410,7 @@ public class TourVisioHotelApiClient {
                 .offerId("MOCK-OFFER-001")
                 .thumbnail("https://preprod-services.tourvisio.com/media/images/product/1/57/635885402400000000/2/1/14/rixos_belek.jpg")
                 .roomName("DOUBLE ROOM")
+                .provider(2)
                 .build());
 
         hotels.add(HotelSearchResponseItem.builder()
@@ -424,6 +426,7 @@ public class TourVisioHotelApiClient {
                 .offerId("MOCK-OFFER-002")
                 .thumbnail("https://preprod-services.tourvisio.com/media/images/product/1/57/635885402400000000/2/1/14/sheraton.jpg")
                 .roomName("SUPERIOR DOUBLE")
+                .provider(2)
                 .build());
 
         hotels.add(HotelSearchResponseItem.builder()
@@ -439,6 +442,7 @@ public class TourVisioHotelApiClient {
                 .offerId("MOCK-OFFER-003")
                 .thumbnail("https://preprod-services.tourvisio.com/media/images/product/1/57/635885402400000000/2/1/14/sunpark.jpg")
                 .roomName("STANDARD ROOM")
+                .provider(2)
                 .build());
 
         return hotels;

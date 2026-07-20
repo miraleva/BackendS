@@ -82,6 +82,8 @@ public class SearchCriteriaExtractor {
             "(\\d+)\\s*(?:yetişkin|yetiskin|adult|kişi|kisi)");
     private static final Pattern CHILD_PATTERN = Pattern.compile(
             "(\\d+)\\s*(?:çocuk|cocuk|child|kids)");
+    private static final Pattern INFANT_PATTERN = Pattern.compile(
+            "(\\d+)\\s*(?:bebek|infant|infants|baby|babies)");
     private static final Pattern PASSENGER_PATTERN = Pattern.compile(
             "(\\d+)\\s*(?:yolcu|kişi|kisi|passenger|passengers|person|people|kişilik|kisilik|yetişkin|yetiskin|adult|adults)");
 
@@ -141,7 +143,13 @@ public class SearchCriteriaExtractor {
         c.setSearchType(intent);
 
         // --- NEW LOGIC FOR ITEM 5 ---
-        if (awaitingField != null && awaitingField.contains("çocuk yaş") && lower.matches("^[\\d\\s,.-]+$")) {
+        // Mesaj sadece sayılardan oluşuyorsa ve "çocuk yaşları" veya "bebek yaşları"
+        // soruluyorsa, bu sayılar yaş kabul edilir. Hangi listeye (childAges/infantAges)
+        // konduğu önemli değil — SearchCriteria.reconcileAgeBuckets() gerçek yaşa göre
+        // zaten doğru kovaya (bebek/çocuk/yetişkin) yeniden dağıtacak.
+        if (awaitingField != null
+                && (awaitingField.contains("çocuk yaş") || awaitingField.contains("bebek yaş"))
+                && lower.matches("^[\\d\\s,.-]+$")) {
             List<Integer> ages = new java.util.ArrayList<>();
             Matcher m = Pattern.compile("\\d+").matcher(lower);
             while (m.find()) {
@@ -190,6 +198,11 @@ public class SearchCriteriaExtractor {
         Matcher cm = CHILD_PATTERN.matcher(lower);
         if (cm.find())
             c.setChildCount(Integer.parseInt(cm.group(1)));
+
+        // Bebek
+        Matcher im = INFANT_PATTERN.matcher(lower);
+        if (im.find())
+            c.setInfantCount(Integer.parseInt(im.group(1)));
 
         // Tarihler (giriş & çıkış)
         extractHotelDates(lower, c, awaitingField);
