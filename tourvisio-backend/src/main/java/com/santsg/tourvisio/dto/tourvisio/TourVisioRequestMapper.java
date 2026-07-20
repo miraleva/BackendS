@@ -47,13 +47,14 @@ public class TourVisioRequestMapper {
                         .type(locationType)
                         .build();
 
-        // TourVisio'da ayrı bir "çocuk" kavramı yok; çocuklar yetişkin sayısına
-        // eklenerek gönderilir. Gerçek çocuk sayısı (gösterim için) SearchCriteria/
-        // ChatCriteriaSummary üzerinde ayrı tutulmaya devam eder, sadece TourVisio'ya
-        // giden istek buradan etkilenir.
-        int childCountForTourVisio = request.getChildAges() != null && !request.getChildAges().isEmpty()
+        // TourVisio'da ayrı bir "çocuk"/"bebek" kavramı yok; ikisi de yetişkin
+        // sayısına eklenerek gönderilir. Gerçek çocuk/bebek sayısı (gösterim için)
+        // SearchCriteria/ChatCriteriaSummary üzerinde ayrı tutulmaya devam eder,
+        // sadece TourVisio'ya giden istek buradan etkilenir.
+        int childCountForTourVisio = (request.getChildAges() != null && !request.getChildAges().isEmpty()
                 ? request.getChildAges().size()
-                : (request.getChildCount() != null ? request.getChildCount() : 0);
+                : (request.getChildCount() != null ? request.getChildCount() : 0))
+                + (request.getInfantCount() != null ? request.getInfantCount() : 0);
 
         // roomCount kadar oda oluştur (yoksa 1)
         int roomCount = request.getRoomCount() != null && request.getRoomCount() > 0
@@ -118,11 +119,13 @@ public class TourVisioRequestMapper {
                         .type(locationType)
                         .build();
 
-        // TourVisio'da ayrı bir "çocuk" kavramı yok; çocuklar yetişkin sayısına
-        // eklenerek gönderilir (gerçek çocuk sayısı gösterim için SearchCriteria'da kalır).
-        int childCountForTourVisio = criteria.getChildAges() != null && !criteria.getChildAges().isEmpty()
+        // TourVisio'da ayrı bir "çocuk"/"bebek" kavramı yok; ikisi de yetişkin
+        // sayısına eklenerek gönderilir (gerçek çocuk/bebek sayısı gösterim için
+        // SearchCriteria'da kalır).
+        int childCountForTourVisio = (criteria.getChildAges() != null && !criteria.getChildAges().isEmpty()
                 ? criteria.getChildAges().size()
-                : (criteria.getChildCount() != null ? criteria.getChildCount() : 0);
+                : (criteria.getChildCount() != null ? criteria.getChildCount() : 0))
+                + (criteria.getInfantCount() != null ? criteria.getInfantCount() : 0);
 
         // Oda kriterleri (varsayılan 1 oda)
         int roomCount = criteria.getRoomCount() != null && criteria.getRoomCount() > 0

@@ -46,4 +46,7 @@ public class HotelSearchResponseItem {
 
     /** Oda adı (örn. DOUBLE ROOM) */
     private String roomName;
+
+    /** TourVisio sağlayıcı kodu — GetProductInfo çağrısı için gerekli (ownerProvider) */
+    private Integer provider;
 }
