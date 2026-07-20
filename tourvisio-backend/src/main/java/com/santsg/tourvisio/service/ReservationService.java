@@ -76,6 +76,9 @@ public class ReservationService {
                     .email(pr.getEmail())
                     .phoneNumber(pr.getPhoneNumber())
                     .identityNumber(pr.getIdentityNumber())
+                    .birthDate(pr.getBirthDate())
+                    .gender(pr.getGender())
+                    .nationality(pr.getNationality())
                     .reservation(reservation)
                     .build();
             passengers.add(passenger);
