@@ -95,6 +95,17 @@ public class HotelSearchService {
     }
 
     /**
+     * Kullanıcı yeni bir kriter vermeden (ör. "en yakın tarih ne var") sadece
+     * yakın tarih önerisi istediğinde çağrılır. Zaten başarısız olduğu bilinen
+     * orijinal tarihi tekrar aramadan, doğrudan yakın tarihleri dener —
+     * {@link #searchFromCriteria} ile kıyasla bir gereksiz arama isteği daha az.
+     */
+    public ChatSearchResponse suggestNearbyDatesOnly(SearchCriteria criteria) {
+        Locale locale = LocaleResolver.resolveLocale(criteria);
+        return buildNoResultsResponse(criteria, locale);
+    }
+
+    /**
      * Kriterlere uygun otel bulunamadığında en yakın uygun tarihleri de
      * önererek cevap oluşturur.
      *

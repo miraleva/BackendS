@@ -33,6 +33,7 @@ public class HotelSearchRequest {
 
     private Integer childCount;
     private List<Integer> childAges;
+    private Integer infantCount;
     private Integer roomCount;
     private String nationality;
 

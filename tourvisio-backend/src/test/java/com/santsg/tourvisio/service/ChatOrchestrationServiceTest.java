@@ -81,7 +81,7 @@ class ChatOrchestrationServiceTest {
                 criteria.setAdultCount(2);
                 criteria.setCurrency("EUR");
 
-                when(extractionAgent.extract(any(), any(), any()))
+                when(extractionAgent.extract(any(), any(), any(), any()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", criteria));
 
                 when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
@@ -164,7 +164,7 @@ class ChatOrchestrationServiceTest {
                 criteria.setCheckOutDate(java.time.LocalDate.of(2026, 7, 20));
                 criteria.setCurrency("EUR");
 
-                when(extractionAgent.extract(any(), any(), any()))
+                when(extractionAgent.extract(any(), any(), any(), any()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", new SearchCriteria()));
 
                 when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
@@ -215,7 +215,7 @@ class ChatOrchestrationServiceTest {
                 criteria.setAdultCount(2);
                 criteria.setCurrency("EUR");
 
-                when(extractionAgent.extract(any(), any(), any()))
+                when(extractionAgent.extract(any(), any(), any(), any()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", new SearchCriteria()));
 
                 when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))

@@ -1,9 +1,10 @@
 package com.santsg.tourvisio.agent;
 
 import com.santsg.tourvisio.chat.SearchCriteria;
-import com.santsg.tourvisio.client.GeminiClient;
+import com.santsg.tourvisio.client.AIFallbackChain;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Component;
 
@@ -16,10 +17,11 @@ public class ResponseAgent {
 
     private static final Logger log = LoggerFactory.getLogger(ResponseAgent.class);
 
-    private final GeminiClient geminiClient;
+    /** Gemini → OpenRouter (ücretsiz) fallback zinciri. Bkz. {@code AIProviderConfig}. */
+    private final AIFallbackChain geminiClient;
     private final MessageSource messageSource;
 
-    public ResponseAgent(GeminiClient geminiClient, MessageSource messageSource) {
+    public ResponseAgent(@Qualifier("responseAiChain") AIFallbackChain geminiClient, MessageSource messageSource) {
         this.geminiClient = geminiClient;
         this.messageSource = messageSource;
     }
@@ -29,17 +31,20 @@ public class ResponseAgent {
     // ─────────────────────────────────────────────────────────────────────────
 
     public String decline(SearchCriteria criteria, boolean isTerminated) {
+        return decline(criteria, isTerminated, null);
+    }
+
+    public String decline(SearchCriteria criteria, boolean isTerminated, String userMessage) {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = resolveLanguageName(criteria);
-        String targetCountry = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "United Kingdom";
 
         String prompt = String.format(
                 "Write a polite travel assistant response declining the user's out-of-scope travel query. " +
                 "Explain politely that we can only assist with hotel search, flight search, and booking/reservations. " +
-                "Write the response in the official language of %s (%s). " +
+                "Write the response in %s — the same language the user is writing in.%s " +
                 "Context status: %s. " +
                 "Return ONLY the response itself, no extra notes or introductions.",
-                targetCountry, targetLanguage, isTerminated ? "TERMINATED" : "ACTIVE"
+                targetLanguage, userMessageClause(userMessage), isTerminated ? "TERMINATED" : "ACTIVE"
         );
 
         try {
@@ -104,15 +109,18 @@ public class ResponseAgent {
     }
 
     public String clarify(SearchCriteria criteria) {
+        return clarify(criteria, null);
+    }
+
+    public String clarify(SearchCriteria criteria, String userMessage) {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = resolveLanguageName(criteria);
-        String targetCountry = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "United Kingdom";
 
         String prompt = String.format(
                 "Write a polite travel assistant question asking the user whether they would like to search for a hotel or a flight ticket. " +
-                "Write the response in the official language of %s (%s). " +
+                "Write the response in %s — the same language the user is writing in.%s " +
                 "Return ONLY the question itself, no extra notes.",
-                targetCountry, targetLanguage
+                targetLanguage, userMessageClause(userMessage)
         );
 
         try {
@@ -128,18 +136,21 @@ public class ResponseAgent {
     }
 
     public String askMissing(List<String> missingFields, SearchCriteria criteria) {
+        return askMissing(missingFields, criteria, null);
+    }
+
+    public String askMissing(List<String> missingFields, SearchCriteria criteria, String userMessage) {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = resolveLanguageName(criteria);
-        String targetCountry = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "United Kingdom";
 
         String fieldsCsv = String.join(", ", missingFields);
         String prompt = String.format(
                 "The user is planning a trip, but the following mandatory search criteria are missing: [%s]. " +
                 "Ask the user for ALL of this information together in a single, friendly, and natural question. " +
                 "Do NOT use bare technical terms (e.g., say 'How many people will be traveling?' instead of 'adult count'). " +
-                "Write the question in the official language of %s (%s). " +
+                "Write the question in %s — the same language the user is writing in.%s " +
                 "Return ONLY the question itself, no extra notes.",
-                fieldsCsv, targetCountry, targetLanguage
+                fieldsCsv, targetLanguage, userMessageClause(userMessage)
         );
 
         try {
@@ -173,7 +184,6 @@ public class ResponseAgent {
     public String summarize(String intent, String resultsJson, String defaultReply, SearchCriteria criteria, String userMessage, int totalResults, int shownResults) {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = resolveLanguageName(criteria);
-        String targetCountry = (criteria != null && criteria.getCountry() != null) ? criteria.getCountry() : "United Kingdom";
 
         String childNote = "";
         if (criteria != null && criteria.getChildCount() != null && criteria.getChildCount() > 0) {
@@ -195,11 +205,11 @@ public class ResponseAgent {
                 "Do NOT use terse lists like 'En iyi teklif: X'. Instead, write 1-2 natural sentences per top recommendation. " +
                 "Include the following context naturally in your response:\n%s%s\n\n" +
                 "IMPORTANT RULES:\n" +
-                "1. Write the response in the official language of %s (%s).\n" +
+                "1. Write the response in %s — the same language the user is writing in.%s\n" +
                 "2. Only mention facts from the provided JSON results.\n" +
                 "3. Never invent nicer names for raw system/sandbox data (e.g. if the room name is 'low level yerel dil' or 'BUILD131', present it exactly as is without fabricating a nicer name).\n" +
                 "4. Return ONLY the assistant's summary response, with no notes or extra text.",
-                intent, resultsJson, countNote, childNote, targetCountry, targetLanguage
+                intent, resultsJson, countNote, childNote, targetLanguage, userMessageClause(userMessage)
         );
 
         try {
@@ -219,19 +229,24 @@ public class ResponseAgent {
     }
 
     public String confirmSelection(Object selectedItem, SearchCriteria criteria) {
+        return confirmSelection(selectedItem, criteria, null);
+    }
+
+    public String confirmSelection(Object selectedItem, SearchCriteria criteria, String userMessage) {
         Locale locale = resolveLocale(criteria);
+        String targetLanguage = resolveLanguageName(criteria);
         String itemName = "";
         if (selectedItem instanceof com.santsg.tourvisio.dto.HotelSearchResponseItem) {
             itemName = ((com.santsg.tourvisio.dto.HotelSearchResponseItem) selectedItem).getName();
         } else if (selectedItem instanceof com.santsg.tourvisio.dto.FlightSearchResponseItem) {
             itemName = ((com.santsg.tourvisio.dto.FlightSearchResponseItem) selectedItem).getAirline() + " flight";
         }
-        
+
         String prompt = String.format(
             "You are a helpful travel assistant. The user has selected '%s' from the search results. " +
             "Please ask them politely if they would like to proceed with booking this option. " +
-            "Ensure the response is natural and written in %s.",
-            itemName, locale.getDisplayLanguage(Locale.ENGLISH));
+            "Ensure the response is natural and written in %s — the same language the user is writing in.%s",
+            itemName, targetLanguage, userMessageClause(userMessage));
             
         try {
             String aiResponse = geminiClient.generate(prompt);
@@ -396,6 +411,19 @@ public class ResponseAgent {
         return date != null ? date.format(DISPLAY_DATE_FORMAT) : "?";
     }
 
+    /**
+     * Prompt'a kullanıcının ham mesajını ekleyerek dil talimatını somutlaştırır.
+     * Sadece "hedef dil" adını söylemek (özellikle küçük/ücretsiz modellerde)
+     * yetersiz kalabiliyor; mesajın kendisini de göstermek modelin doğru dili
+     * seçmesini büyük ölçüde güçlendiriyor.
+     */
+    private String userMessageClause(String userMessage) {
+        if (userMessage == null || userMessage.isBlank()) {
+            return "";
+        }
+        return " The user's exact message was: \"" + userMessage.replace("\"", "\\\"") + "\".";
+    }
+
     private boolean isValidResponse(String response) {
         return response != null 
                 && !response.trim().isEmpty() 
@@ -431,6 +459,10 @@ public class ResponseAgent {
             case "childCount": return "field.childCount";
             case "çocuk yaşları":
             case "childAges": return "field.childAges";
+            case "bebek sayısı":
+            case "infantCount": return "field.infantCount";
+            case "bebek yaşları":
+            case "infantAges": return "field.infantAges";
             case "para birimi":
             case "currency": return "field.currency";
             case "kalkış noktası":
