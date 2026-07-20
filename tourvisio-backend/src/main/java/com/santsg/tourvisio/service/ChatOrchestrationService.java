@@ -137,18 +137,18 @@ public class ChatOrchestrationService {
         }
         sessionStore.save(sessionId, existingCriteria);
 
+        String userMessage = request.getMessage();
+
         // 2. Oturum sonlandırılmışsa erken çık
         if ("TERMINATED".equals(sessionState.getChatStatus())) {
             return ChatResponse.builder()
-                    .reply(responseAgent.decline(existingCriteria, true))
+                    .reply(responseAgent.decline(existingCriteria, true, userMessage))
                     .sessionId(sessionId)
                     .searchType("OUT_OF_SCOPE")
                     .missingFields(List.of())
                     .chatStatus("TERMINATED")
                     .build();
         }
-
-        String userMessage = request.getMessage();
 
         // 2.5 AWAITING_CONFIRM mode check
         if ("AWAITING_CONFIRM".equals(sessionState.getMode()) && sessionState.getLastShownResults() != null) {
@@ -158,7 +158,7 @@ public class ChatOrchestrationService {
                 sessionState.setMode("BOOKING");
                 sessionState.setSelectedItem(matchedItem);
 
-                String confirmReply = responseAgent.confirmSelection(matchedItem, existingCriteria);
+                String confirmReply = responseAgent.confirmSelection(matchedItem, existingCriteria, userMessage);
                 return ChatResponse.builder()
                         .reply(confirmReply)
                         .sessionId(sessionId)
@@ -203,8 +203,8 @@ public class ChatOrchestrationService {
         // Try extracting via AI Agent first
         try {
             String currentIntent = hasActiveSearch ? existingCriteria.getSearchType() : null;
-            extractionResult = extractionAgent.extract(userMessage, currentIntent,
-                    sessionState.getLastRequestedField());
+            extractionResult = extractionAgent.extract(userMessage, currentIntent, sessionState.getLastRequestedField(),
+                    hasActiveSearch ? existingCriteria : null);
         } catch (Exception e) {
             log.warn("[Orchestration] ExtractionAgent failed or mocked, falling back to rule-based: {}",
                     e.getMessage());
@@ -230,7 +230,7 @@ public class ChatOrchestrationService {
                 sessionState.incrementOutOfScopeCount();
                 String chatStatus = sessionState.getChatStatus();
                 return ChatResponse.builder()
-                        .reply(responseAgent.decline(existingCriteria, "TERMINATED".equals(chatStatus)))
+                        .reply(responseAgent.decline(existingCriteria, "TERMINATED".equals(chatStatus), userMessage))
                         .sessionId(sessionId)
                         .searchType("OUT_OF_SCOPE")
                         .missingFields(List.of())
@@ -251,7 +251,7 @@ public class ChatOrchestrationService {
                             .build();
                 }
                 return ChatResponse.builder()
-                        .reply(responseAgent.clarify(existingCriteria))
+                        .reply(responseAgent.clarify(existingCriteria, userMessage))
                         .sessionId(sessionId)
                         .searchType("UNKNOWN")
                         .missingFields(List.of())
@@ -269,6 +269,11 @@ public class ChatOrchestrationService {
 
         // 6. Yeni kriterler önceki session kriterleri üzerine birleştir
         existingCriteria.mergeWith(incoming);
+        // Bebek/çocuk/yetişkin yaş yeniden-sınıflandırma notu varsa bir kez tüketilir
+        // (aşağıdaki cevaplardan hangisi dönerse ona eklenir), tekrar gösterilmemesi
+        // için criteria üzerinden temizlenir.
+        String reclassificationNote = existingCriteria.getReclassificationNote();
+        existingCriteria.setReclassificationNote(null);
         sessionStore.save(sessionId, existingCriteria);
 
         log.debug("[Orchestration] Birleştirilmiş kriterler: {}", existingCriteria);
@@ -301,7 +306,8 @@ public class ChatOrchestrationService {
 
         if (!missingFields.isEmpty()) {
             sessionState.setLastRequestedField(String.join(", ", missingFields));
-            String replyText = responseAgent.askMissing(missingFields, existingCriteria);
+            String replyText = responseAgent.askMissing(missingFields, existingCriteria, userMessage);
+            replyText = prependNote(reclassificationNote, replyText);
             return ChatResponse.builder()
                     .reply(replyText)
                     .sessionId(sessionId)
@@ -312,14 +318,62 @@ public class ChatOrchestrationService {
                     .build();
         }
 
+        // 8.5 Kullanıcı yeni bir kriter vermeden (ör. "en yakın tarih ne var") sadece
+        // yakın tarih önerisi istiyor ve son arama zaten sonuçsuz kaldıysa, aynı
+        // (başarısız olduğu zaten bilinen) tarihi tekrar aramadan doğrudan yakın
+        // tarihlere bakıyoruz — bir gereksiz arama isteği daha az, daha hızlı cevap.
+        if (sessionState.isLastSearchHadNoResults() && hasNoNewSearchCriteria(incoming)) {
+            ChatSearchResponse nearbyResponse = null;
+            if ("HOTEL_SEARCH".equals(intent)) {
+                nearbyResponse = hotelSearchService.suggestNearbyDatesOnly(existingCriteria);
+            } else if ("FLIGHT_SEARCH".equals(intent)) {
+                nearbyResponse = flightSearchService.suggestNearbyDatesOnly(existingCriteria);
+            }
+            if (nearbyResponse != null) {
+                return ChatResponse.builder()
+                        .reply(prependNote(reclassificationNote, nearbyResponse.getReply()))
+                        .sessionId(sessionId)
+                        .searchType(intent)
+                        .missingFields(List.of())
+                        .chatStatus("ACTIVE")
+                        .success(false)
+                        .results(List.of())
+                        .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(existingCriteria))
+                        .build();
+            }
+        }
+
         // 9. Tüm bilgiler tamam → arama servisine yönlendir
-        return readyToSearchResponse(sessionId, intent, existingCriteria, userMessage);
+        return readyToSearchResponse(sessionId, intent, existingCriteria, userMessage, reclassificationNote);
+    }
+
+    /**
+     * Bebek/çocuk/yetişkin yeniden-sınıflandırma notu varsa cevabın başına ekler.
+     */
+    private String prependNote(String note, String reply) {
+        if (note == null || note.isBlank()) {
+            return reply;
+        }
+        return (reply == null || reply.isBlank()) ? note : note + "\n\n" + reply;
     }
 
     private void adjustIncomingCriteria(SearchCriteria incoming, String lastField, String message) {
         if (incoming == null || lastField == null || message == null || message.isBlank()) {
             return;
         }
+
+        // "giriş tarihi, çıkış tarihi" gibi birden fazla tarih alanı aynı anda
+        // soruluyorken, extractor.extract() (etiket-farkında, "giriş"/"çıkış"
+        // gibi kelimeleri tanır) bu mesajdan zaten BİR tarihi doğru alana
+        // atamış olabilir (örn. "giriş 28 temmuz" → checkInDate). Aşağıdaki
+        // etiketsiz (bare) "parseSingleDate" yedek mantığı bunu bilmeden aynı
+        // tarihi diğer alana da (çıkış) atayıp, üstüne doğru atanmış olanı
+        // sıfırlayabiliyordu. Bu yüzden, etiketli çıkarım bu mesajdan zaten
+        // bir tarih bulduysa, etiketsiz yedek mantığı hiç çalıştırmıyoruz.
+        boolean hotelDateAlreadyResolvedByLabel = incoming.getCheckInDate() != null
+                || incoming.getCheckOutDate() != null;
+        boolean flightDateAlreadyResolvedByLabel = incoming.getDepartureDate() != null
+                || incoming.getReturnDate() != null;
 
         String[] fields = lastField.split(",\\s*");
         for (String field : fields) {
@@ -343,47 +397,27 @@ public class ChatOrchestrationService {
                     break;
 
                 case "giriş tarihi":
-                    if (incoming.getCheckInDate() == null) {
-                        java.time.LocalDate d = extractor.parseSingleDate(message);
-                        if (d == null && incoming.getCheckOutDate() != null) {
-                            d = incoming.getCheckOutDate();
-                            incoming.setCheckOutDate(null);
-                        }
-                        incoming.setCheckInDate(d);
+                    if (incoming.getCheckInDate() == null && !hotelDateAlreadyResolvedByLabel) {
+                        incoming.setCheckInDate(extractor.parseSingleDate(message));
                     }
                     break;
 
                 case "çıkış tarihi":
-                    if (incoming.getCheckOutDate() == null) {
-                        java.time.LocalDate d = extractor.parseSingleDate(message);
-                        if (d == null && incoming.getCheckInDate() != null) {
-                            d = incoming.getCheckInDate();
-                        }
-                        incoming.setCheckOutDate(d);
+                    if (incoming.getCheckOutDate() == null && !hotelDateAlreadyResolvedByLabel) {
+                        incoming.setCheckOutDate(extractor.parseSingleDate(message));
                     }
-                    incoming.setCheckInDate(null);
                     break;
 
                 case "gidiş tarihi":
-                    if (incoming.getDepartureDate() == null) {
-                        java.time.LocalDate d = extractor.parseSingleDate(message);
-                        if (d == null && incoming.getReturnDate() != null) {
-                            d = incoming.getReturnDate();
-                            incoming.setReturnDate(null);
-                        }
-                        incoming.setDepartureDate(d);
+                    if (incoming.getDepartureDate() == null && !flightDateAlreadyResolvedByLabel) {
+                        incoming.setDepartureDate(extractor.parseSingleDate(message));
                     }
                     break;
 
                 case "dönüş tarihi":
-                    if (incoming.getReturnDate() == null) {
-                        java.time.LocalDate d = extractor.parseSingleDate(message);
-                        if (d == null && incoming.getDepartureDate() != null) {
-                            d = incoming.getDepartureDate();
-                        }
-                        incoming.setReturnDate(d);
+                    if (incoming.getReturnDate() == null && !flightDateAlreadyResolvedByLabel) {
+                        incoming.setReturnDate(extractor.parseSingleDate(message));
                     }
-                    incoming.setDepartureDate(null);
                     break;
 
                 case "yetişkin sayısı":
@@ -419,6 +453,24 @@ public class ChatOrchestrationService {
                 case "çocuk yaşları":
                     if (incoming.getChildAges() == null || incoming.getChildAges().isEmpty()) {
                         incoming.setChildAges(parseChildAges(message));
+                    }
+                    break;
+
+                case "bebek sayısı":
+                    if (incoming.getInfantCount() == null || incoming.getInfantCount() == 0) {
+                        Integer infants = parseCountWithLabel(message, INFANT_COUNT_LABEL_PATTERN);
+                        if (infants != null) {
+                            incoming.setInfantCount(infants);
+                        }
+                    }
+                    break;
+
+                case "bebek yaşları":
+                    // Hangi listeye (infantAges/childAges) yazıldığı önemli değil —
+                    // SearchCriteria.reconcileAgeBuckets() gerçek yaşa göre zaten
+                    // doğru kovaya taşıyacak.
+                    if (incoming.getInfantAges() == null || incoming.getInfantAges().isEmpty()) {
+                        incoming.setInfantAges(parseChildAges(message));
                     }
                     break;
 
@@ -465,9 +517,12 @@ public class ChatOrchestrationService {
             "(\\d{1,2})\\s*(?:oda|room|rooms)", java.util.regex.Pattern.CASE_INSENSITIVE);
     private static final java.util.regex.Pattern CHILD_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
             "(\\d{1,2})\\s*(?:çocuk|cocuk|child|children|kids)", java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern INFANT_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
+            "(\\d{1,2})\\s*(?:bebek|infant|infants|baby|babies)", java.util.regex.Pattern.CASE_INSENSITIVE);
 
     private Integer parseCountWithLabel(String message, java.util.regex.Pattern labelPattern) {
-        if (message == null) return null;
+        if (message == null)
+            return null;
 
         java.util.regex.Matcher labelMatcher = labelPattern.matcher(message);
         if (labelMatcher.find()) {
@@ -509,11 +564,13 @@ public class ChatOrchestrationService {
 
     private List<Integer> parseChildAges(String message) {
         List<Integer> ages = new java.util.ArrayList<>();
-        if (message == null) return ages;
+        if (message == null)
+            return ages;
 
         java.util.regex.Matcher clauseMatcher = CHILD_AGE_CLAUSE_PATTERN.matcher(message);
         while (clauseMatcher.find()) {
-            java.util.regex.Matcher numMatcher = java.util.regex.Pattern.compile("\\d{1,2}").matcher(clauseMatcher.group(1));
+            java.util.regex.Matcher numMatcher = java.util.regex.Pattern.compile("\\d{1,2}")
+                    .matcher(clauseMatcher.group(1));
             while (numMatcher.find()) {
                 ages.add(Integer.parseInt(numMatcher.group()));
             }
@@ -523,7 +580,8 @@ public class ChatOrchestrationService {
         }
 
         // Yaş belirteci bulunamadı; mesaj sadece sayılardan/ayraçlardan oluşuyorsa
-        // (örn. kullanıcı doğrudan "5" ya da "5, 8" yazdıysa) tüm sayıları yaş kabul et.
+        // (örn. kullanıcı doğrudan "5" ya da "5, 8" yazdıysa) tüm sayıları yaş kabul
+        // et.
         if (message.trim().matches("^[\\d\\s,.-]+$")) {
             return parseIntegerList(message);
         }
@@ -654,21 +712,8 @@ public class ChatOrchestrationService {
         sessionState.setResultOffset(newOffset);
         sessionState.setLastShownResults(slicedResults);
 
-        String finalReply;
-        try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            int shownResults = slicedResults.size();
-            String resultsJson = mapper.writeValueAsString(slicedResults);
-
-            // Re-use summarize, pass the new batch
-            finalReply = responseAgent.summarize(intent, resultsJson, "Here are the next options:", criteria,
-                    userMessage, totalSize, shownResults);
-        } catch (Exception e) {
-            log.warn("[Orchestration] Pagination AI summarize failed: {}", e.getMessage());
-            int shownResults = slicedResults.size();
-            finalReply = responseAgent.summarize(intent, "[]", "Here are the next options:", criteria, userMessage,
-                    totalSize, shownResults);
-        }
+        // Sonuçlar zaten kart olarak gösteriliyor — ayrıca metin özeti yazdırmıyoruz.
+        String finalReply = "";
 
         return ChatResponse.builder()
                 .reply(finalReply)
@@ -687,7 +732,8 @@ public class ChatOrchestrationService {
     private ChatResponse readyToSearchResponse(String sessionId,
             String intent,
             SearchCriteria criteria,
-            String userMessage) {
+            String userMessage,
+            String reclassificationNote) {
 
         log.info(
                 "[Orchestration] Executing Search to TourVisio API with Final Criteria: Location={}, CheckIn={}, CheckOut={}, Adults={}, Children={}, ChildAges={}",
@@ -713,12 +759,12 @@ public class ChatOrchestrationService {
         }
 
         String finalReply = searchResponse.getReply();
+        ChatSessionManager.SessionState sessionState = chatSessionManager.getSessionState(sessionId);
 
         // AI ile arama sonuçlarını özetleme
         if (searchResponse.isSuccess() && searchResponse.getResults() != null
                 && !searchResponse.getResults().isEmpty()) {
 
-            ChatSessionManager.SessionState sessionState = chatSessionManager.getSessionState(sessionId);
             List<?> fullResults = searchResponse.getResults();
             List<?> slicedResults = fullResults;
 
@@ -727,6 +773,7 @@ public class ChatOrchestrationService {
                 sessionState.setMode("AWAITING_CONFIRM");
                 sessionState.setAllSearchResults(fullResults);
                 sessionState.setResultOffset(0);
+                sessionState.setLastSearchHadNoResults(false);
 
                 int totalSize = fullResults.size();
                 slicedResults = fullResults.subList(0, Math.min(10, totalSize));
@@ -739,25 +786,17 @@ public class ChatOrchestrationService {
             // Set sliced results onto the response
             searchResponse.setResults((List) slicedResults);
 
-            try {
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                int totalResults = fullResults.size();
-                int shownResults = slicedResults.size();
-                String resultsJson = mapper.writeValueAsString(slicedResults);
-
-                finalReply = responseAgent.summarize(intent, resultsJson, searchResponse.getReply(), criteria,
-                        userMessage, totalResults, shownResults);
-            } catch (Exception e) {
-                log.warn("[Orchestration] Arama sonuçları AI ile özetlenemedi, varsayılan cevaba dönülüyor: {}",
-                        e.getMessage());
-                int totalResults = fullResults.size();
-                int shownResults = slicedResults.size();
-                finalReply = responseAgent.summarize(intent, "[]", searchResponse.getReply(), criteria, userMessage,
-                        totalResults, shownResults);
-            }
+            // Sonuçlar zaten kart olarak gösteriliyor — ayrıca metin özeti yazdırmıyoruz
+            // (AI çağrısı da atlanmış oluyor: daha hızlı yanıt, daha az kota kullanımı).
+            finalReply = "";
         } else {
+            if (sessionState != null) {
+                sessionState.setLastSearchHadNoResults(true);
+            }
             finalReply = responseAgent.noResultsFound(criteria, userMessage, searchResponse.getSuggestedDates());
         }
+
+        finalReply = prependNote(reclassificationNote, finalReply);
 
         return ChatResponse.builder()
                 .reply(finalReply)
@@ -769,6 +808,30 @@ public class ChatOrchestrationService {
                 .results(searchResponse.getResults())
                 .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(criteria))
                 .build();
+    }
+
+    /**
+     * Bu mesajdan (adjustIncomingCriteria sonrası) hiçbir yeni arama bilgisi
+     * çıkarılmadı mı? "en yakın tarih ne var" gibi salt soru niteliğindeki
+     * mesajlarda true döner — bu durumda üst katman aynı aramayı tekrarlamak
+     * yerine doğrudan yakın tarih önerisine geçebilir.
+     */
+    private boolean hasNoNewSearchCriteria(SearchCriteria incoming) {
+        if (incoming == null)
+            return true;
+        return incoming.getLocationOrHotelName() == null
+                && incoming.getCheckInDate() == null
+                && incoming.getCheckOutDate() == null
+                && incoming.getAdultCount() == null
+                && (incoming.getChildCount() == null || incoming.getChildCount() == 0)
+                && (incoming.getChildAges() == null || incoming.getChildAges().isEmpty())
+                && incoming.getDepartureLocation() == null
+                && incoming.getArrivalLocation() == null
+                && incoming.getDepartureDate() == null
+                && incoming.getReturnDate() == null
+                && incoming.getPassengerCount() == null
+                && incoming.getTripType() == null
+                && incoming.getRoomCount() == null;
     }
 
     private String resolveSessionId(String sessionId) {

@@ -43,8 +43,18 @@ public class SearchCriteria {
     private Integer adultCount;
     private Integer childCount = 0;
     private List<Integer> childAges = new ArrayList<>();
+    private Integer infantCount = 0;
+    private List<Integer> infantAges = new ArrayList<>();
     private String nationality = "TR";
     private Integer roomCount = 1;
+
+    /**
+     * Yaşa göre bebek/çocuk/yetişkin sınıflandırması değiştiğinde (ör.
+     * kullanıcı "2 bebek" dedi ama yaşları 2 ve 3 çıktı → biri gerçekte
+     * çocuk) burada oluşan açıklama metni tutulur; tek seferlik bilgi
+     * amaçlıdır, cevaba eklenip tüketilir.
+     */
+    private transient String reclassificationNote;
 
     // ── Uçak ─────────────────────────────────────────────────────────────────
     private String departureLocation;
@@ -97,6 +107,13 @@ public class SearchCriteria {
         } else if (incoming.getChildCount() != null && incoming.getChildCount() > 0) {
             this.childCount = incoming.getChildCount();
         }
+        // Bebek — aynı mantık çocukla birebir aynı.
+        if (incoming.getInfantAges() != null && !incoming.getInfantAges().isEmpty()) {
+            this.infantAges = incoming.getInfantAges();
+            this.infantCount = incoming.getInfantAges().size();
+        } else if (incoming.getInfantCount() != null && incoming.getInfantCount() > 0) {
+            this.infantCount = incoming.getInfantCount();
+        }
         if (incoming.getNationality() != null)
             this.nationality = incoming.getNationality();
         if (incoming.getRoomCount() != null)
@@ -115,6 +132,67 @@ public class SearchCriteria {
             this.passengerCount = incoming.getPassengerCount();
         if (incoming.getTripType() != null)
             this.tripType = incoming.getTripType();
+
+        reconcileAgeBuckets();
+    }
+
+    /**
+     * Bebek (0-2 yaş), çocuk (3-12 yaş) ve yetişkin (12 yaş üstü) sınırlarına
+     * göre, o ana kadar toplanmış TÜM yaşları (hem "çocuk" hem "bebek" olarak
+     * bildirilmiş olsun fark etmez) gerçek yaşlarına göre yeniden dağıtır.
+     *
+     * <p>Kullanıcı "2 bebek" deyip yaşlarını "2 ve 3" olarak verirse, ya da
+     * "2 çocuk" deyip yaşlarını "8 ve 13" olarak verirse, burada gerçek yaşa
+     * göre doğru kovaya (bebek/çocuk/yetişkin) taşınır ve neden taşındığını
+     * açıklayan bir not ({@link #reclassificationNote}) üretilir.</p>
+     */
+    private void reconcileAgeBuckets() {
+        List<Integer> allAges = new ArrayList<>();
+        if (this.infantAges != null) allAges.addAll(this.infantAges);
+        if (this.childAges != null) allAges.addAll(this.childAges);
+        if (allAges.isEmpty()) {
+            return;
+        }
+
+        // Yaşı henüz bilinmeyen (sadece sayı söylenmiş, yaş sorusu hâlâ bekleniyor
+        // olabilecek) bebek/çocuk sayısı — bunlar aşağıda yaşa göre yeniden
+        // dağıtılan listelere dahil değildir, o yüzden sayı hesaplanırken korunmalı.
+        int prevInfantAgesKnown = this.infantAges != null ? this.infantAges.size() : 0;
+        int prevChildAgesKnown = this.childAges != null ? this.childAges.size() : 0;
+        int infantsWithoutKnownAge = Math.max(0,
+                (this.infantCount != null ? this.infantCount : 0) - prevInfantAgesKnown);
+        int childrenWithoutKnownAge = Math.max(0,
+                (this.childCount != null ? this.childCount : 0) - prevChildAgesKnown);
+
+        List<Integer> newInfantAges = new ArrayList<>();
+        List<Integer> newChildAges = new ArrayList<>();
+        int movedToAdult = 0;
+        for (Integer age : allAges) {
+            if (age == null) continue;
+            if (age <= 2) newInfantAges.add(age);
+            else if (age <= 12) newChildAges.add(age);
+            else movedToAdult++;
+        }
+
+        boolean changed = newInfantAges.size() != prevInfantAgesKnown
+                || newChildAges.size() != prevChildAgesKnown
+                || movedToAdult > 0;
+
+        if (changed) {
+            List<String> parts = new ArrayList<>();
+            if (!newInfantAges.isEmpty()) parts.add(newInfantAges.size() + " bebek (0-2 yaş)");
+            if (!newChildAges.isEmpty()) parts.add(newChildAges.size() + " çocuk (3-12 yaş)");
+            if (movedToAdult > 0) parts.add(movedToAdult + " yetişkin (12 yaş üstü, yaşa göre yetişkin sayıldı)");
+            this.reclassificationNote = "Belirttiğiniz yaşlara göre: " + String.join(", ", parts) + ".";
+        }
+
+        this.infantAges = newInfantAges;
+        this.infantCount = newInfantAges.size() + infantsWithoutKnownAge;
+        this.childAges = newChildAges;
+        this.childCount = newChildAges.size() + childrenWithoutKnownAge;
+        if (movedToAdult > 0) {
+            this.adultCount = (this.adultCount != null ? this.adultCount : 0) + movedToAdult;
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -138,6 +216,7 @@ public class SearchCriteria {
         req.setChildCount(childCount);
         req.setCurrency(currency);
         req.setChildAges(childAges);
+        req.setInfantCount(infantCount);
         req.setRoomCount(roomCount);
         req.setNationality(nationality);
         return req;
