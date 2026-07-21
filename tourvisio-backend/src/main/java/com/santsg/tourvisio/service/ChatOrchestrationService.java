@@ -267,6 +267,11 @@ public class ChatOrchestrationService {
         }
 
         // 6. Yeni kriterler önceki session kriterleri üzerine birleştir
+        // Merge öncesi bir anlık görüntü (snapshot) alınıyor — aşağıda validasyon
+        // başarısız olursa oturumu buna geri döndürüyoruz (rollback). Aksi hâlde
+        // reddedilen bir deneme (ör. "4 yetişkin 3 çocuk 2 bebek") bile kalıcı
+        // olarak yazılıp sonraki turlarda "hayalet" kriter olarak sızmaya devam ederdi.
+        SearchCriteria beforeMerge = existingCriteria.copy();
         existingCriteria.mergeWith(incoming);
         applyExclusiveGuestCountOverride(existingCriteria, userMessage);
         // Bebek/çocuk/yetişkin yaş yeniden-sınıflandırma notu varsa bir kez tüketilir
@@ -274,7 +279,6 @@ public class ChatOrchestrationService {
         // için criteria üzerinden temizlenir.
         String reclassificationNote = existingCriteria.getReclassificationNote();
         existingCriteria.setReclassificationNote(null);
-        sessionStore.save(sessionId, existingCriteria);
 
         log.debug("[Orchestration] Birleştirilmiş kriterler: {}", existingCriteria);
 
@@ -291,8 +295,11 @@ public class ChatOrchestrationService {
                     || "TOO_MANY_PASSENGERS".equals(errorType) || "TOO_MANY_ROOMS".equals(errorType)) {
                 replyText = responseAgent.invalidGuestCount(errorType, existingCriteria);
             }
-            
+
             if (!replyText.isEmpty()) {
+                // Rollback: geçersiz güncelleme oturuma hiç yazılmıyor, merge öncesi
+                // hâl korunuyor.
+                sessionStore.save(sessionId, beforeMerge);
                 return ChatResponse.builder()
                         .reply(replyText)
                         .sessionId(sessionId)
@@ -303,6 +310,9 @@ public class ChatOrchestrationService {
                         .build();
             }
         }
+
+        // Kriterler geçerli — artık kalıcı olarak yazılabilir.
+        sessionStore.save(sessionId, existingCriteria);
 
         // 8. Eksik alan kontrolü
         List<String> missingFields = missingFieldsService.getMissingFields(existingCriteria);
@@ -362,6 +372,16 @@ public class ChatOrchestrationService {
             java.util.regex.Pattern.CASE_INSENSITIVE);
     private static final java.util.regex.Pattern MENTIONS_CHILD_OR_INFANT = java.util.regex.Pattern.compile(
             "çocuk|cocuk|child|children|kid|bebek|infant|baby|babies", java.util.regex.Pattern.CASE_INSENSITIVE);
+    // "bebek ve çocuk yok", "yok ki çocuk", "çocuksuz" gibi olumsuzlama ifadeleri —
+    // bunlar çocuk/bebek kelimesi geçse bile aslında onları HARİÇ TUTMA niyetini
+    // gösterir, dahil etme değil.
+    private static final java.util.regex.Pattern NEGATED_CHILD_OR_INFANT_PATTERN = java.util.regex.Pattern.compile(
+            "(?:çocuk|cocuk|bebek)\\w*.{0,25}?\\byok\\w*\\b"
+                    + "|\\byok\\w*\\b.{0,25}?(?:çocuk|cocuk|bebek)\\w*"
+                    + "|(?:çocuk|cocuk|bebek)(?:suz|siz)\\w*"
+                    + "|\\bno\\s+(?:child|children|kid|infant|baby|babies)\\b"
+                    + "|\\bwithout\\s+(?:child|children|kid|infant|baby|babies)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL);
 
     private void applyExclusiveGuestCountOverride(SearchCriteria criteria, String userMessage) {
         if (criteria == null || userMessage == null || userMessage.isBlank()) return;
@@ -370,8 +390,13 @@ public class ChatOrchestrationService {
         java.util.regex.Matcher matcher = EXCLUSIVE_GUEST_PATTERN.matcher(userMessage);
         if (!matcher.find()) return;
         // "sadece 2 yetişkin ve 1 çocukla" gibi mesajlarda çocuk/bebek hâlâ isteniyor
-        // olabilir — o durumda dokunmuyoruz, sadece gerçekten hariç tutulduğunda sıfırlıyoruz.
-        if (MENTIONS_CHILD_OR_INFANT.matcher(userMessage).find()) return;
+        // olabilir — o durumda dokunmuyoruz. Ama "bebek ve çocuk yok" gibi açıkça
+        // olumsuzlanmış bir mention varsa, bu zaten hariç tutma niyeti demektir,
+        // sıfırlamayı engellememeli.
+        if (MENTIONS_CHILD_OR_INFANT.matcher(userMessage).find()
+                && !NEGATED_CHILD_OR_INFANT_PATTERN.matcher(userMessage).find()) {
+            return;
+        }
 
         criteria.setAdultCount(Integer.parseInt(matcher.group(1)));
         criteria.setChildCount(0);

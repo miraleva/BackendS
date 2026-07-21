@@ -66,6 +66,41 @@ public class SearchCriteria {
     private String tripType;
 
     // ──────────────────────────────────────────────────────────────────────────
+    // Copy helper
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Bu kriterlerin bağımsız bir kopyasını döner — merge/validasyon denemesi
+     * başarısız olursa oturumu bu kopyaya geri döndürebilmek (rollback) için
+     * kullanılır; aksi hâlde reddedilen bir güncelleme bile kalıcı olarak
+     * yazılmış olurdu (bkz. {@code ChatOrchestrationService}).
+     */
+    public SearchCriteria copy() {
+        SearchCriteria c = new SearchCriteria();
+        c.searchType = this.searchType;
+        c.currency = this.currency;
+        c.preferredLanguage = this.preferredLanguage;
+        c.country = this.country;
+        c.locationOrHotelName = this.locationOrHotelName;
+        c.checkInDate = this.checkInDate;
+        c.checkOutDate = this.checkOutDate;
+        c.adultCount = this.adultCount;
+        c.childCount = this.childCount;
+        c.childAges = this.childAges != null ? new ArrayList<>(this.childAges) : new ArrayList<>();
+        c.infantCount = this.infantCount;
+        c.infantAges = this.infantAges != null ? new ArrayList<>(this.infantAges) : new ArrayList<>();
+        c.nationality = this.nationality;
+        c.roomCount = this.roomCount;
+        c.departureLocation = this.departureLocation;
+        c.arrivalLocation = this.arrivalLocation;
+        c.departureDate = this.departureDate;
+        c.returnDate = this.returnDate;
+        c.passengerCount = this.passengerCount;
+        c.tripType = this.tripType;
+        return c;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // Merge helper
     // ──────────────────────────────────────────────────────────────────────────
 
