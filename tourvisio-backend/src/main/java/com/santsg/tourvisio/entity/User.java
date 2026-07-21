@@ -31,23 +31,28 @@ public class User {
     @Column(nullable = false, unique = true, length = 100)
     private String email;
 
-    @Column(nullable = false, unique = true, length = 16)
+    @Column(name = "phone", unique = true, nullable = true, length = 16)
     private String phone;
 
-    @Column(nullable = false)
+    @Column(name = "password", nullable = true)
     private String password;
 
-    @Column(length = 100)
+    @Column(name = "country", nullable = true, length = 100)
     private String country;
 
-    @Column(length = 20)
+    @Column(name = "gender", nullable = true, length = 20)
     private String gender;
 
-    @Column(name = "date_of_birth")
+    @Column(name = "date_of_birth", nullable = true)
     private LocalDate dateOfBirth;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    /** Authentication provider: LOCAL, GOOGLE */
+    @Column(name = "auth_provider", nullable = true, length = 20)
+    @Builder.Default
+    private String authProvider = "LOCAL";
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
@@ -58,3 +63,4 @@ public class User {
         this.createdAt = Instant.now();
     }
 }
+
