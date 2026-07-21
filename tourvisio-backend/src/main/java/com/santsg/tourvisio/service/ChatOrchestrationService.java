@@ -273,6 +273,7 @@ public class ChatOrchestrationService {
         // olarak yazılıp sonraki turlarda "hayalet" kriter olarak sızmaya devam ederdi.
         SearchCriteria beforeMerge = existingCriteria.copy();
         existingCriteria.mergeWith(incoming);
+        applyChildInfantNegation(existingCriteria, userMessage);
         applyExclusiveGuestCountOverride(existingCriteria, userMessage);
         // Bebek/çocuk/yetişkin yaş yeniden-sınıflandırma notu varsa bir kez tüketilir
         // (aşağıdaki cevaplardan hangisi dönerse ona eklenir), tekrar gösterilmemesi
@@ -382,6 +383,41 @@ public class ChatOrchestrationService {
                     + "|\\bno\\s+(?:child|children|kid|infant|baby|babies)\\b"
                     + "|\\bwithout\\s+(?:child|children|kid|infant|baby|babies)\\b",
             java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL);
+
+    // "bebek yok artık", "çocuk yok" gibi bağımsız olumsuzlama ifadeleri — bunlar
+    // "sadece X yetişkin" kalıbına uymaz (yetişkin sayısı tekrar söylenmemiştir),
+    // o yüzden yukarıdaki EXCLUSIVE_GUEST_PATTERN hiç tetiklenmez ve infantCount/
+    // childCount eski değerinde takılı kalırdı. Burada bebek ve çocuk için AYRI
+    // AYRI, bağımsız bir olumsuzlama kontrolü yapılıyor — sadece bahsi geçen
+    // kategori sıfırlanıyor, diğerine dokunulmuyor.
+    private static final java.util.regex.Pattern INFANT_NEGATION_PATTERN = java.util.regex.Pattern.compile(
+            "\\bbebek\\w*.{0,25}?\\byok\\w*\\b"
+                    + "|\\byok\\w*\\b.{0,25}?\\bbebek\\w*"
+                    + "|\\bbebeksiz\\w*"
+                    + "|\\bno\\s+(?:infant|infants|baby|babies)\\b"
+                    + "|\\bwithout\\s+(?:infant|infants|baby|babies)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL);
+    private static final java.util.regex.Pattern CHILD_NEGATION_PATTERN = java.util.regex.Pattern.compile(
+            "\\b(?:çocuk|cocuk)\\w*.{0,25}?\\byok\\w*\\b"
+                    + "|\\byok\\w*\\b.{0,25}?\\b(?:çocuk|cocuk)\\w*"
+                    + "|\\b(?:çocuk|cocuk)suz\\w*"
+                    + "|\\bno\\s+(?:child|children|kid|kids)\\b"
+                    + "|\\bwithout\\s+(?:child|children|kid|kids)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL);
+
+    private void applyChildInfantNegation(SearchCriteria criteria, String userMessage) {
+        if (criteria == null || userMessage == null || userMessage.isBlank()) return;
+        if (!"HOTEL_SEARCH".equals(criteria.getSearchType())) return;
+
+        if (INFANT_NEGATION_PATTERN.matcher(userMessage).find()) {
+            criteria.setInfantCount(0);
+            criteria.setInfantAges(new java.util.ArrayList<>());
+        }
+        if (CHILD_NEGATION_PATTERN.matcher(userMessage).find()) {
+            criteria.setChildCount(0);
+            criteria.setChildAges(new java.util.ArrayList<>());
+        }
+    }
 
     private void applyExclusiveGuestCountOverride(SearchCriteria criteria, String userMessage) {
         if (criteria == null || userMessage == null || userMessage.isBlank()) return;
