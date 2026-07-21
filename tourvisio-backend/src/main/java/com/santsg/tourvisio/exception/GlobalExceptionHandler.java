@@ -51,6 +51,23 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
     }
 
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatusException(
+            org.springframework.web.server.ResponseStatusException ex) {
+        // Genel Exception.class yakalayıcısı bunu da yakalayıp her zaman 500 dönüyordu —
+        // örn. bir kullanıcı başkasının chat oturumuna erişmeye çalışınca fırlatılan 403
+        // FORBIDDEN, istemciye yanlışlıkla 500 Internal Server Error olarak gidiyordu.
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        if (status == null) status = HttpStatus.INTERNAL_SERVER_ERROR;
+        ErrorResponse response = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(status.value())
+                .error(status.getReasonPhrase())
+                .message(ex.getReason() != null ? ex.getReason() : status.getReasonPhrase())
+                .build();
+        return new ResponseEntity<>(response, status);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex) {
         ErrorResponse response = ErrorResponse.builder()
