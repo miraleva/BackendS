@@ -36,6 +36,15 @@ public class Passenger {
     @Column(name = "identity_number", nullable = false)
     private String identityNumber;
 
+    @Column(name = "birth_date")
+    private java.time.LocalDate birthDate;
+
+    @Column(name = "gender")
+    private String gender;
+
+    @Column(name = "nationality")
+    private String nationality;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reservation_id", nullable = false)
     @JsonIgnore

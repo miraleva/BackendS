@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * Sohbette o ana kadar toplanmış arama kriterlerinin frontend'e özetlenmiş
@@ -27,6 +28,7 @@ public class ChatCriteriaSummary {
     private LocalDate checkOutDate;
     private Integer adultCount;
     private Integer childCount;
+    private List<Integer> childAges;
     private Integer infantCount;
 
     private String departureLocation;
@@ -48,6 +50,7 @@ public class ChatCriteriaSummary {
                 .checkOutDate(criteria.getCheckOutDate())
                 .adultCount(criteria.getAdultCount())
                 .childCount(criteria.getChildCount())
+                .childAges(criteria.getChildAges())
                 .infantCount(criteria.getInfantCount())
                 .departureLocation(criteria.getDepartureLocation())
                 .arrivalLocation(criteria.getArrivalLocation())
