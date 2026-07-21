@@ -20,10 +20,8 @@ public class PassengerRequest {
     private String lastName;
 
     @Email(message = "Invalid email format")
-    @NotBlank(message = "Email cannot be blank")
     private String email;
 
-    @NotBlank(message = "Phone number cannot be blank")
     private String phoneNumber;
 
     @NotBlank(message = "Identity number (TC No) cannot be blank")
@@ -39,7 +37,8 @@ public class PassengerRequest {
     private String nationality;
 
     // 5-argument constructor for test compatibility
-    public PassengerRequest(String firstName, String lastName, String email, String phoneNumber, String identityNumber) {
+    public PassengerRequest(String firstName, String lastName, String email, String phoneNumber,
+            String identityNumber) {
         this.firstName = firstName;
         this.lastName = lastName;
         this.email = email;

@@ -1,6 +1,7 @@
 package com.santsg.tourvisio.dto;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -41,4 +42,18 @@ public class ReservationRequest {
     @NotEmpty(message = "Reservation must have at least one passenger")
     @Valid
     private List<PassengerRequest> passengers;
+
+    @AssertTrue(message = "First passenger contact information is required.")
+    public boolean isPrimaryContactValid() {
+        if (passengers == null || passengers.isEmpty()) {
+            return true;
+        }
+
+        PassengerRequest primary = passengers.get(0);
+
+        boolean hasEmail = primary.getEmail() != null && !primary.getEmail().isBlank();
+        boolean hasPhone = primary.getPhoneNumber() != null && !primary.getPhoneNumber().isBlank();
+
+        return hasEmail && hasPhone;
+    }
 }
