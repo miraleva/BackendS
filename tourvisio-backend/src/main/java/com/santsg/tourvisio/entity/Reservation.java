@@ -25,6 +25,13 @@ public class Reservation {
     @Column(name = "reservation_number", unique = true, nullable = false)
     private String reservationNumber;
 
+    @Column(name = "user_id", nullable = true)
+    private Long userId;
+
+    @Column(name = "is_guest")
+    @Builder.Default
+    private Boolean isGuest = false;
+
     @Column(nullable = false)
     private String type; // e.g., HOTEL, FLIGHT
 

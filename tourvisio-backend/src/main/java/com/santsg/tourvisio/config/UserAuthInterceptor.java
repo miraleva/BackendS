@@ -44,24 +44,6 @@ public class UserAuthInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-        // Public / Unauthenticated Endpoints (permitAll)
-        // Giriş yapılmadan bu endpoint'lere istek atılabilmeli.
-        // ─────────────────────────────────────────────────────────────────────────
-        String requestURI = request.getRequestURI();
-        if (requestURI != null) {
-            String uriLower = requestURI.toLowerCase();
-            if (uriLower.contains("/api/auth") ||
-                uriLower.contains("/api/authenticationservice/login") ||
-                uriLower.contains("/api/health") ||
-                uriLower.contains("/swagger-ui") ||
-                uriLower.contains("/v3/api-docs") ||
-                uriLower.contains("/api-docs")) {
-                return true;
-            }
-        }
-        // ─────────────────────────────────────────────────────────────────────────
-
         // Get Authorization header
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
 
@@ -85,6 +67,26 @@ public class UserAuthInterceptor implements HandlerInterceptor {
                 return true;
             }
         }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // Public / Guest Endpoints (permitAll)
+        // Giriş yapılmadan bu endpoint'lere istek atılabilmeli.
+        // ─────────────────────────────────────────────────────────────────────────
+        String requestURI = request.getRequestURI();
+        if (requestURI != null) {
+            String uriLower = requestURI.toLowerCase();
+            if (uriLower.contains("/api/auth") ||
+                uriLower.contains("/api/authenticationservice/login") ||
+                uriLower.contains("/api/health") ||
+                uriLower.contains("/swagger-ui") ||
+                uriLower.contains("/v3/api-docs") ||
+                uriLower.contains("/api-docs") ||
+                uriLower.contains("/api/reservations") ||
+                uriLower.contains("/api/tickets")) {
+                return true;
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────────────
 
         // Return 401 Unauthorized if token is missing or invalid
         // Manually add CORS headers because short-circuiting MVC preHandle bypasses CorsFilter/registry

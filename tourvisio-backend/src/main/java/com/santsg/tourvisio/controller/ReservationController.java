@@ -24,8 +24,10 @@ public class ReservationController {
 
     @PostMapping
     @Operation(summary = "Create a new reservation", description = "Validates the reservation details and passengers, generates a unique booking number, and persists the record.")
-    public ResponseEntity<Reservation> createReservation(@Valid @RequestBody ReservationRequest request) {
-        Reservation created = reservationService.createReservation(request);
+    public ResponseEntity<Reservation> createReservation(
+            @Valid @RequestBody ReservationRequest request,
+            @RequestAttribute(value = "userId", required = false) Long userId) {
+        Reservation created = reservationService.createReservation(request, userId);
         return new ResponseEntity<>(created, HttpStatus.CREATED);
     }
 
