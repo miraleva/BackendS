@@ -268,6 +268,7 @@ public class ChatOrchestrationService {
 
         // 6. Yeni kriterler önceki session kriterleri üzerine birleştir
         existingCriteria.mergeWith(incoming);
+        applyExclusiveGuestCountOverride(existingCriteria, userMessage);
         // Bebek/çocuk/yetişkin yaş yeniden-sınıflandırma notu varsa bir kez tüketilir
         // (aşağıdaki cevaplardan hangisi dönerse ona eklenir), tekrar gösterilmemesi
         // için criteria üzerinden temizlenir.
@@ -347,6 +348,36 @@ public class ChatOrchestrationService {
 
         // 9. Tüm bilgiler tamam → arama servisine yönlendir
         return readyToSearchResponse(sessionId, intent, existingCriteria, userMessage, reclassificationNote);
+    }
+
+    // "sadece 2 yetişkin" gibi münhasırlık ifadeleri, önceki turda eklenmiş bir
+    // çocuk/bebek sayısının artık aramaya dahil olmadığını belirtir. Ancak yapay
+    // zeka çıkarımı bu tür mesajlarda childCount/infantCount alanlarını genelde hiç
+    // döndürmüyor (null) — SearchCriteria.mergeWith() da yanlışlıkla sıfırlamayı
+    // önlemek için sadece pozitif değerleri uyguluyor, bu yüzden "sadece" niyeti
+    // hiçbir zaman uygulanmıyordu. Burada ham mesajı regex ile kontrol ederek bu
+    // münhasırlık niyetini LLM'in tutarlılığına güvenmeden yakalıyoruz.
+    private static final java.util.regex.Pattern EXCLUSIVE_GUEST_PATTERN = java.util.regex.Pattern.compile(
+            "\\b(?:sadece|yalnızca|yalniz|only|just)\\b.{0,20}?\\b(\\d{1,2})\\s*(?:yetişkin|yetiskin|adult|adults|kişi|kisi|people|person)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern MENTIONS_CHILD_OR_INFANT = java.util.regex.Pattern.compile(
+            "çocuk|cocuk|child|children|kid|bebek|infant|baby|babies", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    private void applyExclusiveGuestCountOverride(SearchCriteria criteria, String userMessage) {
+        if (criteria == null || userMessage == null || userMessage.isBlank()) return;
+        if (!"HOTEL_SEARCH".equals(criteria.getSearchType())) return;
+
+        java.util.regex.Matcher matcher = EXCLUSIVE_GUEST_PATTERN.matcher(userMessage);
+        if (!matcher.find()) return;
+        // "sadece 2 yetişkin ve 1 çocukla" gibi mesajlarda çocuk/bebek hâlâ isteniyor
+        // olabilir — o durumda dokunmuyoruz, sadece gerçekten hariç tutulduğunda sıfırlıyoruz.
+        if (MENTIONS_CHILD_OR_INFANT.matcher(userMessage).find()) return;
+
+        criteria.setAdultCount(Integer.parseInt(matcher.group(1)));
+        criteria.setChildCount(0);
+        criteria.setChildAges(new java.util.ArrayList<>());
+        criteria.setInfantCount(0);
+        criteria.setInfantAges(new java.util.ArrayList<>());
     }
 
     /** Bebek/çocuk/yetişkin yeniden-sınıflandırma notu varsa cevabın başına ekler. */
