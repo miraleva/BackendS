@@ -30,6 +30,7 @@ public class ChatCriteriaSummary {
     private Integer childCount;
     private List<Integer> childAges;
     private Integer infantCount;
+    private List<Integer> infantAges;
 
     private String departureLocation;
     private String arrivalLocation;
@@ -52,6 +53,7 @@ public class ChatCriteriaSummary {
                 .childCount(criteria.getChildCount())
                 .childAges(criteria.getChildAges())
                 .infantCount(criteria.getInfantCount())
+                .infantAges(criteria.getInfantAges())
                 .departureLocation(criteria.getDepartureLocation())
                 .arrivalLocation(criteria.getArrivalLocation())
                 .departureDate(criteria.getDepartureDate())
