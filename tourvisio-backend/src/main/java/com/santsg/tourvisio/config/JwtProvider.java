@@ -24,14 +24,18 @@ public class JwtProvider {
      * Generates a JWT token for the given user ID and email.
      */
     public String generateToken(Long userId, String email) {
-        return JWT.create()
+        var builder = JWT.create()
                 .withIssuer(issuer)
                 .withSubject(email)
-                .withClaim("userId", userId)
                 .withClaim("email", email)
                 .withIssuedAt(new Date())
-                .withExpiresAt(new Date(System.currentTimeMillis() + expiryMs))
-                .sign(algorithm);
+                .withExpiresAt(new Date(System.currentTimeMillis() + expiryMs));
+
+        if (userId != null) {
+            builder.withClaim("userId", userId);
+        }
+
+        return builder.sign(algorithm);
     }
 
     /**
@@ -56,6 +60,10 @@ public class JwtProvider {
      * Extracts the userId claim from the decoded JWT.
      */
     public Long getUserId(DecodedJWT jwt) {
-        return jwt.getClaim("userId").asLong();
+        com.auth0.jwt.interfaces.Claim claim = jwt.getClaim("userId");
+        if (claim == null || claim.isNull()) {
+            return null;
+        }
+        return claim.asLong();
     }
 }

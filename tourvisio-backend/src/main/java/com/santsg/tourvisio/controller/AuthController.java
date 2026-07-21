@@ -3,11 +3,13 @@ package com.santsg.tourvisio.controller;
 import com.santsg.tourvisio.config.JwtProvider;
 import com.santsg.tourvisio.dto.auth.LoginRequest;
 import com.santsg.tourvisio.dto.auth.LoginResponse;
+import com.santsg.tourvisio.dto.auth.OAuthLoginRequest;
 import com.santsg.tourvisio.dto.auth.SignupRequest;
 import com.santsg.tourvisio.dto.auth.UserResponse;
 import com.santsg.tourvisio.dto.auth.AdminLoginRequest;
 import com.santsg.tourvisio.entity.User;
 import com.santsg.tourvisio.repository.UserRepository;
+import com.santsg.tourvisio.service.OAuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -30,14 +32,16 @@ public class AuthController {
 
     private final UserRepository userRepository;
     private final JwtProvider jwtProvider;
+    private final OAuthService oAuthService;
 
     // application.properties dosyasındaki "sanny.admin.password" değerini okur. 
     // Bulamazsa varsayılan olarak "admin2026" şifresini geçerli kılar.
     private final String correctAdminPassword = "admin2026";
 
-    public AuthController(UserRepository userRepository, JwtProvider jwtProvider) {
+    public AuthController(UserRepository userRepository, JwtProvider jwtProvider, OAuthService oAuthService) {
         this.userRepository = userRepository;
         this.jwtProvider = jwtProvider;
+        this.oAuthService = oAuthService;
     }
 
     @PostMapping(value = "/signup", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
@@ -123,7 +127,7 @@ public class AuthController {
         }
 
         // Verify password hash
-        if (!BCrypt.checkpw(request.getPassword(), user.getPassword())) {
+        if (user.getPassword() == null || !BCrypt.checkpw(request.getPassword(), user.getPassword())) {
             log.warn("[AuthController] Login failed: incorrect password for email={}", request.getEmail());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
                     "error", "Unauthorized",
@@ -152,6 +156,93 @@ public class AuthController {
                 .build();
 
         return ResponseEntity.ok(loginResponse);
+    }
+
+    @PostMapping(value = {"/oauth-login", "/google", "/google-login", "/oauth"}, produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "OAuth Social Login", description = "Authenticate via Google OAuth2 ID token")
+    public ResponseEntity<?> oauthLogin(
+            @RequestHeader(value = org.springframework.http.HttpHeaders.AUTHORIZATION, required = false) String authHeader,
+            @RequestBody(required = false) OAuthLoginRequest request
+    ) {
+        String provider = (request != null && request.getProvider() != null) ? request.getProvider().toLowerCase() : "google";
+        String idToken = (request != null && request.getIdToken() != null && !request.getIdToken().isBlank())
+                ? request.getIdToken()
+                : null;
+
+        // Extract from Authorization header if missing from body
+        if ((idToken == null || idToken.isBlank()) && authHeader != null && authHeader.startsWith("Bearer ")) {
+            idToken = authHeader.substring(7).trim();
+        }
+
+        if (idToken == null || idToken.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Bad Request",
+                    "message", "Google ID token is required either in request body (idToken) or Authorization header"
+            ));
+        }
+
+        log.info("[AuthController] OAuth login request received for provider={}", provider);
+
+        if (!"google".equals(provider)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Bad Request",
+                    "message", "Unsupported OAuth provider: " + provider
+            ));
+        }
+
+        try {
+            Map<String, String> userInfo = oAuthService.verifyGoogleToken(idToken);
+
+            // Find or create user
+            User user = oAuthService.findOrCreateUser(
+                    userInfo.get("email"),
+                    userInfo.get("firstName"),
+                    userInfo.get("lastName"),
+                    provider
+            );
+
+            // Generate JWT token
+            String token = jwtProvider.generateToken(user.getId(), user.getEmail());
+            log.info("[AuthController] OAuth login successful for email={}, provider={}", user.getEmail(), provider);
+
+            // Build response payload (same format as regular login)
+            UserResponse userResponse = UserResponse.builder()
+                    .firstName(user.getFirstName())
+                    .lastName(user.getLastName())
+                    .email(user.getEmail())
+                    .phone(user.getPhone())
+                    .country(user.getCountry())
+                    .gender(user.getGender())
+                    .dateOfBirth(user.getDateOfBirth())
+                    .build();
+
+            LoginResponse loginResponse = LoginResponse.builder()
+                    .token(token)
+                    .user(userResponse)
+                    .build();
+
+            return ResponseEntity.ok(loginResponse);
+
+        } catch (IllegalStateException e) {
+            log.error("[AuthController] OAuth configuration error: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of(
+                    "error", "Service Unavailable",
+                    "message", e.getMessage()
+            ));
+        } catch (SecurityException e) {
+            log.warn("[AuthController] OAuth token verification failed: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "error", "Unauthorized",
+                    "message", "OAuth token verification failed: " + e.getMessage()
+            ));
+        } catch (Exception e) {
+            log.error("[AuthController] OAuth login error: {}", e.getMessage(), e);
+            String detail = (e.getMessage() != null && !e.getMessage().isBlank()) ? e.getMessage() : e.getClass().getSimpleName();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                    "error", "Internal Server Error",
+                    "message", "OAuth login error: " + detail
+            ));
+        }
     }
 
     @PostMapping(value = "/admin-login", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
