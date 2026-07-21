@@ -82,7 +82,8 @@ public class UserAuthInterceptor implements HandlerInterceptor {
                 uriLower.contains("/v3/api-docs") ||
                 uriLower.contains("/api-docs") ||
                 uriLower.contains("/api/reservations") ||
-                uriLower.contains("/api/tickets")) {
+                uriLower.contains("/api/tickets") ||
+                uriLower.contains("/api/chat")) {
                 return true;
             }
         }
