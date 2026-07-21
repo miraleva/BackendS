@@ -28,6 +28,12 @@ public class UserAuthInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        // Add CORS & COOP headers for cross-origin popup compatibility
+        response.setHeader("Access-Control-Allow-Origin", "*");
+        response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        response.setHeader("Access-Control-Allow-Headers", "*");
+        response.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+
         // Bypass check if in test mode
         if (testMode) {
             return true;
@@ -39,21 +45,28 @@ public class UserAuthInterceptor implements HandlerInterceptor {
         }
 
         // ─────────────────────────────────────────────────────────────────────────
-        // YENİ EKLEDİĞİMİZ KISIM: Şifremi Unuttum, Sıfırlama ve Admin Giriş bypass kontrolleri
+        // Public / Unauthenticated Endpoints (permitAll)
+        // Giriş yapılmadan bu endpoint'lere istek atılabilmeli.
         // ─────────────────────────────────────────────────────────────────────────
         String requestURI = request.getRequestURI();
-        if (requestURI.contains("/api/auth/forgot-password") || 
-            requestURI.contains("/api/auth/reset-password") ||
-            requestURI.contains("/api/auth/admin-login")) { // BU SATIR SAYESİNDE INTERCEPTOR ENGELLENMEYECEK!
-            return true; 
+        if (requestURI != null) {
+            String uriLower = requestURI.toLowerCase();
+            if (uriLower.contains("/api/auth") ||
+                uriLower.contains("/api/authenticationservice/login") ||
+                uriLower.contains("/api/health") ||
+                uriLower.contains("/swagger-ui") ||
+                uriLower.contains("/v3/api-docs") ||
+                uriLower.contains("/api-docs")) {
+                return true;
+            }
         }
         // ─────────────────────────────────────────────────────────────────────────
 
         // Get Authorization header
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
 
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7).trim();
+        if (authHeader != null && authHeader.trim().length() > 7 && authHeader.trim().substring(0, 7).equalsIgnoreCase("Bearer ")) {
+            String token = authHeader.trim().substring(7).trim();
             
             // 1. Try to validate as our JWT
             try {
