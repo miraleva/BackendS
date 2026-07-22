@@ -54,7 +54,7 @@ public class OpenRouterClient implements AIProviderClient {
 
         try {
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set(HttpHeaders.CONTENT_TYPE, "application/json; charset=utf-8");
             headers.setBearerAuth(apiKey);
             // OpenRouter, hangi uygulamanın istek attığını görebilmek için bu iki
             // header'ı önerir (zorunlu değil, atlanırsa istek yine çalışır).

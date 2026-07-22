@@ -17,9 +17,11 @@ import java.util.UUID;
 public class ReservationService {
 
     private final ReservationRepository reservationRepository;
+    private final EmailService emailService;
 
-    public ReservationService(ReservationRepository reservationRepository) {
+    public ReservationService(ReservationRepository reservationRepository, EmailService emailService) {
         this.reservationRepository = reservationRepository;
+        this.emailService = emailService;
     }
 
     private void validateReservationRequest(ReservationRequest request) {
@@ -85,7 +87,7 @@ public class ReservationService {
     }
 
     @Transactional
-    public Reservation createReservation(ReservationRequest request) {
+    public Reservation createReservation(ReservationRequest request, Long userId) {
         validateReservationRequest(request);
 
         // Generate a unique reservation number (e.g. RES-ABC12D)
@@ -93,6 +95,8 @@ public class ReservationService {
 
         Reservation reservation = Reservation.builder()
                 .reservationNumber(reservationNum)
+                .userId(userId)
+                .isGuest(userId == null)
                 .type(request.getType().toUpperCase())
                 .itemName(request.getItemName())
                 .destination(request.getDestination())
@@ -119,7 +123,14 @@ public class ReservationService {
         }
 
         reservation.setPassengers(passengers);
-        return reservationRepository.save(reservation);
+        Reservation savedReservation = reservationRepository.save(reservation);
+
+        // Send confirmation email
+        PassengerRequest primary = request.getPassengers().get(0);
+        String fullName = (primary.getFirstName() != null ? primary.getFirstName() : "") + " " + (primary.getLastName() != null ? primary.getLastName() : "");
+        emailService.sendReservationConfirmationEmail(savedReservation, primary.getEmail(), fullName.trim());
+
+        return savedReservation;
     }
 
     @Transactional
