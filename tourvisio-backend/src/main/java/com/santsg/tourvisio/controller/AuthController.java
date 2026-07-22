@@ -106,6 +106,7 @@ public class AuthController {
                 .country(savedUser.getCountry())
                 .gender(savedUser.getGender())
                 .dateOfBirth(savedUser.getDateOfBirth())
+                .createdAt(savedUser.getCreatedAt())
                 .build();
 
         return ResponseEntity.status(HttpStatus.CREATED).body(userResponse);
@@ -148,6 +149,7 @@ public class AuthController {
                 .country(user.getCountry())
                 .gender(user.getGender())
                 .dateOfBirth(user.getDateOfBirth())
+                .createdAt(user.getCreatedAt())
                 .build();
 
         LoginResponse loginResponse = LoginResponse.builder()
@@ -214,6 +216,7 @@ public class AuthController {
                     .country(user.getCountry())
                     .gender(user.getGender())
                     .dateOfBirth(user.getDateOfBirth())
+                    .createdAt(user.getCreatedAt())
                     .build();
 
             LoginResponse loginResponse = LoginResponse.builder()
