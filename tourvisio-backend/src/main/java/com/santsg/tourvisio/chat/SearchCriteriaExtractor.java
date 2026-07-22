@@ -78,14 +78,19 @@ public class SearchCriteriaExtractor {
             "\\b(?:(\\d{4})[-/.](0[1-9]|1[0-2])[-/.](0[1-9]|[12]\\d|3[01])|(0[1-9]|[12]\\d|3[01])[-/.](0[1-9]|1[0-2])[-/.](\\d{4}))\\b");
 
     // ── Sayı + kişi ifadeleri ─────────────────────────────────────────────────
+    // Eksi işareti de yakalanır (ör. "-3 yetişkin") ki SearchCriteriaValidator
+    // negatif sayıyı görüp kullanıcıyı uyarabilsin — önceden "\d+" işareti atlayıp
+    // "-3"ü sessizce "3"e çeviriyordu. "(?<!\d)" ile "3-4 kişi" gibi bir aralık
+    // ifadesindeki tireyi eksi işareti sanmıyoruz (önünde başka bir rakam varsa
+    // eksi işareti almıyoruz).
     private static final Pattern ADULT_PATTERN = Pattern.compile(
-            "(\\d+)\\s*(?:yetişkin|yetiskin|adult|kişi|kisi)");
+            "((?<!\\d)-?\\d+)\\s*(?:yetişkin|yetiskin|adult|kişi|kisi)");
     private static final Pattern CHILD_PATTERN = Pattern.compile(
-            "(\\d+)\\s*(?:çocuk|cocuk|child|kids)");
+            "((?<!\\d)-?\\d+)\\s*(?:çocuk|cocuk|child|kids)");
     private static final Pattern INFANT_PATTERN = Pattern.compile(
-            "(\\d+)\\s*(?:bebek|infant|infants|baby|babies)");
+            "((?<!\\d)-?\\d+)\\s*(?:bebek|infant|infants|baby|babies)");
     private static final Pattern PASSENGER_PATTERN = Pattern.compile(
-            "(\\d+)\\s*(?:yolcu|kişi|kisi|passenger|passengers|person|people|kişilik|kisilik|yetişkin|yetiskin|adult|adults)");
+            "((?<!\\d)-?\\d+)\\s*(?:yolcu|kişi|kisi|passenger|passengers|person|people|kişilik|kisilik|yetişkin|yetiskin|adult|adults)");
 
     // ── Gece sayısı ───────────────────────────────────────────────────────────
     private static final Pattern NIGHT_PATTERN = Pattern.compile(
