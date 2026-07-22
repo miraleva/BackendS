@@ -55,8 +55,15 @@ public class ExtractionAgent {
                             + "If the user's message describes an INCREMENTAL change relative to these (e.g. \"one more baby is coming\"/\"1 tane daha bebek gelicek\", "
                             + "\"add a child\"/\"bir çocuk daha ekleyelim\", \"my wife is coming too\"), compute and output the NEW ABSOLUTE total for that field "
                             + "(current value + the change), not just the delta. If the message states an absolute total instead (e.g. \"we'll be 3 adults\"/\"3 yetişkin olacağız\"), "
-                            + "output that absolute number directly.",
-                    existingCriteria.getAdultCount(), existingCriteria.getChildCount(), existingCriteria.getInfantCount());
+                            + "output that absolute number directly.\n"
+                            + "If the message is a CORRECTION, RESET, or CHANGE OF MIND about the party size — in any phrasing, e.g. \"never mind, just 2 adults\"/"
+                            + "\"vazgeçtim 2 yetişkin olsun\"/\"forget that, 2 adults only\"/\"actually just 2 people\"/\"değiştim fikrimi 2 yetişkin\" — and it does NOT "
+                            + "mention children or infants at all, this means the user wants to DROP the previously-known children/infants (children=%s, infants=%s above), "
+                            + "not just leave them unchanged. In that exact situation, explicitly output childCount: 0 and infantCount: 0 (and empty arrays for childAges/"
+                            + "infantAges) in your JSON — do NOT omit them. This is different from an ordinary follow-up question (like asking about dates or a location) "
+                            + "that has nothing to do with party size, where you should still omit childCount/infantCount/childAges/infantAges entirely as usual.",
+                    existingCriteria.getAdultCount(), existingCriteria.getChildCount(), existingCriteria.getInfantCount(),
+                    existingCriteria.getChildCount(), existingCriteria.getInfantCount());
         }
 
         String schemaDescription = """

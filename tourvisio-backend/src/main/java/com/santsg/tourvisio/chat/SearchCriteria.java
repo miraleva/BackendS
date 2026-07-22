@@ -133,14 +133,23 @@ public class SearchCriteria {
         if (incoming.getAdultCount() != null)
             this.adultCount = incoming.getAdultCount();
         // childAges dolu geldiğinde çocuk sayısı ondan türetilir (tutarlılık için).
-        // childCount, sadece pozitif bir değer geldiğinde uygulanır — LLM tabanlı
-        // çıkarım, çocuktan hiç bahsetmeyen mesajlarda da "childCount": 0 döndürebiliyor;
-        // bunu uygulamak önceki turda öğrenilmiş gerçek çocuk sayısını sıfırlardı.
+        // childCount pozitif bir değer geldiğinde her zaman uygulanır. Açık bir 0
+        // ise de, SADECE bu mesaj gerçekten misafir sayısıyla ilgiliyse (aynı anda
+        // adultCount de gelmişse) uygulanır — bu, yapay zekanın "vazgeçtim, sadece
+        // 2 yetişkin olsun" gibi bir sıfırlama niyetini (bkz. ExtractionAgent
+        // prompt'u) güvenilir şekilde iletebildiği tek durumdur. Bunun dışında
+        // (misafirle hiç ilgisi olmayan bir mesajda modelin alışkanlıkla "childCount":
+        // 0 döndürmesi ihtimaline karşı) 0 değeri yok sayılır ki önceki turda
+        // öğrenilmiş gerçek çocuk sayısı yanlışlıkla sıfırlanmasın.
         if (incoming.getChildAges() != null && !incoming.getChildAges().isEmpty()) {
             this.childAges = incoming.getChildAges();
             this.childCount = incoming.getChildAges().size();
         } else if (incoming.getChildCount() != null && incoming.getChildCount() > 0) {
             this.childCount = incoming.getChildCount();
+        } else if (incoming.getChildCount() != null && incoming.getChildCount() == 0
+                && incoming.getAdultCount() != null) {
+            this.childCount = 0;
+            this.childAges = new ArrayList<>();
         }
         // Bebek — aynı mantık çocukla birebir aynı.
         if (incoming.getInfantAges() != null && !incoming.getInfantAges().isEmpty()) {
@@ -148,6 +157,10 @@ public class SearchCriteria {
             this.infantCount = incoming.getInfantAges().size();
         } else if (incoming.getInfantCount() != null && incoming.getInfantCount() > 0) {
             this.infantCount = incoming.getInfantCount();
+        } else if (incoming.getInfantCount() != null && incoming.getInfantCount() == 0
+                && incoming.getAdultCount() != null) {
+            this.infantCount = 0;
+            this.infantAges = new ArrayList<>();
         }
         if (incoming.getNationality() != null)
             this.nationality = incoming.getNationality();
