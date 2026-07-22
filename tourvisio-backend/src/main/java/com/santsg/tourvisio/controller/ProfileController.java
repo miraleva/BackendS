@@ -182,6 +182,7 @@ public class ProfileController {
                 .country(user.getCountry())
                 .gender(user.getGender())
                 .dateOfBirth(user.getDateOfBirth())
+                .createdAt(user.getCreatedAt())
                 .build();
     }
 }
