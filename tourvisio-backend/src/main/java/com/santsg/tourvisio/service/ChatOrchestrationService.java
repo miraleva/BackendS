@@ -266,6 +266,18 @@ public class ChatOrchestrationService {
             sessionState.setLastRequestedField(null);
         }
 
+        // Sistem bu turda SADECE "yetişkin sayısı" sorduysa (CriteriaMissingFieldsService bunu
+        // ancak çocuk/bebek yaşları zaten çözülmüşken sorar — bkz. o servisteki sıralama kuralı),
+        // kullanıcı direkt o soruyu cevaplıyordur; yeni bir "sadece N yetişkin" partisi öne
+        // sürmüyor. Modelin yine de (çocuk/bebek tekrar anılmadı diye) sıfırlama sinyali
+        // döndürdüğü gözlemlendi — bu turda o sinyali güvenilir biçimde yok sayıyoruz.
+        if (hasActiveSearch && lastField != null && lastField.contains("yetişkin sayısı") && incoming != null) {
+            incoming.setChildCount(null);
+            incoming.setChildAges(null);
+            incoming.setInfantCount(null);
+            incoming.setInfantAges(null);
+        }
+
         // 6. Yeni kriterler önceki session kriterleri üzerine birleştir
         // Merge öncesi bir anlık görüntü (snapshot) alınıyor — aşağıda validasyon
         // başarısız olursa oturumu buna geri döndürüyoruz (rollback). Aksi hâlde
