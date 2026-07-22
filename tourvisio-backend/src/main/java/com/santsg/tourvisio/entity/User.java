@@ -54,6 +54,14 @@ public class User {
     @Builder.Default
     private String authProvider = "LOCAL";
 
+    @Column(name = "role", length = 20)
+    @Builder.Default
+    private String role = "user";
+
+    @Column(name = "is_active")
+    @Builder.Default
+    private Boolean isActive = true;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<ChatSession> chatSessions = new ArrayList<>();
@@ -61,6 +69,14 @@ public class User {
     @PrePersist
     protected void onCreate() {
         this.createdAt = Instant.now();
+    }
+
+    public String getRole() {
+        return role != null ? role : "user";
+    }
+
+    public Boolean getIsActive() {
+        return isActive != null ? isActive : true;
     }
 }
 
