@@ -204,7 +204,7 @@ public class ChatOrchestrationService {
         try {
             String currentIntent = hasActiveSearch ? existingCriteria.getSearchType() : null;
             extractionResult = extractionAgent.extract(userMessage, currentIntent, sessionState.getLastRequestedField(),
-                    hasActiveSearch ? existingCriteria : null);
+                    hasActiveSearch ? existingCriteria : null, sessionState.isLastSearchHadNoResults());
         } catch (Exception e) {
             log.warn("[Orchestration] ExtractionAgent failed or mocked, falling back to rule-based: {}",
                     e.getMessage());
