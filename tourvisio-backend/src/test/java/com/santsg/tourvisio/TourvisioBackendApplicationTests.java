@@ -141,6 +141,75 @@ class TourvisioBackendApplicationTests {
 	}
 
 	@Test
+	void testReservationMultiPassengerAndEditWorkflow() throws Exception {
+		PassengerRequest primary = new PassengerRequest(
+				"Ahmet",
+				"Yilmaz",
+				"ahmet@gmail.com",
+				"+905555555555",
+				"12345678901",
+				LocalDate.of(1990, 1, 1),
+				"MR",
+				"TR"
+		);
+
+		PassengerRequest secondary = new PassengerRequest(
+				"John",
+				"Doe",
+				"", // Optional email
+				"", // Optional phone
+				"PASSPORT123",
+				LocalDate.of(2010, 5, 15),
+				"CHD",
+				"DE"
+		);
+
+		ReservationRequest request = new ReservationRequest(
+				"HOTEL",
+				"Rixos Premium Belek",
+				"Antalya",
+				LocalDate.now().plusDays(5),
+				LocalDate.now().plusDays(12),
+				9000.0,
+				"TRY",
+				List.of(primary, secondary));
+
+		// 1. Create reservation
+		String responseJson = mockMvc.perform(post("/api/reservations")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(request)))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.id", notNullValue()))
+				.andExpect(jsonPath("$.passengers", hasSize(2)))
+				.andExpect(jsonPath("$.passengers[0].firstName", equalTo("Ahmet")))
+				.andExpect(jsonPath("$.passengers[1].firstName", equalTo("John")))
+				.andExpect(jsonPath("$.passengers[1].email", anyOf(nullValue(), emptyString())))
+				.andReturn().getResponse().getContentAsString();
+
+		Long createdId = objectMapper.readTree(responseJson).get("id").asLong();
+
+		// 2. Edit reservation (change secondary passenger name)
+		secondary.setLastName("Smith");
+		ReservationRequest updateRequest = new ReservationRequest(
+				"HOTEL",
+				"Rixos Premium Belek",
+				"Antalya",
+				LocalDate.now().plusDays(5),
+				LocalDate.now().plusDays(12),
+				9000.0,
+				"TRY",
+				List.of(primary, secondary));
+
+		mockMvc.perform(put("/api/reservations/" + createdId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(objectMapper.writeValueAsString(updateRequest)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.id", equalTo(createdId.intValue())))
+				.andExpect(jsonPath("$.passengers", hasSize(2)))
+				.andExpect(jsonPath("$.passengers[1].lastName", equalTo("Smith")));
+	}
+
+	@Test
 	void testHotelSearchMultiTurnChatWorkflow() throws Exception {
 		// Turn 1: Initial query
 		ChatRequest request1 = new ChatRequest("Antalya'da 2 yetişkin için 25 Temmuz girişli 5 gece otel bakıyorum", "hotel-session-123");
