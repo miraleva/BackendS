@@ -361,15 +361,15 @@ public class ChatOrchestrationService {
         return readyToSearchResponse(sessionId, intent, existingCriteria, userMessage, reclassificationNote);
     }
 
-    // "sadece 2 yetişkin" gibi münhasırlık ifadeleri, önceki turda eklenmiş bir
-    // çocuk/bebek sayısının artık aramaya dahil olmadığını belirtir. Ancak yapay
-    // zeka çıkarımı bu tür mesajlarda childCount/infantCount alanlarını genelde hiç
-    // döndürmüyor (null) — SearchCriteria.mergeWith() da yanlışlıkla sıfırlamayı
-    // önlemek için sadece pozitif değerleri uyguluyor, bu yüzden "sadece" niyeti
-    // hiçbir zaman uygulanmıyordu. Burada ham mesajı regex ile kontrol ederek bu
-    // münhasırlık niyetini LLM'in tutarlılığına güvenmeden yakalıyoruz.
+    // "sadece 2 yetişkin" / "vazgeçtim 2 yetişkin olsun" gibi münhasırlık/vazgeçme
+    // ifadeleri, önceki turda eklenmiş bir çocuk/bebek sayısının artık aramaya dahil
+    // olmadığını belirtir. Ancak yapay zeka çıkarımı bu tür mesajlarda childCount/
+    // infantCount alanlarını genelde hiç döndürmüyor (null) — SearchCriteria.mergeWith()
+    // da yanlışlıkla sıfırlamayı önlemek için sadece pozitif değerleri uyguluyor, bu
+    // yüzden bu niyet hiçbir zaman uygulanmıyordu. Burada ham mesajı regex ile
+    // kontrol ederek bu niyeti LLM'in tutarlılığına güvenmeden yakalıyoruz.
     private static final java.util.regex.Pattern EXCLUSIVE_GUEST_PATTERN = java.util.regex.Pattern.compile(
-            "\\b(?:sadece|yalnızca|yalniz|only|just)\\b.{0,20}?\\b(\\d{1,2})\\s*(?:yetişkin|yetiskin|adult|adults|kişi|kisi|people|person)\\b",
+            "\\b(?:sadece|yalnızca|yalniz|only|just|vazgeçtim|vazgectim|boşver|bosver|neyse|iptal)\\b.{0,20}?\\b(\\d{1,2})\\s*(?:yetişkin|yetiskin|adult|adults|kişi|kisi|people|person)\\b",
             java.util.regex.Pattern.CASE_INSENSITIVE);
     private static final java.util.regex.Pattern MENTIONS_CHILD_OR_INFANT = java.util.regex.Pattern.compile(
             "çocuk|cocuk|child|children|kid|bebek|infant|baby|babies", java.util.regex.Pattern.CASE_INSENSITIVE);
