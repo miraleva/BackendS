@@ -204,7 +204,7 @@ public class ChatOrchestrationService {
         try {
             String currentIntent = hasActiveSearch ? existingCriteria.getSearchType() : null;
             extractionResult = extractionAgent.extract(userMessage, currentIntent, sessionState.getLastRequestedField(),
-                    hasActiveSearch ? existingCriteria : null);
+                    hasActiveSearch ? existingCriteria : null, sessionState.isLastSearchHadNoResults());
         } catch (Exception e) {
             log.warn("[Orchestration] ExtractionAgent failed or mocked, falling back to rule-based: {}",
                     e.getMessage());
@@ -267,13 +267,19 @@ public class ChatOrchestrationService {
         }
 
         // 6. Yeni kriterler önceki session kriterleri üzerine birleştir
+        // Merge öncesi bir anlık görüntü (snapshot) alınıyor — aşağıda validasyon
+        // başarısız olursa oturumu buna geri döndürüyoruz (rollback). Aksi hâlde
+        // reddedilen bir deneme (ör. "4 yetişkin 3 çocuk 2 bebek") bile kalıcı
+        // olarak yazılıp sonraki turlarda "hayalet" kriter olarak sızmaya devam ederdi.
+        SearchCriteria beforeMerge = existingCriteria.copy();
         existingCriteria.mergeWith(incoming);
+        applyChildInfantNegation(existingCriteria, userMessage);
+        applyExclusiveGuestCountOverride(existingCriteria, userMessage);
         // Bebek/çocuk/yetişkin yaş yeniden-sınıflandırma notu varsa bir kez tüketilir
         // (aşağıdaki cevaplardan hangisi dönerse ona eklenir), tekrar gösterilmemesi
         // için criteria üzerinden temizlenir.
         String reclassificationNote = existingCriteria.getReclassificationNote();
         existingCriteria.setReclassificationNote(null);
-        sessionStore.save(sessionId, existingCriteria);
 
         log.debug("[Orchestration] Birleştirilmiş kriterler: {}", existingCriteria);
 
@@ -282,13 +288,19 @@ public class ChatOrchestrationService {
         if (!validation.isValid()) {
             String errorType = validation.getErrorType();
             String replyText = "";
-            if ("DATE_PAST".equals(errorType) || "DATE_MISMATCH".equals(errorType)) {
+            if ("DATE_PAST".equals(errorType) || "DATE_MISMATCH".equals(errorType) || "DATE_TOO_FAR".equals(errorType)) {
                 replyText = responseAgent.invalidDateRange(errorType, existingCriteria, userMessage);
             } else if ("NO_ADULTS".equals(errorType)) {
                 replyText = responseAgent.noAdults(existingCriteria, userMessage);
+            } else if ("NEGATIVE_COUNT".equals(errorType) || "TOO_MANY_GUESTS".equals(errorType)
+                    || "TOO_MANY_PASSENGERS".equals(errorType) || "TOO_MANY_ROOMS".equals(errorType)) {
+                replyText = responseAgent.invalidGuestCount(errorType, existingCriteria);
             }
-            
+
             if (!replyText.isEmpty()) {
+                // Rollback: geçersiz güncelleme oturuma hiç yazılmıyor, merge öncesi
+                // hâl korunuyor.
+                sessionStore.save(sessionId, beforeMerge);
                 return ChatResponse.builder()
                         .reply(replyText)
                         .sessionId(sessionId)
@@ -299,6 +311,9 @@ public class ChatOrchestrationService {
                         .build();
             }
         }
+
+        // Kriterler geçerli — artık kalıcı olarak yazılabilir.
+        sessionStore.save(sessionId, existingCriteria);
 
         // 8. Eksik alan kontrolü
         List<String> missingFields = missingFieldsService.getMissingFields(existingCriteria);
@@ -344,6 +359,86 @@ public class ChatOrchestrationService {
 
         // 9. Tüm bilgiler tamam → arama servisine yönlendir
         return readyToSearchResponse(sessionId, intent, existingCriteria, userMessage, reclassificationNote);
+    }
+
+    // "sadece 2 yetişkin" / "vazgeçtim 2 yetişkin olsun" gibi münhasırlık/vazgeçme
+    // ifadeleri, önceki turda eklenmiş bir çocuk/bebek sayısının artık aramaya dahil
+    // olmadığını belirtir. Ancak yapay zeka çıkarımı bu tür mesajlarda childCount/
+    // infantCount alanlarını genelde hiç döndürmüyor (null) — SearchCriteria.mergeWith()
+    // da yanlışlıkla sıfırlamayı önlemek için sadece pozitif değerleri uyguluyor, bu
+    // yüzden bu niyet hiçbir zaman uygulanmıyordu. Burada ham mesajı regex ile
+    // kontrol ederek bu niyeti LLM'in tutarlılığına güvenmeden yakalıyoruz.
+    private static final java.util.regex.Pattern EXCLUSIVE_GUEST_PATTERN = java.util.regex.Pattern.compile(
+            "\\b(?:sadece|yalnızca|yalniz|only|just|vazgeçtim|vazgectim|boşver|bosver|neyse|iptal)\\b.{0,20}?\\b(\\d{1,2})\\s*(?:yetişkin|yetiskin|adult|adults|kişi|kisi|people|person)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern MENTIONS_CHILD_OR_INFANT = java.util.regex.Pattern.compile(
+            "çocuk|cocuk|child|children|kid|bebek|infant|baby|babies", java.util.regex.Pattern.CASE_INSENSITIVE);
+    // "bebek ve çocuk yok", "yok ki çocuk", "çocuksuz" gibi olumsuzlama ifadeleri —
+    // bunlar çocuk/bebek kelimesi geçse bile aslında onları HARİÇ TUTMA niyetini
+    // gösterir, dahil etme değil.
+    private static final java.util.regex.Pattern NEGATED_CHILD_OR_INFANT_PATTERN = java.util.regex.Pattern.compile(
+            "(?:çocuk|cocuk|bebek)\\w*.{0,25}?\\byok\\w*\\b"
+                    + "|\\byok\\w*\\b.{0,25}?(?:çocuk|cocuk|bebek)\\w*"
+                    + "|(?:çocuk|cocuk|bebek)(?:suz|siz)\\w*"
+                    + "|\\bno\\s+(?:child|children|kid|infant|baby|babies)\\b"
+                    + "|\\bwithout\\s+(?:child|children|kid|infant|baby|babies)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL);
+
+    // "bebek yok artık", "çocuk yok" gibi bağımsız olumsuzlama ifadeleri — bunlar
+    // "sadece X yetişkin" kalıbına uymaz (yetişkin sayısı tekrar söylenmemiştir),
+    // o yüzden yukarıdaki EXCLUSIVE_GUEST_PATTERN hiç tetiklenmez ve infantCount/
+    // childCount eski değerinde takılı kalırdı. Burada bebek ve çocuk için AYRI
+    // AYRI, bağımsız bir olumsuzlama kontrolü yapılıyor — sadece bahsi geçen
+    // kategori sıfırlanıyor, diğerine dokunulmuyor.
+    private static final java.util.regex.Pattern INFANT_NEGATION_PATTERN = java.util.regex.Pattern.compile(
+            "\\bbebek\\w*.{0,25}?\\byok\\w*\\b"
+                    + "|\\byok\\w*\\b.{0,25}?\\bbebek\\w*"
+                    + "|\\bbebeksiz\\w*"
+                    + "|\\bno\\s+(?:infant|infants|baby|babies)\\b"
+                    + "|\\bwithout\\s+(?:infant|infants|baby|babies)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL);
+    private static final java.util.regex.Pattern CHILD_NEGATION_PATTERN = java.util.regex.Pattern.compile(
+            "\\b(?:çocuk|cocuk)\\w*.{0,25}?\\byok\\w*\\b"
+                    + "|\\byok\\w*\\b.{0,25}?\\b(?:çocuk|cocuk)\\w*"
+                    + "|\\b(?:çocuk|cocuk)suz\\w*"
+                    + "|\\bno\\s+(?:child|children|kid|kids)\\b"
+                    + "|\\bwithout\\s+(?:child|children|kid|kids)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL);
+
+    private void applyChildInfantNegation(SearchCriteria criteria, String userMessage) {
+        if (criteria == null || userMessage == null || userMessage.isBlank()) return;
+        if (!"HOTEL_SEARCH".equals(criteria.getSearchType())) return;
+
+        if (INFANT_NEGATION_PATTERN.matcher(userMessage).find()) {
+            criteria.setInfantCount(0);
+            criteria.setInfantAges(new java.util.ArrayList<>());
+        }
+        if (CHILD_NEGATION_PATTERN.matcher(userMessage).find()) {
+            criteria.setChildCount(0);
+            criteria.setChildAges(new java.util.ArrayList<>());
+        }
+    }
+
+    private void applyExclusiveGuestCountOverride(SearchCriteria criteria, String userMessage) {
+        if (criteria == null || userMessage == null || userMessage.isBlank()) return;
+        if (!"HOTEL_SEARCH".equals(criteria.getSearchType())) return;
+
+        java.util.regex.Matcher matcher = EXCLUSIVE_GUEST_PATTERN.matcher(userMessage);
+        if (!matcher.find()) return;
+        // "sadece 2 yetişkin ve 1 çocukla" gibi mesajlarda çocuk/bebek hâlâ isteniyor
+        // olabilir — o durumda dokunmuyoruz. Ama "bebek ve çocuk yok" gibi açıkça
+        // olumsuzlanmış bir mention varsa, bu zaten hariç tutma niyeti demektir,
+        // sıfırlamayı engellememeli.
+        if (MENTIONS_CHILD_OR_INFANT.matcher(userMessage).find()
+                && !NEGATED_CHILD_OR_INFANT_PATTERN.matcher(userMessage).find()) {
+            return;
+        }
+
+        criteria.setAdultCount(Integer.parseInt(matcher.group(1)));
+        criteria.setChildCount(0);
+        criteria.setChildAges(new java.util.ArrayList<>());
+        criteria.setInfantCount(0);
+        criteria.setInfantAges(new java.util.ArrayList<>());
     }
 
     /** Bebek/çocuk/yetişkin yeniden-sınıflandırma notu varsa cevabın başına ekler. */
@@ -588,7 +683,14 @@ public class ChatOrchestrationService {
     private static final java.util.Set<String> ENGLISH_WORDS = java.util.Set.of(
             "hotel", "flight", "fly", "want", "looking", "for", "from", "please", "need", "book",
             "reservation", "adults", "children", "date", "hello", "hi", "the", "and", "night",
-            "nights", "trip", "travel", "search", "yes", "no", "return", "departure");
+            "nights", "trip", "travel", "search", "yes", "no", "return", "departure",
+            // Genel yapısal kelimeler — kısa/bozuk İngilizce cümlelerin (ör. "i searching
+            // otel in antalya") içindeki tek bir yabancı ödünç kelime ("otel") yüzünden
+            // yanlışlıkla o dile (Türkçe) sınıflandırılmasını önlemek için eklendi.
+            "i", "in", "is", "am", "are", "to", "of", "my", "on", "at", "a", "an", "do", "does",
+            "can", "will", "would", "have", "has", "with", "this", "that", "me", "you", "we", "us",
+            "it", "searching", "find", "finding", "room", "rooms", "guest", "guests",
+            "people", "person", "going", "like", "about", "help", "some", "any");
 
     private static final java.util.Set<String> GERMAN_WORDS = java.util.Set.of(
             "hallo", "guten", "ich", "möchte", "bitte", "danke", "hotel", "flug", "buchen",

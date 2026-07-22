@@ -87,13 +87,25 @@ public class ResponseAgent {
 
     public String welcome(String userMessage) {
         Locale locale = detectFallbackLocale(userMessage);
+        // Hedef dili net bir isimle (ör. "English") sabitliyoruz — sadece "write in the
+        // language of this message" demek, mesaj emoji/anlamsız metin gibi hiçbir dil
+        // sinyali içermediğinde modelin rastgele bir dile (ör. İspanyolca) savrulmasına
+        // yol açıyordu. Diğer tüm ResponseAgent metodları zaten somut bir "Target: X"
+        // dili veriyor; welcome() de aynı şekilde davranmalı.
+        String targetLanguage = "tr".equals(locale.getLanguage()) ? "Turkish"
+                : "de".equals(locale.getLanguage()) ? "German"
+                : "ru".equals(locale.getLanguage()) ? "Russian"
+                : "English";
         String prompt = String.format(
                 "The user just started a chat and sent their first message: \"%s\".\n" +
                 "Write a warm, welcoming onboarding message as a travel assistant. " +
                 "Briefly explain that you need their destination, dates, and guest count to find the best hotel or flight options. " +
-                "Write the response in the language of this user message.\n" +
+                "Write the response in the same language as the user's message above. If the message has no " +
+                "identifiable language (e.g. only emoji, random characters, numbers, or gibberish), default to %s — " +
+                "do NOT guess an unrelated language.\n" +
                 "Return ONLY the response itself, no extra notes or greetings.",
-                userMessage != null ? userMessage.replace("\"", "\\\"") : ""
+                userMessage != null ? userMessage.replace("\"", "\\\"") : "",
+                targetLanguage
         );
 
         try {
@@ -269,6 +281,8 @@ public class ResponseAgent {
             context = "The user provided a check-in or departure date that is in the past. Explain that they must provide a future date.";
         } else if ("DATE_MISMATCH".equals(errorType)) {
             context = "The user provided a check-out or return date that is before the check-in or departure date. Explain that the return/check-out date must be after the start date.";
+        } else if ("DATE_TOO_FAR".equals(errorType)) {
+            context = "The user provided a date more than 2 years in the future, which is unrealistic for a travel booking. Explain that they should choose a date within the next 2 years.";
         }
         
         String prompt = String.format(
@@ -289,7 +303,9 @@ public class ResponseAgent {
             log.warn("[ResponseAgent] invalidDateRange AI generation failed: {}", e.getMessage());
         }
 
-        String key = "DATE_PAST".equals(errorType) ? "invalid.date.past" : "invalid.date.mismatch";
+        String key = "DATE_PAST".equals(errorType) ? "invalid.date.past"
+                : "DATE_TOO_FAR".equals(errorType) ? "invalid.date.too.far"
+                : "invalid.date.mismatch";
         return messageSource.getMessage(key, null, locale);
     }
 
@@ -317,6 +333,38 @@ public class ResponseAgent {
         return messageSource.getMessage("error.no.adults", null, locale);
     }
 
+    /**
+     * Negatif yolcu/misafir sayısı (ör. "-3 kişi") ya da izin verilen üst sınırı
+     * (otelde 8, uçakta 9) aşan bir sayı girildiğinde çağrılır. Bilinçli olarak
+     * serbest metinli bir yapay zeka çağrısı YAPMIYORUZ — anlamsız bir sayı,
+     * modelin şaşırıp beklenmedik/alakasız bir dilde cevap vermesine yol
+     * açabiliyordu; bunun yerine sabit, yerelleştirilmiş bir mesaj döndürülür.
+     */
+    public String invalidGuestCount(String errorType, SearchCriteria criteria) {
+        Locale locale = resolveLocale(criteria);
+        String key;
+        Object[] args = null;
+        switch (errorType) {
+            case "NEGATIVE_COUNT":
+                key = "error.negative.count";
+                break;
+            case "TOO_MANY_GUESTS":
+                key = "error.too.many.guests";
+                args = new Object[]{8};
+                break;
+            case "TOO_MANY_PASSENGERS":
+                key = "error.too.many.passengers";
+                args = new Object[]{9};
+                break;
+            case "TOO_MANY_ROOMS":
+                key = "error.too.many.rooms";
+                break;
+            default:
+                key = "error.negative.count";
+        }
+        return messageSource.getMessage(key, args, locale);
+    }
+
     public String noResultsFound(SearchCriteria criteria, String userMessage) {
         return noResultsFound(criteria, userMessage, null);
     }
@@ -331,14 +379,23 @@ public class ResponseAgent {
         String checkOut = criteria != null && criteria.getCheckOutDate() != null ? criteria.getCheckOutDate().toString() : "?";
         boolean hasSuggestions = suggestedDates != null && !suggestedDates.isEmpty();
         String suggestedDatesText = hasSuggestions ? String.join(", ", suggestedDates) : null;
+        // Sadece yetişkin sayısını yazınca, kullanıcı bir önceki turdan "sticky" kalmış
+        // (o mesajda hiç bahsedilmemiş) çocuk/bebek sayısının hâlâ aramaya dahil
+        // olduğunu fark edemiyordu — cevap "3 yetişkin için..." derken aslında arka
+        // planda 3 bebek de aranıyor olabiliyordu. Şimdi tam misafir kompozisyonu
+        // (yetişkin+çocuk+bebek) modele veriliyor ki cevap gerçek aramayı yansıtsın.
+        String guestsDescription = describeGuestComposition(criteria);
 
         String prompt = String.format(
-                "The user searched for a trip (Location: %s, Dates: %s to %s, Adults: %s) but no results were found in the system.\n" +
+                "The user searched for a trip (Location: %s, Dates: %s to %s, Guests: %s) but no results were found in the system.\n" +
                 "Write a polite response. Start by briefly restating the key criteria (location, dates, guests) you understood from the user's request, then explain that no hotels or flights were found matching those exact criteria. " +
-                "Never give a bare 'not found' message with zero context.%s\n" +
+                "Never give a bare 'not found' message with zero context. IMPORTANT: the Guests value already includes " +
+                "children/infants carried over from earlier in the conversation even if the user's latest message didn't " +
+                "mention them — state the FULL guest composition honestly (e.g. \"3 adults, 3 infants\"), do not silently " +
+                "drop the children/infants just because this message only talked about adults.%s\n" +
                 "Write the response in the language of this user message: \"%s\" (Target: %s).\n" +
                 "Return ONLY the response itself, no extra notes.",
-                location, checkIn, checkOut, adults,
+                location, checkIn, checkOut, guestsDescription,
                 hasSuggestions
                         ? " The following nearby dates ARE available for this location, so suggest the user try one of them instead: " + suggestedDatesText + "."
                         : "",
@@ -367,12 +424,28 @@ public class ResponseAgent {
             String datesParam = formatDisplayDate(startDate) + " - " + formatDisplayDate(endDate);
             String adultsParam = criteria.getAdultCount() != null ? criteria.getAdultCount().toString() : "?";
             String childrenParam = criteria.getChildCount() != null ? criteria.getChildCount().toString() : "0";
+            String infantsParam = criteria.getInfantCount() != null ? criteria.getInfantCount().toString() : "0";
 
             String details = messageSource.getMessage("criteria.understood",
-                new Object[]{locationParam, datesParam, adultsParam, childrenParam}, locale);
+                new Object[]{locationParam, datesParam, adultsParam, childrenParam, infantsParam}, locale);
             return defaultMsg + " (" + details + ")";
         }
         return defaultMsg;
+    }
+
+    /**
+     * "3 yetişkin, 2 çocuk, 1 bebek" tarzında tam misafir kompozisyonu metni üretir.
+     * Sadece yetişkin sayısını gösteren cevaplar, önceki turdan "sticky" kalmış
+     * (bu mesajda hiç bahsedilmemiş) çocuk/bebek sayısının hâlâ aramaya dahil
+     * olduğunu kullanıcıdan gizlemiş oluyordu.
+     */
+    private String describeGuestComposition(SearchCriteria criteria) {
+        if (criteria == null) return "?";
+        List<String> parts = new java.util.ArrayList<>();
+        if (criteria.getAdultCount() != null) parts.add(criteria.getAdultCount() + " adults");
+        if (criteria.getChildCount() != null && criteria.getChildCount() > 0) parts.add(criteria.getChildCount() + " children");
+        if (criteria.getInfantCount() != null && criteria.getInfantCount() > 0) parts.add(criteria.getInfantCount() + " infants");
+        return parts.isEmpty() ? "?" : String.join(", ", parts);
     }
 
     public String noMoreResults(SearchCriteria criteria, String userMessage) {
