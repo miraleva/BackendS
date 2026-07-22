@@ -283,10 +283,13 @@ public class ChatOrchestrationService {
         if (!validation.isValid()) {
             String errorType = validation.getErrorType();
             String replyText = "";
-            if ("DATE_PAST".equals(errorType) || "DATE_MISMATCH".equals(errorType)) {
+            if ("DATE_PAST".equals(errorType) || "DATE_MISMATCH".equals(errorType) || "DATE_TOO_FAR".equals(errorType)) {
                 replyText = responseAgent.invalidDateRange(errorType, existingCriteria, userMessage);
             } else if ("NO_ADULTS".equals(errorType)) {
                 replyText = responseAgent.noAdults(existingCriteria, userMessage);
+            } else if ("NEGATIVE_COUNT".equals(errorType) || "TOO_MANY_GUESTS".equals(errorType)
+                    || "TOO_MANY_PASSENGERS".equals(errorType) || "TOO_MANY_ROOMS".equals(errorType)) {
+                replyText = responseAgent.invalidGuestCount(errorType, existingCriteria);
             }
 
             if (!replyText.isEmpty()) {
@@ -597,7 +600,14 @@ public class ChatOrchestrationService {
     private static final java.util.Set<String> ENGLISH_WORDS = java.util.Set.of(
             "hotel", "flight", "fly", "want", "looking", "for", "from", "please", "need", "book",
             "reservation", "adults", "children", "date", "hello", "hi", "the", "and", "night",
-            "nights", "trip", "travel", "search", "yes", "no", "return", "departure");
+            "nights", "trip", "travel", "search", "yes", "no", "return", "departure",
+            // Genel yapısal kelimeler — kısa/bozuk İngilizce cümlelerin (ör. "i searching
+            // otel in antalya") içindeki tek bir yabancı ödünç kelime ("otel") yüzünden
+            // yanlışlıkla o dile (Türkçe) sınıflandırılmasını önlemek için eklendi.
+            "i", "in", "is", "am", "are", "to", "of", "my", "on", "at", "a", "an", "do", "does",
+            "can", "will", "would", "have", "has", "with", "this", "that", "me", "you", "we", "us",
+            "it", "searching", "find", "finding", "room", "rooms", "guest", "guests",
+            "people", "person", "going", "like", "about", "help", "some", "any");
 
     private static final java.util.Set<String> GERMAN_WORDS = java.util.Set.of(
             "hallo", "guten", "ich", "möchte", "bitte", "danke", "hotel", "flug", "buchen",

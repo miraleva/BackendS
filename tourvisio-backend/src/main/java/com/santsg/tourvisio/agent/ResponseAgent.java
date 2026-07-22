@@ -87,13 +87,25 @@ public class ResponseAgent {
 
     public String welcome(String userMessage) {
         Locale locale = detectFallbackLocale(userMessage);
+        // Hedef dili net bir isimle (ör. "English") sabitliyoruz — sadece "write in the
+        // language of this message" demek, mesaj emoji/anlamsız metin gibi hiçbir dil
+        // sinyali içermediğinde modelin rastgele bir dile (ör. İspanyolca) savrulmasına
+        // yol açıyordu. Diğer tüm ResponseAgent metodları zaten somut bir "Target: X"
+        // dili veriyor; welcome() de aynı şekilde davranmalı.
+        String targetLanguage = "tr".equals(locale.getLanguage()) ? "Turkish"
+                : "de".equals(locale.getLanguage()) ? "German"
+                : "ru".equals(locale.getLanguage()) ? "Russian"
+                : "English";
         String prompt = String.format(
                 "The user just started a chat and sent their first message: \"%s\".\n" +
                 "Write a warm, welcoming onboarding message as a travel assistant. " +
                 "Briefly explain that you need their destination, dates, and guest count to find the best hotel or flight options. " +
-                "Write the response in the language of this user message.\n" +
+                "Write the response in the same language as the user's message above. If the message has no " +
+                "identifiable language (e.g. only emoji, random characters, numbers, or gibberish), default to %s — " +
+                "do NOT guess an unrelated language.\n" +
                 "Return ONLY the response itself, no extra notes or greetings.",
-                userMessage != null ? userMessage.replace("\"", "\\\"") : ""
+                userMessage != null ? userMessage.replace("\"", "\\\"") : "",
+                targetLanguage
         );
 
         try {
@@ -269,6 +281,8 @@ public class ResponseAgent {
             context = "The user provided a check-in or departure date that is in the past. Explain that they must provide a future date.";
         } else if ("DATE_MISMATCH".equals(errorType)) {
             context = "The user provided a check-out or return date that is before the check-in or departure date. Explain that the return/check-out date must be after the start date.";
+        } else if ("DATE_TOO_FAR".equals(errorType)) {
+            context = "The user provided a date more than 2 years in the future, which is unrealistic for a travel booking. Explain that they should choose a date within the next 2 years.";
         }
         
         String prompt = String.format(
@@ -289,7 +303,9 @@ public class ResponseAgent {
             log.warn("[ResponseAgent] invalidDateRange AI generation failed: {}", e.getMessage());
         }
 
-        String key = "DATE_PAST".equals(errorType) ? "invalid.date.past" : "invalid.date.mismatch";
+        String key = "DATE_PAST".equals(errorType) ? "invalid.date.past"
+                : "DATE_TOO_FAR".equals(errorType) ? "invalid.date.too.far"
+                : "invalid.date.mismatch";
         return messageSource.getMessage(key, null, locale);
     }
 
@@ -315,6 +331,38 @@ public class ResponseAgent {
         }
 
         return messageSource.getMessage("error.no.adults", null, locale);
+    }
+
+    /**
+     * Negatif yolcu/misafir sayısı (ör. "-3 kişi") ya da izin verilen üst sınırı
+     * (otelde 8, uçakta 9) aşan bir sayı girildiğinde çağrılır. Bilinçli olarak
+     * serbest metinli bir yapay zeka çağrısı YAPMIYORUZ — anlamsız bir sayı,
+     * modelin şaşırıp beklenmedik/alakasız bir dilde cevap vermesine yol
+     * açabiliyordu; bunun yerine sabit, yerelleştirilmiş bir mesaj döndürülür.
+     */
+    public String invalidGuestCount(String errorType, SearchCriteria criteria) {
+        Locale locale = resolveLocale(criteria);
+        String key;
+        Object[] args = null;
+        switch (errorType) {
+            case "NEGATIVE_COUNT":
+                key = "error.negative.count";
+                break;
+            case "TOO_MANY_GUESTS":
+                key = "error.too.many.guests";
+                args = new Object[]{8};
+                break;
+            case "TOO_MANY_PASSENGERS":
+                key = "error.too.many.passengers";
+                args = new Object[]{9};
+                break;
+            case "TOO_MANY_ROOMS":
+                key = "error.too.many.rooms";
+                break;
+            default:
+                key = "error.negative.count";
+        }
+        return messageSource.getMessage(key, args, locale);
     }
 
     public String noResultsFound(SearchCriteria criteria, String userMessage) {
