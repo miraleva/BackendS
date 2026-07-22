@@ -38,6 +38,17 @@ public class ExtractionAgent {
      */
     public ExtractionResult extract(String message, String currentIntent, String awaitingField,
             SearchCriteria existingCriteria) {
+        return extract(message, currentIntent, awaitingField, existingCriteria, false);
+    }
+
+    /**
+     * @param lastSearchHadNoResults Son arama sonuçsuz kaldıysa true — modelin, kullanıcının
+     *                               şimdi daha basit/kısıtlı bir kriterle tekrar denediğini
+     *                               (ör. bebek/çocuk olmadan sadece yetişkin sayısı vererek)
+     *                               daha güvenilir şekilde anlayabilmesi için bağlam verir.
+     */
+    public ExtractionResult extract(String message, String currentIntent, String awaitingField,
+            SearchCriteria existingCriteria, boolean lastSearchHadNoResults) {
         if (message == null || message.trim().isEmpty()) {
             SearchCriteria emptyCriteria = new SearchCriteria();
             return new ExtractionResult("UNKNOWN", emptyCriteria);
@@ -51,12 +62,28 @@ public class ExtractionAgent {
         String currentCountsContext = "";
         if (existingCriteria != null && currentIntent != null) {
             currentCountsContext = String.format(
-                    "%nCurrent already-known traveler counts for this search: adults=%s, children=%s, infants=%s. "
-                            + "If the user's message describes an INCREMENTAL change relative to these (e.g. \"one more baby is coming\"/\"1 tane daha bebek gelicek\", "
-                            + "\"add a child\"/\"bir çocuk daha ekleyelim\", \"my wife is coming too\"), compute and output the NEW ABSOLUTE total for that field "
-                            + "(current value + the change), not just the delta. If the message states an absolute total instead (e.g. \"we'll be 3 adults\"/\"3 yetişkin olacağız\"), "
-                            + "output that absolute number directly.",
-                    existingCriteria.getAdultCount(), existingCriteria.getChildCount(), existingCriteria.getInfantCount());
+                    "%nCurrent already-known traveler counts for this search: adults=%s, children=%s, infants=%s.%s\n"
+                            + "Use real judgment (like an experienced human travel agent would) to decide what the user's message "
+                            + "means for these counts — don't rely on spotting specific keywords or phrases, reason about intent:\n"
+                            + "- If the message clearly ADDS TO or ADJUSTS one category while leaving the rest of the party implicitly "
+                            + "unchanged (e.g. \"one more baby is coming\", \"add a child\", \"make it 4 adults instead\", \"my wife is coming too\"), "
+                            + "compute the new absolute total for that field only, and leave the other fields (children/infants if not the one "
+                            + "being adjusted) omitted so they keep their current value.\n"
+                            + "- If the message reads as the user proposing a NEW, SELF-CONTAINED party size — a plain restatement of just the "
+                            + "adult count with no mention of children/infants at all (e.g. answering \"how many adults?\" with a bare number, "
+                            + "\"2 yetişkin var mı\", \"is there anything for 2 adults\", \"just 2 people\", \"never mind, 2 adults\", especially "
+                            + "right after a search came back with no results and the user seems to be retrying with a simpler/smaller party) — "
+                            + "this signals the user no longer wants the previously-known children/infants included. In that case, explicitly output "
+                            + "childCount: 0 and infantCount: 0 (and empty childAges/infantAges arrays) in your JSON — do NOT omit them.\n"
+                            + "- If the message has nothing to do with party size (e.g. it's about dates, location, or an unrelated topic), omit "
+                            + "childCount/infantCount/childAges/infantAges entirely as usual — do not default them to 0.\n"
+                            + "When genuinely ambiguous, prefer keeping children/infants as they are (omit) rather than dropping them, UNLESS the "
+                            + "no-results-retry context below suggests the user is deliberately simplifying their search.",
+                    existingCriteria.getAdultCount(), existingCriteria.getChildCount(), existingCriteria.getInfantCount(),
+                    lastSearchHadNoResults
+                            ? " IMPORTANT CONTEXT: the user's last search with these exact counts returned NO RESULTS, and they are now sending "
+                              + "a new message — this makes it more likely they are retrying with a deliberately reduced/simpler party size."
+                            : "");
         }
 
         String schemaDescription = """
