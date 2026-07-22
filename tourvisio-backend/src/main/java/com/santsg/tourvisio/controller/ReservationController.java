@@ -42,4 +42,11 @@ public class ReservationController {
         Reservation reservation = reservationService.getReservationById(id);
         return ResponseEntity.ok(reservation);
     }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Update an existing reservation", description = "Validates the reservation details and updates the booking record and passenger list.")
+    public ResponseEntity<Reservation> updateReservation(@PathVariable Long id, @Valid @RequestBody ReservationRequest request) {
+        Reservation updated = reservationService.updateReservation(id, request);
+        return ResponseEntity.ok(updated);
+    }
 }

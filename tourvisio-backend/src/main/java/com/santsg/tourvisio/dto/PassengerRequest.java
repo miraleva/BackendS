@@ -19,11 +19,8 @@ public class PassengerRequest {
     @NotBlank(message = "Last name cannot be blank")
     private String lastName;
 
-    @Email(message = "Invalid email format")
-    @NotBlank(message = "Email cannot be blank")
     private String email;
 
-    @NotBlank(message = "Phone number cannot be blank")
     private String phoneNumber;
 
     @NotBlank(message = "Identity number (TC No) cannot be blank")
