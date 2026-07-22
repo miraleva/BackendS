@@ -61,6 +61,15 @@ public class ExtractionAgent {
 
         String currentCountsContext = "";
         if (existingCriteria != null && currentIntent != null) {
+            boolean adultCountSpecificallyAwaited = awaitingField != null
+                    && awaitingField.contains("yetişkin sayısı");
+            boolean childrenAlreadyResolved = existingCriteria.getChildCount() == null
+                    || existingCriteria.getChildCount() == 0
+                    || !existingCriteria.getChildAges().isEmpty();
+            boolean infantsAlreadyResolved = existingCriteria.getInfantCount() == null
+                    || existingCriteria.getInfantCount() == 0
+                    || !existingCriteria.getInfantAges().isEmpty();
+
             currentCountsContext = String.format(
                     "%nCurrent already-known traveler counts for this search: adults=%s, children=%s, infants=%s.%s\n"
                             + "Use real judgment (like an experienced human travel agent would) to decide what the user's message "
@@ -74,7 +83,7 @@ public class ExtractionAgent {
                             + "\"2 yetişkin var mı\", \"is there anything for 2 adults\", \"just 2 people\", \"never mind, 2 adults\", especially "
                             + "right after a search came back with no results and the user seems to be retrying with a simpler/smaller party) — "
                             + "this signals the user no longer wants the previously-known children/infants included. In that case, explicitly output "
-                            + "childCount: 0 and infantCount: 0 (and empty childAges/infantAges arrays) in your JSON — do NOT omit them.\n"
+                            + "childCount: 0 and infantCount: 0 (and empty childAges/infantAges arrays) in your JSON — do NOT omit them.%s\n"
                             + "- If the message has nothing to do with party size (e.g. it's about dates, location, or an unrelated topic), omit "
                             + "childCount/infantCount/childAges/infantAges entirely as usual — do not default them to 0.\n"
                             + "When genuinely ambiguous, prefer keeping children/infants as they are (omit) rather than dropping them, UNLESS the "
@@ -83,6 +92,12 @@ public class ExtractionAgent {
                     lastSearchHadNoResults
                             ? " IMPORTANT CONTEXT: the user's last search with these exact counts returned NO RESULTS, and they are now sending "
                               + "a new message — this makes it more likely they are retrying with a deliberately reduced/simpler party size."
+                            : "",
+                    (adultCountSpecificallyAwaited && childrenAlreadyResolved && infantsAlreadyResolved)
+                            ? " EXCEPTION: right now the assistant specifically asked ONLY for \"yetişkin sayısı\" (adult count) as a direct "
+                              + "follow-up question, and children/infants for this search are already fully resolved (their ages are known, or "
+                              + "there are none). In this exact situation, treat a plain adult-count answer (e.g. \"2 yetişkin\") as simply "
+                              + "answering that specific question — do NOT reset childCount/infantCount to 0 just because they weren't repeated."
                             : "");
         }
 
@@ -117,38 +132,46 @@ public class ExtractionAgent {
 
         String awaitingFieldContext = "";
         if (awaitingField != null && !awaitingField.trim().isEmpty()) {
-            awaitingFieldContext = String.format("\nThe assistant just asked the user for: [%s]. Interpret the user's reply primarily as an answer to THIS field, not as new unrelated criteria (e.g. dates), unless the message clearly indicates a topic change.", awaitingField);
+            boolean multipleFieldsAwaited = awaitingField.contains(",");
+            awaitingFieldContext = String.format(
+                    "\nThe assistant just asked the user for: [%s]. Interpret the user's reply primarily as an answer to %s, not as new unrelated criteria (e.g. dates), unless the message clearly indicates a topic change.",
+                    awaitingField,
+                    multipleFieldsAwaited ? "THESE fields together" : "THIS field");
         }
 
-        // "çocuk yaşları" ve "bebek yaşları" AYNI ANDA soruluyorsa (ikisi de eksikse),
-        // tek bir alan yok — bare "2 6" gibi bir cevapta hangi sayının hangi kategoriye
-        // ait olduğunu tek bir alana yazma talimatıyla modele bildiremeyiz; bu durumda
-        // model her iki listeye de AYNI sayıları KOPYALIYORDU (çocuk+bebek sayısını
-        // ikiye katlayan bir hataya yol açıyordu). Bu özel durumda talimatı değiştirip
-        // yaşları gerçek değerlerine göre ayırmasını istiyoruz.
-        boolean bothChildAndInfantAgesAwaited = awaitingField != null
-                && awaitingField.contains("çocuk yaş") && awaitingField.contains("bebek yaş");
-        String ageFieldInstruction;
-        if (bothChildAndInfantAgesAwaited) {
-            ageFieldInstruction = """
-                    IMPORTANT — infant/child age fields: the assistant just asked for BOTH "çocuk yaşları" AND
-                    "bebek yaşları" together, so there is no single field to dump all ages into. Split the ages
-                    the user gives between childAges and infantAges by each age's ACTUAL VALUE: 0-2 -> infantAges,
-                    3-12 -> childAges. Each given age must appear in EXACTLY ONE of the two lists — never put the
-                    same age (or the full set of ages) into both lists.""";
-        } else {
-            ageFieldInstruction = """
-                    IMPORTANT — infant/child/adult age fields: when the user gives ages in direct response to a
-                    question about a specific field (e.g. the assistant asked for "bebek yaşları"/"çocuk yaşları"),
-                    put ALL the ages the user gives into THAT SAME field (infantAges or childAges) exactly as given,
-                    even if some ages numerically look like they belong to a different bracket (e.g. answering
-                    "bebek yaşları" with "2 and 3" -> infantAges: [2, 3]). Do NOT re-split or reclassify the ages
-                    yourself — a downstream system automatically reconciles ages into the correct infant (0-2) /
-                    child (3-12) / adult (13+) bucket afterward, and needs to see the user's original, unmodified
-                    categorization to explain the correction to the user. Only use actual age to decide the field
-                    when there is no specific awaited field context (e.g. a fresh, unprompted message like "2 kişi,
-                    yaşları 2 ve 8").""";
-        }
+        // Eksik alanlar tek cümlede birlikte sorulabiliyor (örn. "yetişkin sayısı, çocuk
+        // yaşları" veya "çocuk yaşları, bebek yaşları"), ama oturum bunu TEK bir düz string
+        // olarak tutuyor — modelin hangi sayının hangi alana ait olduğunu akıl yürüterek
+        // (zaten bilinen sayılar, alan tipi, verilen değer adedi gibi ipuçlarıyla) kendi
+        // kendine ayırması gerekiyor; sabit kelime/kombinasyon listesi tutmuyoruz.
+        String ageFieldInstruction = """
+                IMPORTANT — splitting a reply across multiple awaited fields: when the field(s) named above
+                include more than one item (comma-separated), a short reply like "5 6" must be split sensibly
+                between them using real-world judgment and the current-counts context below — don't blindly dump
+                every value into just one field:
+                - A count field (adultCount, childCount, infantCount, passengerCount, roomCount) normally takes
+                  exactly ONE number.
+                - An ages field (childAges, infantAges) normally takes as many numbers as the already-known count
+                  for that category — e.g. if childCount is already 2, two of the given numbers most plausibly go
+                  into childAges as ages, not into an unrelated count field.
+                - When an ages field and a count field are awaited together and the number of values given matches
+                  the already-known count for the ages field, treat those values as the ages field's answer —
+                  do NOT also copy them into the count field. If that leaves no value for the count field, leave
+                  it unset/omitted rather than reusing one of the ages values for it. This takes priority over any
+                  other general guidance about bare numbers answering a count-field question — that other guidance
+                  applies only when the count field was the ONLY field awaited, not when it was awaited together
+                  with an ages field.
+                - When childAges and infantAges are awaited together, split the given ages between them by each
+                  age's ACTUAL VALUE (0-2 -> infantAges, 3-12 -> childAges); each age must appear in exactly one
+                  of the two lists, never both.
+                - When only ONE field was awaited, put all the values the user gives into that single field
+                  exactly as given, even if some values numerically look like they belong to a different bracket
+                  (e.g. answering "bebek yaşları" with "2 and 3" -> infantAges: [2, 3]). Do NOT re-split or
+                  reclassify them yourself in that single-field case — a downstream system automatically
+                  reconciles ages into the correct infant (0-2) / child (3-12) / adult (13+) bucket afterward, and
+                  needs to see the user's original, unmodified reply to explain the correction to the user.
+                  Only use actual age value to decide the field when there is no specific awaited field context
+                  at all (e.g. a fresh, unprompted message like "2 kişi, yaşları 2 ve 8").""";
 
         String prompt = """
                 Extract travel criteria and identify user intent from the message below.
