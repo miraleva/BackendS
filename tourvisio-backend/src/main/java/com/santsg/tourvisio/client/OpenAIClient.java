@@ -62,7 +62,7 @@ public class OpenAIClient implements AIProviderClient {
 
         try {
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set(HttpHeaders.CONTENT_TYPE, "application/json; charset=utf-8");
             headers.setBearerAuth(apiKey); // key loglara düşmez
 
             Map<String, Object> requestBody = Map.of(

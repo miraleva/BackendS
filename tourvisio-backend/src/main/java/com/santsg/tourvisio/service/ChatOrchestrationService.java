@@ -189,7 +189,7 @@ public class ChatOrchestrationService {
         if ("AWAITING_CONFIRM".equals(sessionState.getMode()) && 
             sessionState.getAllSearchResults() != null && !sessionState.getAllSearchResults().isEmpty()) {
             
-            String lowerMsg = userMessage.toLowerCase(Locale.ROOT);
+            String lowerMsg = userMessage.toLowerCase(Locale.forLanguageTag("tr-TR"));
             boolean isMoreRequest = lowerMsg.contains("başka seçenek") || lowerMsg.contains("başka otel") || lowerMsg.contains("başka uçuş")
                     || lowerMsg.contains("başka var mı") || lowerMsg.contains("diğer seçenek") || lowerMsg.contains("diğerlerini")
                     || lowerMsg.contains("daha fazla") || lowerMsg.contains("show more") || lowerMsg.contains("more results") 
@@ -721,7 +721,7 @@ public class ChatOrchestrationService {
         if (message == null || message.isBlank()) {
             return null;
         }
-        String lower = message.toLowerCase(Locale.ROOT);
+        String lower = message.toLowerCase(Locale.forLanguageTag("tr-TR"));
 
         if (lower.matches(".*[а-яА-ЯёЁ].*")) {
             return "Russian";
@@ -880,7 +880,7 @@ public class ChatOrchestrationService {
 
             // Sonuçlar zaten kart olarak gösteriliyor — ayrıca metin özeti yazdırmıyoruz
             // (AI çağrısı da atlanmış oluyor: daha hızlı yanıt, daha az kota kullanımı).
-            finalReply = "";
+            finalReply = searchResponse.getReply();
         } else {
             if (sessionState != null) {
                 sessionState.setLastSearchHadNoResults(true);
@@ -937,7 +937,7 @@ public class ChatOrchestrationService {
             return null;
         }
         
-        String cleanUserMsg = userMessage.toLowerCase()
+        String cleanUserMsg = userMessage.toLowerCase(Locale.forLanguageTag("tr-TR"))
             .replace("hoteli", "")
             .replace("oteli", "")
             .replace("hotel", "")
@@ -953,8 +953,8 @@ public class ChatOrchestrationService {
             }
             
             if (itemName != null && !itemName.isBlank()) {
-                String cleanItemName = itemName.toLowerCase();
-                if (userMessage.toLowerCase().contains(cleanItemName) || cleanItemName.contains(cleanUserMsg)) {
+                String cleanItemName = itemName.toLowerCase(Locale.forLanguageTag("tr-TR"));
+                if (userMessage.toLowerCase(Locale.forLanguageTag("tr-TR")).contains(cleanItemName) || cleanItemName.contains(cleanUserMsg)) {
                     return item;
                 }
             }

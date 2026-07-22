@@ -178,6 +178,9 @@ public class ExtractionAgent {
                 Return the output strictly as a single JSON object matching the schema. Do not add any markdown blocks (like ```json), notes, or extra text.
                 If some criteria fields are not found in the message, omit them or set them to null.
 
+                LANGUAGE AND CHARACTER PRESERVATION HINT:
+                The user message is in Turkish. It is critical to preserve Turkish characters ('ş', 'ğ', 'ı', 'ö', 'ü', 'ç', 'Ş', 'Ğ', 'İ', 'I', 'Ö', 'Ü', 'Ç') with high precision in all extracted place names, hotel names, cities, or any criteria fields (e.g., "Eskişehir", "Muğla", "Beşiktaş", "Şişli", "Göcek"). Do not remove, simplify, normalize, or distort these characters in the JSON output.
+
                 IMPORTANT: Only extract a date field (checkInDate, checkOutDate, departureDate, returnDate) if the
                 user's message actually contains a date, weekday, or relative time expression. Vague requests like
                 "what's the nearest available date", "en yakın tarih ne var", "suggest a date", or "hangi tarihler
