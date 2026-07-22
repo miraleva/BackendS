@@ -64,7 +64,7 @@ public class ResponseAgent {
         if (message == null || message.trim().isEmpty()) {
             return Locale.ENGLISH;
         }
-        String lower = message.trim().toLowerCase(Locale.ROOT);
+        String lower = message.trim().toLowerCase(Locale.forLanguageTag("tr-TR"));
         
         // Turkish
         if (lower.contains("merhaba") || lower.contains("selam") || lower.contains("nasılsın")
@@ -379,14 +379,23 @@ public class ResponseAgent {
         String checkOut = criteria != null && criteria.getCheckOutDate() != null ? criteria.getCheckOutDate().toString() : "?";
         boolean hasSuggestions = suggestedDates != null && !suggestedDates.isEmpty();
         String suggestedDatesText = hasSuggestions ? String.join(", ", suggestedDates) : null;
+        // Sadece yetişkin sayısını yazınca, kullanıcı bir önceki turdan "sticky" kalmış
+        // (o mesajda hiç bahsedilmemiş) çocuk/bebek sayısının hâlâ aramaya dahil
+        // olduğunu fark edemiyordu — cevap "3 yetişkin için..." derken aslında arka
+        // planda 3 bebek de aranıyor olabiliyordu. Şimdi tam misafir kompozisyonu
+        // (yetişkin+çocuk+bebek) modele veriliyor ki cevap gerçek aramayı yansıtsın.
+        String guestsDescription = describeGuestComposition(criteria);
 
         String prompt = String.format(
-                "The user searched for a trip (Location: %s, Dates: %s to %s, Adults: %s) but no results were found in the system.\n" +
+                "The user searched for a trip (Location: %s, Dates: %s to %s, Guests: %s) but no results were found in the system.\n" +
                 "Write a polite response. Start by briefly restating the key criteria (location, dates, guests) you understood from the user's request, then explain that no hotels or flights were found matching those exact criteria. " +
-                "Never give a bare 'not found' message with zero context.%s\n" +
+                "Never give a bare 'not found' message with zero context. IMPORTANT: the Guests value already includes " +
+                "children/infants carried over from earlier in the conversation even if the user's latest message didn't " +
+                "mention them — state the FULL guest composition honestly (e.g. \"3 adults, 3 infants\"), do not silently " +
+                "drop the children/infants just because this message only talked about adults.%s\n" +
                 "Write the response in the language of this user message: \"%s\" (Target: %s).\n" +
                 "Return ONLY the response itself, no extra notes.",
-                location, checkIn, checkOut, adults,
+                location, checkIn, checkOut, guestsDescription,
                 hasSuggestions
                         ? " The following nearby dates ARE available for this location, so suggest the user try one of them instead: " + suggestedDatesText + "."
                         : "",
@@ -415,12 +424,28 @@ public class ResponseAgent {
             String datesParam = formatDisplayDate(startDate) + " - " + formatDisplayDate(endDate);
             String adultsParam = criteria.getAdultCount() != null ? criteria.getAdultCount().toString() : "?";
             String childrenParam = criteria.getChildCount() != null ? criteria.getChildCount().toString() : "0";
+            String infantsParam = criteria.getInfantCount() != null ? criteria.getInfantCount().toString() : "0";
 
             String details = messageSource.getMessage("criteria.understood",
-                new Object[]{locationParam, datesParam, adultsParam, childrenParam}, locale);
+                new Object[]{locationParam, datesParam, adultsParam, childrenParam, infantsParam}, locale);
             return defaultMsg + " (" + details + ")";
         }
         return defaultMsg;
+    }
+
+    /**
+     * "3 yetişkin, 2 çocuk, 1 bebek" tarzında tam misafir kompozisyonu metni üretir.
+     * Sadece yetişkin sayısını gösteren cevaplar, önceki turdan "sticky" kalmış
+     * (bu mesajda hiç bahsedilmemiş) çocuk/bebek sayısının hâlâ aramaya dahil
+     * olduğunu kullanıcıdan gizlemiş oluyordu.
+     */
+    private String describeGuestComposition(SearchCriteria criteria) {
+        if (criteria == null) return "?";
+        List<String> parts = new java.util.ArrayList<>();
+        if (criteria.getAdultCount() != null) parts.add(criteria.getAdultCount() + " adults");
+        if (criteria.getChildCount() != null && criteria.getChildCount() > 0) parts.add(criteria.getChildCount() + " children");
+        if (criteria.getInfantCount() != null && criteria.getInfantCount() > 0) parts.add(criteria.getInfantCount() + " infants");
+        return parts.isEmpty() ? "?" : String.join(", ", parts);
     }
 
     public String noMoreResults(SearchCriteria criteria, String userMessage) {

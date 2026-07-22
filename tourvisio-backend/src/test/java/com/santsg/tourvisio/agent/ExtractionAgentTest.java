@@ -1,6 +1,6 @@
 package com.santsg.tourvisio.agent;
 
-import com.santsg.tourvisio.client.GeminiExtractionClient;
+import com.santsg.tourvisio.client.AIFallbackChain;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -16,7 +16,7 @@ import static org.mockito.Mockito.when;
 class ExtractionAgentTest {
 
     @Mock
-    private GeminiExtractionClient geminiExtractionClient;
+    private AIFallbackChain geminiExtractionClient;
 
     @InjectMocks
     private ExtractionAgent extractionAgent;

@@ -543,7 +543,7 @@ public class TourVisioHotelApiClient {
 
     private List<ArrivalAutocompleteResponse> generateMockAutocomplete(String query) {
         List<ArrivalAutocompleteResponse> results = new ArrayList<>();
-        String queryLower = query != null ? query.toLowerCase() : "";
+        String queryLower = query != null ? query.toLowerCase(java.util.Locale.forLanguageTag("tr-TR")) : "";
  
         if (queryLower.contains("invalid") || queryLower.contains("unrecognized")) {
             return results;

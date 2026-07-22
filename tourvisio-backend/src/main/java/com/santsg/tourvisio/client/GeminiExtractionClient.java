@@ -67,7 +67,7 @@ public class GeminiExtractionClient implements AIProviderClient {
 
         try {
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set(HttpHeaders.CONTENT_TYPE, "application/json; charset=utf-8");
             headers.set("X-goog-api-key", apiKey);
 
             GeminiGenerateContentRequest requestBody = new GeminiGenerateContentRequest(prompt);

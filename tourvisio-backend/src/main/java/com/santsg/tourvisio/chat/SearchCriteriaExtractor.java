@@ -133,12 +133,8 @@ public class SearchCriteriaExtractor {
         if (message == null || message.isBlank())
             return new SearchCriteria();
 
-        // Locale.ROOT, Türkçe'nin büyük "İ" (noktalı I, U+0130) harfini "i̇" (i +
-        // birleşik nokta işareti) yapar — bu da "İstanbul" gibi kelimelerin
-        // "istanbul" alt-dizisiyle eşleşmesini bozar. Şehir/anahtar kelime
-        // listelerimiz düz ASCII "i" kullandığından, hem "İ" hem "I" harfini
-        // küçültmeden önce düz "i"ye normalize ediyoruz.
-        String lower = message.replace('İ', 'i').replace('I', 'i').toLowerCase(Locale.ROOT);
+        // Türkçe locale'e uygun şekilde küçük harfe dönüştürüyoruz.
+        String lower = message.toLowerCase(Locale.forLanguageTag("tr-TR"));
         SearchCriteria c = new SearchCriteria();
         c.setSearchType(intent);
 
@@ -341,8 +337,9 @@ public class SearchCriteriaExtractor {
         Matcher depM = DEPARTURE_CITY_PATTERN.matcher(lower);
         while (depM.find()) {
             String candidate = depM.group(1);
-            if (FLIGHT_CITIES.contains(candidate.toLowerCase(Locale.ROOT))) {
-                c.setDepartureLocation(capitalize(candidate));
+            String matchedCity = findCityMatch(candidate, FLIGHT_CITIES);
+            if (matchedCity != null) {
+                c.setDepartureLocation(capitalize(matchedCity));
                 break;
             }
         }
@@ -351,13 +348,10 @@ public class SearchCriteriaExtractor {
         Matcher arrM = ARRIVAL_CITY_PATTERN.matcher(lower);
         while (arrM.find()) {
             String candidate = arrM.group(1);
-            String cLower = candidate.toLowerCase(Locale.ROOT);
-            if (FLIGHT_CITIES.contains(cLower)
-                    && !cLower.equals(
-                            c.getDepartureLocation() != null
-                                    ? c.getDepartureLocation().toLowerCase(Locale.ROOT)
-                                    : "")) {
-                c.setArrivalLocation(capitalize(candidate));
+            String matchedCity = findCityMatch(candidate, FLIGHT_CITIES);
+            if (matchedCity != null
+                    && !matchedCity.equalsIgnoreCase(c.getDepartureLocation())) {
+                c.setArrivalLocation(capitalize(matchedCity));
                 break;
             }
         }
@@ -365,7 +359,7 @@ public class SearchCriteriaExtractor {
         // Doğrudan şehir adı (suffix olmadan) — kalkış veya varış belirsizse atla
         if (c.getDepartureLocation() == null || c.getArrivalLocation() == null) {
             for (String city : FLIGHT_CITIES) {
-                if (lower.contains(city)) {
+                if (containsCity(lower, city)) {
                     if (c.getDepartureLocation() == null
                             && !city.equalsIgnoreCase(c.getArrivalLocation())) {
                         c.setDepartureLocation(capitalize(city));
@@ -499,7 +493,7 @@ public class SearchCriteriaExtractor {
     }
 
     private LocalDate buildDate(int day, String monthTr) {
-        Integer monthNum = MONTHS_BY_NAME.get(monthTr.toLowerCase(Locale.ROOT));
+        Integer monthNum = MONTHS_BY_NAME.get(monthTr.toLowerCase(Locale.forLanguageTag("tr-TR")));
         if (monthNum == null)
             return null;
         try {
@@ -516,7 +510,7 @@ public class SearchCriteriaExtractor {
         while (m.find()) {
             LocalDate d = buildDate(
                     Integer.parseInt(m.group(2)),
-                    m.group(3).toLowerCase(Locale.ROOT));
+                    m.group(3).toLowerCase(Locale.forLanguageTag("tr-TR")));
             if (d != null)
                 dates.add(d);
         }
@@ -526,7 +520,7 @@ public class SearchCriteriaExtractor {
             while (mdm.find()) {
                 LocalDate d = buildDate(
                         Integer.parseInt(mdm.group(3)),
-                        mdm.group(2).toLowerCase(Locale.ROOT));
+                        mdm.group(2).toLowerCase(Locale.forLanguageTag("tr-TR")));
                 if (d != null)
                     dates.add(d);
             }
@@ -557,15 +551,46 @@ public class SearchCriteriaExtractor {
         return dates;
     }
 
+    private String normalizeForCityComparison(String s) {
+        if (s == null) return "";
+        return s.toLowerCase(Locale.forLanguageTag("tr-TR"))
+                .replace('ı', 'i')
+                .replace('İ', 'i')
+                .replace('ü', 'u')
+                .replace('ö', 'o')
+                .replace('ş', 's')
+                .replace('ğ', 'g')
+                .replace('ç', 'c');
+    }
+
+    private String findCityMatch(String candidate, List<String> cities) {
+        if (candidate == null) return null;
+        String normCandidate = normalizeForCityComparison(candidate);
+        for (String city : cities) {
+            if (normalizeForCityComparison(city).equals(normCandidate)) {
+                return city;
+            }
+        }
+        return null;
+    }
+
+    private boolean containsCity(String text, String city) {
+        if (text == null || city == null) return false;
+        String normText = normalizeForCityComparison(text);
+        String normCity = normalizeForCityComparison(city);
+        return normText.contains(normCity);
+    }
+
     private String capitalize(String s) {
         if (s == null || s.isBlank())
             return s;
-        return Character.toUpperCase(s.charAt(0)) + s.substring(1).toLowerCase(Locale.ROOT);
+        return s.substring(0, 1).toUpperCase(Locale.forLanguageTag("tr-TR"))
+                + s.substring(1).toLowerCase(Locale.forLanguageTag("tr-TR"));
     }
 
     public LocalDate parseSingleDate(String text) {
         if (text == null || text.isBlank()) return null;
-        String lower = text.toLowerCase(Locale.ROOT);
+        String lower = text.toLowerCase(Locale.forLanguageTag("tr-TR"));
         
         // 1. Try numeric date
         List<LocalDate> numericDates = extractNumericDates(lower);
@@ -576,7 +601,7 @@ public class SearchCriteriaExtractor {
         // 2. Try word date
         Matcher m = DATE_WITH_LABEL_PATTERN.matcher(lower);
         if (m.find()) {
-            return buildDate(Integer.parseInt(m.group(2)), m.group(3).toLowerCase(Locale.ROOT));
+            return buildDate(Integer.parseInt(m.group(2)), m.group(3).toLowerCase(Locale.forLanguageTag("tr-TR")));
         }
         
         return null;
@@ -584,10 +609,9 @@ public class SearchCriteriaExtractor {
 
     public String parseLocation(String text, boolean isFlight) {
         if (text == null || text.isBlank()) return null;
-        String lower = text.toLowerCase(Locale.ROOT);
         List<String> cities = isFlight ? FLIGHT_CITIES : HOTEL_CITIES;
         for (String city : cities) {
-            if (lower.contains(city)) {
+            if (containsCity(text, city)) {
                 return capitalize(city);
             }
         }
@@ -601,12 +625,12 @@ public class SearchCriteriaExtractor {
 
     public String parseCurrency(String text) {
         if (text == null || text.isBlank()) return null;
-        return extractCurrency(text.toLowerCase(Locale.ROOT));
+        return extractCurrency(text.toLowerCase(Locale.forLanguageTag("tr-TR")));
     }
 
     public String parseTripType(String text) {
         if (text == null) return null;
-        String lower = text.toLowerCase(Locale.ROOT);
+        String lower = text.toLowerCase(Locale.forLanguageTag("tr-TR"));
         if (lower.contains("tek") || lower.contains("one")) {
             return "ONE_WAY";
         }

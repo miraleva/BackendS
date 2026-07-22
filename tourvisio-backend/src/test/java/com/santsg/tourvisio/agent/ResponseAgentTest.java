@@ -1,6 +1,6 @@
 package com.santsg.tourvisio.agent;
 
-import com.santsg.tourvisio.client.GeminiClient;
+import com.santsg.tourvisio.client.AIFallbackChain;
 import com.santsg.tourvisio.chat.SearchCriteria;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,7 +20,7 @@ import static org.mockito.Mockito.when;
 class ResponseAgentTest {
 
     @Mock
-    private GeminiClient geminiClient;
+    private AIFallbackChain geminiClient;
 
     @Mock
     private MessageSource messageSource;

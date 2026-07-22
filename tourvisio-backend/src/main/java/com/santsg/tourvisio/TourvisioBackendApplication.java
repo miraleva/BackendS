@@ -8,6 +8,7 @@ import java.util.List;
 
 @SpringBootApplication
 @org.springframework.scheduling.annotation.EnableScheduling
+@org.springframework.scheduling.annotation.EnableAsync
 public class TourvisioBackendApplication {
 
 	static {

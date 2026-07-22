@@ -23,6 +23,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -81,10 +82,10 @@ class ChatOrchestrationServiceTest {
                 criteria.setAdultCount(2);
                 criteria.setCurrency("EUR");
 
-                when(extractionAgent.extract(any(), any(), any(), any()))
+                when(extractionAgent.extract(any(), any(), any(), any(), anyBoolean()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", criteria));
 
-                when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
+                lenient().when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
                                 .thenReturn("Found suitable hotels for Antalya");
 
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
@@ -164,10 +165,10 @@ class ChatOrchestrationServiceTest {
                 criteria.setCheckOutDate(java.time.LocalDate.of(2026, 7, 20));
                 criteria.setCurrency("EUR");
 
-                when(extractionAgent.extract(any(), any(), any(), any()))
+                when(extractionAgent.extract(any(), any(), any(), any(), anyBoolean()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", new SearchCriteria()));
 
-                when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
+                lenient().when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
                                 .thenReturn("Found suitable hotels");
 
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
@@ -215,10 +216,10 @@ class ChatOrchestrationServiceTest {
                 criteria.setAdultCount(2);
                 criteria.setCurrency("EUR");
 
-                when(extractionAgent.extract(any(), any(), any(), any()))
+                when(extractionAgent.extract(any(), any(), any(), any(), anyBoolean()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", new SearchCriteria()));
 
-                when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
+                lenient().when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
                                 .thenReturn("Found suitable hotels");
 
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()

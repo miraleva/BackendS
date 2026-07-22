@@ -27,7 +27,7 @@ public class Passenger {
     @Column(name = "last_name", nullable = false)
     private String lastName;
 
-    @Column()
+    @Column(name = "email")
     private String email;
 
     @Column(name = "phone_number")

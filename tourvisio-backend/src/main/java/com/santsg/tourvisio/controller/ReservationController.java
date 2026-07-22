@@ -39,8 +39,10 @@ public class ReservationController {
 
     @PostMapping
     @Operation(summary = "Create a new reservation", description = "Validates the reservation details and passengers, generates a unique booking number, and persists the record.")
-    public ResponseEntity<Reservation> createReservation(@Valid @RequestBody ReservationRequest request) {
-        Reservation created = reservationService.createReservation(request);
+    public ResponseEntity<Reservation> createReservation(
+            @Valid @RequestBody ReservationRequest request,
+            @RequestAttribute(value = "userId", required = false) Long userId) {
+        Reservation created = reservationService.createReservation(request, userId);
         return new ResponseEntity<>(created, HttpStatus.CREATED);
     }
 
@@ -56,5 +58,12 @@ public class ReservationController {
     public ResponseEntity<Reservation> getReservationById(@PathVariable Long id) {
         Reservation reservation = reservationService.getReservationById(id);
         return ResponseEntity.ok(reservation);
+    }
+
+    @PutMapping("/{id}")
+    @Operation(summary = "Update an existing reservation", description = "Validates the reservation details and updates the booking record and passenger list.")
+    public ResponseEntity<Reservation> updateReservation(@PathVariable Long id, @Valid @RequestBody ReservationRequest request) {
+        Reservation updated = reservationService.updateReservation(id, request);
+        return ResponseEntity.ok(updated);
     }
 }
