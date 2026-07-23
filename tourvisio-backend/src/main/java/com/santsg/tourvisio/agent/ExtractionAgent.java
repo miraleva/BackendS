@@ -183,6 +183,7 @@ public class ExtractionAgent {
 
                 CRITICAL LOKASYON / DESTİNASYON KURALI (LOCATION EXTRACTION RULE):
                 - Eğer kullanıcı spesifik bir şehir/il/ilçe/ülke adı (örn: Antalya, Belek, Paris, İstanbul) belirtmediyse, 'locationOrHotelName', 'departureLocation' veya 'arrivalLocation' alanlarını KESİNLİKLE doldurma (null bırak veya boş string dön).
+                - Konaklama süresi / gece sayısı ifadeleri (örn: "5 gece", "3 gün", "5 gece kalacağım", "1 hafta", "night", "stay", vb.) KESİNLİKLE şehir/lokasyon adı DEĞİLDİR. Bu tür süre ifadeleri kesinlikle 'locationOrHotelName', 'departureLocation' veya 'arrivalLocation' alanlarına YAZILMAMALIDIR.
                 - Genel mekan/ilgi noktası (POI) isimleri (örn: "lunapark", "havalimanı", "müze", "plaj", "merkez", "otogar", "istasyon", "sahil", vb.) şehir veya lokasyon adı DEĞİLDİR. Bu tür genel ifadeler kesinlikle 'locationOrHotelName', 'departureLocation' veya 'arrivalLocation' alanlarına yazılmamalıdır. Bunlar 'nearby_poi' veya 'search_keywords' parametresi olarak değerlendirilmelidir.
 
                 LANGUAGE AND CHARACTER PRESERVATION HINT:
@@ -272,13 +273,14 @@ public class ExtractionAgent {
 
     private boolean isGeneralPoi(String text) {
         if (text == null) return false;
-        java.util.List<String> pois = java.util.List.of(
+        java.util.List<String> invalidLocationKeywords = java.util.List.of(
             "lunapark", "plaj", "havalimanı", "havalimani", "havaalanı", "havaalani",
             "otogar", "müze", "muze", "merkez", "beach", "museum", "airport",
-            "theme park", "themepark", "aquapark", "su park"
+            "theme park", "themepark", "aquapark", "su park",
+            "gece", "gün", "gun", "kalacağım", "kalacagim", "kalmak", "günlük", "gunluk", "gecelik", "hafta"
         );
-        for (String poi : pois) {
-            if (text.contains(poi)) {
+        for (String invalid : invalidLocationKeywords) {
+            if (text.contains(invalid)) {
                 return true;
             }
         }

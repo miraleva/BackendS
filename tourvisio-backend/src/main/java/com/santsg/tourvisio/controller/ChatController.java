@@ -116,12 +116,6 @@ public class ChatController {
     public ResponseEntity<?> getSessionMessages(
             @PathVariable String id,
             @RequestAttribute(value = "userId", required = false) Long userId) {
-        if (userId == null) {
-            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body(java.util.Map.of(
-                "error", "Unauthorized",
-                "message", "User session is invalid or missing"
-            ));
-        }
         ChatSessionManager.SessionState state = chatSessionManager.getSessionState(id);
         if (state == null) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(java.util.Map.of(
@@ -129,7 +123,7 @@ public class ChatController {
                 "message", "Session not found: " + id
             ));
         }
-        if (!userId.equals(state.getUserId())) {
+        if (state.getUserId() != null && (userId == null || !userId.equals(state.getUserId()))) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(java.util.Map.of(
                 "error", "Forbidden",
                 "message", "Access denied to session: " + id
@@ -143,12 +137,6 @@ public class ChatController {
     public ResponseEntity<?> getSessionDetails(
             @PathVariable String id,
             @RequestAttribute(value = "userId", required = false) Long userId) {
-        if (userId == null) {
-            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body(java.util.Map.of(
-                "error", "Unauthorized",
-                "message", "User session is invalid or missing"
-            ));
-        }
         ChatSessionManager.SessionState state = chatSessionManager.getSessionState(id);
         if (state == null) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(java.util.Map.of(
@@ -156,7 +144,7 @@ public class ChatController {
                 "message", "Session not found: " + id
             ));
         }
-        if (!userId.equals(state.getUserId())) {
+        if (state.getUserId() != null && (userId == null || !userId.equals(state.getUserId()))) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(java.util.Map.of(
                 "error", "Forbidden",
                 "message", "Access denied to session: " + id
@@ -176,12 +164,6 @@ public class ChatController {
             @PathVariable String id,
             @RequestBody java.util.Map<String, String> body,
             @RequestAttribute(value = "userId", required = false) Long userId) {
-        if (userId == null) {
-            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body(java.util.Map.of(
-                "error", "Unauthorized",
-                "message", "User session is invalid or missing"
-            ));
-        }
         ChatSessionManager.SessionState state = chatSessionManager.getSessionState(id);
         if (state == null) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(java.util.Map.of(
@@ -189,7 +171,7 @@ public class ChatController {
                 "message", "Session not found: " + id
             ));
         }
-        if (!userId.equals(state.getUserId())) {
+        if (state.getUserId() != null && (userId == null || !userId.equals(state.getUserId()))) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(java.util.Map.of(
                 "error", "Forbidden",
                 "message", "Access denied to session: " + id
@@ -212,7 +194,7 @@ public class ChatController {
         if (state == null) {
             throw new ResourceNotFoundException("Session not found: " + id);
         }
-        if (userId == null || !userId.equals(state.getUserId())) {
+        if (state.getUserId() != null && (userId == null || !userId.equals(state.getUserId()))) {
             throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.FORBIDDEN, "Access denied to session: " + id
             );
