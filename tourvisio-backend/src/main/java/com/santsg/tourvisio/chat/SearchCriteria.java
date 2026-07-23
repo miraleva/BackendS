@@ -48,6 +48,10 @@ public class SearchCriteria {
     private String nationality = "TR";
     private Integer roomCount = 1;
 
+    private Double maxPrice;
+    private Double minPrice;
+    private Integer minStars;
+
     /**
      * Yaşa göre bebek/çocuk/yetişkin sınıflandırması değiştiğinde (ör.
      * kullanıcı "2 bebek" dedi ama yaşları 2 ve 3 çıktı → biri gerçekte
@@ -97,6 +101,9 @@ public class SearchCriteria {
         c.returnDate = this.returnDate;
         c.passengerCount = this.passengerCount;
         c.tripType = this.tripType;
+        c.maxPrice = this.maxPrice;
+        c.minPrice = this.minPrice;
+        c.minStars = this.minStars;
         return c;
     }
 
@@ -180,6 +187,12 @@ public class SearchCriteria {
             this.passengerCount = incoming.getPassengerCount();
         if (incoming.getTripType() != null)
             this.tripType = incoming.getTripType();
+        if (incoming.getMaxPrice() != null)
+            this.maxPrice = incoming.getMaxPrice();
+        if (incoming.getMinPrice() != null)
+            this.minPrice = incoming.getMinPrice();
+        if (incoming.getMinStars() != null)
+            this.minStars = incoming.getMinStars();
 
         reconcileAgeBuckets();
     }

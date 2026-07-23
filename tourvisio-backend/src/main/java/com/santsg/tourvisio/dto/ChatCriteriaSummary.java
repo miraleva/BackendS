@@ -41,6 +41,10 @@ public class ChatCriteriaSummary {
 
     private String currency;
 
+    private Double maxPrice;
+    private Double minPrice;
+    private Integer minStars;
+
     public static ChatCriteriaSummary from(SearchCriteria criteria) {
         if (criteria == null) {
             return null;
@@ -61,6 +65,9 @@ public class ChatCriteriaSummary {
                 .passengerCount(criteria.getPassengerCount())
                 .tripType(criteria.getTripType())
                 .currency(criteria.getCurrency())
+                .maxPrice(criteria.getMaxPrice())
+                .minPrice(criteria.getMinPrice())
+                .minStars(criteria.getMinStars())
                 .build();
     }
 }

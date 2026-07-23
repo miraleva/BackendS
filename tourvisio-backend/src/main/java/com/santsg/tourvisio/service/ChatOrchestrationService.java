@@ -125,7 +125,22 @@ public class ChatOrchestrationService {
         if (request.getCountry() != null && !request.getCountry().isBlank()) {
             existingCriteria.setCountry(request.getCountry());
         }
-        if (request.getCurrencySymbol() != null && !request.getCurrencySymbol().isBlank()) {
+        if (request.getMaxPrice() != null) {
+            existingCriteria.setMaxPrice(request.getMaxPrice());
+        }
+        if (request.getMinPrice() != null) {
+            existingCriteria.setMinPrice(request.getMinPrice());
+        }
+        if (request.getMinStars() != null) {
+            existingCriteria.setMinStars(request.getMinStars());
+        }
+        // Frontend her mesajda Ayarlar sayfasındaki tercih edilen para birimini
+        // gönderiyor. Bunu sadece oturumda HENÜZ bir para birimi belirlenmemişse
+        // (yeni/başlangıç değeri olarak) uyguluyoruz — aksi hâlde kullanıcı
+        // sohbet içinde "dolar olarak göster" dediğinde bir sonraki mesajda bu
+        // satır onu sessizce Ayarlar'daki varsayılana geri döndürüyordu.
+        if (existingCriteria.getCurrency() == null
+                && request.getCurrencySymbol() != null && !request.getCurrencySymbol().isBlank()) {
             existingCriteria.setCurrency(request.getCurrencySymbol());
         }
         // Dil tercihi: önce bu mesajın gerçek dilini algılamayı dene (kullanıcı
@@ -326,6 +341,17 @@ public class ChatOrchestrationService {
 
         // Kriterler geçerli — artık kalıcı olarak yazılabilir.
         sessionStore.save(sessionId, existingCriteria);
+
+        // Check if there are existing search results and this is purely a filter update (no new search intent/dates/location)
+        if (sessionState.getAllSearchResults() != null && !sessionState.getAllSearchResults().isEmpty()
+                && (incoming != null && (incoming.getMaxPrice() != null || incoming.getMinPrice() != null || incoming.getMinStars() != null))
+                && hasNoNewSearchCriteria(incoming)) {
+            ChatResponse filterResponse = filterExistingResults(sessionId, sessionState, existingCriteria, userMessage,
+                    existingCriteria.getMaxPrice(), existingCriteria.getMinPrice(), existingCriteria.getMinStars());
+            if (filterResponse != null) {
+                return filterResponse;
+            }
+        }
 
         // 8. Eksik alan kontrolü
         List<String> missingFields = missingFieldsService.getMissingFields(existingCriteria);
@@ -960,5 +986,56 @@ public class ChatOrchestrationService {
             }
         }
         return null;
+    }
+
+    private ChatResponse filterExistingResults(String sessionId, ChatSessionManager.SessionState sessionState,
+            SearchCriteria criteria, String userMessage, Double maxPrice, Double minPrice, Integer minStars) {
+        List<?> allResults = sessionState.getAllSearchResults();
+        if (allResults == null || allResults.isEmpty()) {
+            return null;
+        }
+
+        List<Object> filtered = new java.util.ArrayList<>();
+        for (Object item : allResults) {
+            if (item instanceof com.santsg.tourvisio.dto.HotelSearchResponseItem) {
+                com.santsg.tourvisio.dto.HotelSearchResponseItem hotel = (com.santsg.tourvisio.dto.HotelSearchResponseItem) item;
+                if (maxPrice != null && hotel.getPrice() != null && hotel.getPrice() > maxPrice) {
+                    continue;
+                }
+                if (minPrice != null && hotel.getPrice() != null && hotel.getPrice() < minPrice) {
+                    continue;
+                }
+                if (minStars != null && hotel.getStars() != null && hotel.getStars() < minStars) {
+                    continue;
+                }
+                filtered.add(hotel);
+            } else {
+                filtered.add(item);
+            }
+        }
+
+        sessionState.setResultOffset(0);
+        int totalSize = allResults.size();
+        int filteredSize = filtered.size();
+        List<Object> slicedResults = filtered.subList(0, Math.min(10, filteredSize));
+        sessionState.setLastShownResults(slicedResults);
+
+        criteria.setMaxPrice(maxPrice);
+        criteria.setMinPrice(minPrice);
+        criteria.setMinStars(minStars);
+        sessionStore.save(sessionId, criteria);
+
+        String replyText = String.format("%d adet otel filtrelendi, %d adet uygun otel gösteriliyor.", totalSize, filteredSize);
+
+        return ChatResponse.builder()
+                .reply(replyText)
+                .sessionId(sessionId)
+                .searchType(criteria.getSearchType())
+                .missingFields(List.of())
+                .chatStatus("ACTIVE")
+                .success(true)
+                .results(slicedResults)
+                .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(criteria))
+                .build();
     }
 }

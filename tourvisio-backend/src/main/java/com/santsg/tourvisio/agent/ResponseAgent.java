@@ -155,14 +155,74 @@ public class ResponseAgent {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = resolveLanguageName(criteria);
 
+        String poiInstruction = "";
+        if (userMessage != null && (missingFields.contains("locationOrHotelName") || missingFields.contains("konum veya otel adı") || missingFields.contains("varış noktası") || missingFields.contains("arrivalLocation"))) {
+            String lowerMsg = userMessage.toLowerCase(Locale.forLanguageTag("tr-TR"));
+            String foundPoi = null;
+            if (lowerMsg.contains("lunapark")) foundPoi = "lunapark";
+            else if (lowerMsg.contains("müze") || lowerMsg.contains("muze")) foundPoi = "müze";
+            else if (lowerMsg.contains("plaj")) foundPoi = "plaj";
+            else if (lowerMsg.contains("havalimanı") || lowerMsg.contains("havalimani") || lowerMsg.contains("havaalanı") || lowerMsg.contains("havaalani")) foundPoi = "havalimanı";
+            else if (lowerMsg.contains("otogar")) foundPoi = "otogar";
+            else if (lowerMsg.contains("merkez")) foundPoi = "merkez";
+            else if (lowerMsg.contains("beach")) foundPoi = "beach";
+            else if (lowerMsg.contains("museum")) foundPoi = "museum";
+            else if (lowerMsg.contains("airport")) foundPoi = "airport";
+
+            if (foundPoi != null) {
+                // Adapt grammatical suffix for Turkish
+                String suffix = "yakınında";
+                String targetPoi = foundPoi;
+                if ("lunapark".equals(foundPoi)) { suffix = "lunaparka"; }
+                else if ("müze".equals(foundPoi)) { suffix = "müzeye"; }
+                else if ("plaj".equals(foundPoi)) { suffix = "plaja"; }
+                else if ("havalimanı".equals(foundPoi)) { suffix = "havalimanına"; targetPoi = "havalimanının"; }
+                else if ("otogar".equals(foundPoi)) { suffix = "otogara"; targetPoi = "otogarın"; }
+                else if ("merkez".equals(foundPoi)) { suffix = "merkeze"; targetPoi = "merkezin"; }
+                else if ("beach".equals(foundPoi)) { suffix = "the beach"; targetPoi = "beach's"; }
+                else if ("museum".equals(foundPoi)) { suffix = "the museum"; targetPoi = "museum's"; }
+                else if ("airport".equals(foundPoi)) { suffix = "the airport"; targetPoi = "airport's"; }
+
+                poiInstruction = String.format(
+                    "\nCRITICAL SPECIAL RULE: The user mentioned a general point of interest '%s' but did not specify a city/location. " +
+                    "Instead of a generic destination question, ask them politely which city's '%s' they are referring to. " +
+                    "Format of response MUST be similar to: '%s yakın bir otel bulmaktan memnuniyet duyarım! Hangi şehirdeki %s yakınında konaklamak istersiniz? (Örn: Antalya, İstanbul)'. " +
+                    "Match the tone and language of the user message.",
+                    foundPoi, foundPoi, capitalize(suffix), targetPoi
+                );
+            }
+        }
+
+        String knownDetailsInstruction = "";
+        if (criteria != null) {
+            boolean hasLocation = (criteria.getLocationOrHotelName() != null && !criteria.getLocationOrHotelName().isBlank())
+                    || (criteria.getArrivalLocation() != null && !criteria.getArrivalLocation().isBlank());
+            if (!hasLocation && (criteria.getCheckInDate() != null || criteria.getDepartureDate() != null || criteria.getAdultCount() != null || criteria.getPassengerCount() != null)) {
+                String datesStr = "";
+                if (criteria.getCheckInDate() != null && criteria.getCheckOutDate() != null) {
+                    datesStr = criteria.getCheckInDate() + " - " + criteria.getCheckOutDate();
+                } else if (criteria.getCheckInDate() != null) {
+                    datesStr = criteria.getCheckInDate().toString();
+                }
+                String guestsStr = criteria.getAdultCount() != null ? (criteria.getAdultCount() + " kişi") : "";
+
+                knownDetailsInstruction = String.format(
+                    "\nSPECIAL RULE: We already know some details (Dates: '%s', Guests: '%s'), but the destination/city is still missing. " +
+                    "Acknowledge the known details naturally and politely ask which city/destination they would like to stay or travel to. " +
+                    "Example response format: 'Harika, %s %s için rezervasyon planlıyoruz. Peki hangi şehirde/bölgede konaklamak istersiniz?'",
+                    datesStr, guestsStr, datesStr, guestsStr
+                );
+            }
+        }
+
         String fieldsCsv = String.join(", ", missingFields);
         String prompt = String.format(
                 "The user is planning a trip, but the following mandatory search criteria are missing: [%s]. " +
                 "Ask the user for ALL of this information together in a single, friendly, and natural question. " +
                 "Do NOT use bare technical terms (e.g., say 'How many people will be traveling?' instead of 'adult count'). " +
-                "Write the question in %s — the same language the user is writing in.%s " +
+                "Write the question in %s — the same language the user is writing in.%s%s%s " +
                 "Return ONLY the question itself, no extra notes.",
-                fieldsCsv, targetLanguage, userMessageClause(userMessage)
+                fieldsCsv, targetLanguage, userMessageClause(userMessage), poiInstruction, knownDetailsInstruction
         );
 
         try {
@@ -175,6 +235,14 @@ public class ResponseAgent {
         }
 
         // Fallback localization pathway
+        if ("FLIGHT_SEARCH".equals(criteria.getSearchType()) && 
+            (criteria.getDepartureLocation() == null || criteria.getDepartureLocation().isBlank() ||
+             criteria.getArrivalLocation() == null || criteria.getArrivalLocation().isBlank())) {
+            if ("tr".equals(locale.getLanguage())) {
+                return "Harika bir seyahat planı yapalım! Size en uygun uçak biletini bulabilmem için öncelikle nereden nereye uçacağınızı, hangi tarihte seyahat etmek istediğinizi, biletin tek yön mü yoksa gidiş-dönüş mü olacağını ve kaç yolcu olacağını öğrenebilir miyim?";
+            }
+        }
+
         List<String> translatedFields = missingFields.stream()
                 .map(field -> {
                     String fieldKey = getFieldKey(field);
@@ -373,7 +441,22 @@ public class ResponseAgent {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
 
-        String location = criteria != null ? criteria.getLocationOrHotelName() : "the selected destination";
+        String location = "the selected destination";
+        if (criteria != null) {
+            if ("FLIGHT_SEARCH".equals(criteria.getSearchType())) {
+                String dep = criteria.getDepartureLocation();
+                String arr = criteria.getArrivalLocation();
+                if (dep != null && !dep.isBlank() && arr != null && !arr.isBlank()) {
+                    location = dep + " to " + arr;
+                } else if (dep != null && !dep.isBlank()) {
+                    location = "from " + dep;
+                } else if (arr != null && !arr.isBlank()) {
+                    location = "to " + arr;
+                }
+            } else if (criteria.getLocationOrHotelName() != null && !criteria.getLocationOrHotelName().isBlank()) {
+                location = criteria.getLocationOrHotelName();
+            }
+        }
         String adults = criteria != null && criteria.getAdultCount() != null ? String.valueOf(criteria.getAdultCount()) : "?";
         String checkIn = criteria != null && criteria.getCheckInDate() != null ? criteria.getCheckInDate().toString() : "?";
         String checkOut = criteria != null && criteria.getCheckOutDate() != null ? criteria.getCheckOutDate().toString() : "?";
@@ -482,6 +565,13 @@ public class ResponseAgent {
 
     private String formatDisplayDate(java.time.LocalDate date) {
         return date != null ? date.format(DISPLAY_DATE_FORMAT) : "?";
+    }
+
+    private String capitalize(String s) {
+        if (s == null || s.isBlank())
+            return s;
+        return s.substring(0, 1).toUpperCase(java.util.Locale.forLanguageTag("tr-TR"))
+                + s.substring(1).toLowerCase(java.util.Locale.forLanguageTag("tr-TR"));
     }
 
     /**
