@@ -213,6 +213,14 @@ public class ResponseAgent {
         }
 
         // Fallback localization pathway
+        if ("FLIGHT_SEARCH".equals(criteria.getSearchType()) && 
+            (criteria.getDepartureLocation() == null || criteria.getDepartureLocation().isBlank() ||
+             criteria.getArrivalLocation() == null || criteria.getArrivalLocation().isBlank())) {
+            if ("tr".equals(locale.getLanguage())) {
+                return "Harika bir seyahat planı yapalım! Size en uygun uçak biletini bulabilmem için öncelikle nereden nereye uçacağınızı, hangi tarihte seyahat etmek istediğinizi, biletin tek yön mü yoksa gidiş-dönüş mü olacağını ve kaç yolcu olacağını öğrenebilir miyim?";
+            }
+        }
+
         List<String> translatedFields = missingFields.stream()
                 .map(field -> {
                     String fieldKey = getFieldKey(field);

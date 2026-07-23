@@ -67,7 +67,8 @@ public class GeminiExtractionClient implements AIProviderClient {
 
         try {
             HttpHeaders headers = new HttpHeaders();
-            headers.set(HttpHeaders.CONTENT_TYPE, "application/json; charset=utf-8");
+            headers.setContentType(new org.springframework.http.MediaType("application", "json", java.nio.charset.StandardCharsets.UTF_8));
+            headers.setAccept(java.util.List.of(new org.springframework.http.MediaType("application", "json", java.nio.charset.StandardCharsets.UTF_8)));
             headers.set("X-goog-api-key", apiKey);
 
             GeminiGenerateContentRequest requestBody = new GeminiGenerateContentRequest(prompt);
