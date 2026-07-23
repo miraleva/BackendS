@@ -194,6 +194,10 @@ public class ChatSessionManager {
             }
         }
 
+        public void resetOutOfScopeCount() {
+            this.outOfScopeCount = 0;
+        }
+
         public String getChatStatus() {
             return chatStatus;
         }

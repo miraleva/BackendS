@@ -23,7 +23,6 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -54,7 +53,8 @@ class ChatOrchestrationServiceTest {
 
         @BeforeEach
         void setUp() {
-                lenient().when(criteriaValidator.validate(any())).thenReturn(new SearchCriteriaValidator.ValidationResult(true, null));
+                lenient().when(criteriaValidator.validate(any()))
+                                .thenReturn(new SearchCriteriaValidator.ValidationResult(true, null));
         }
 
         @Test
@@ -82,10 +82,10 @@ class ChatOrchestrationServiceTest {
                 criteria.setAdultCount(2);
                 criteria.setCurrency("EUR");
 
-                when(extractionAgent.extract(any(), any(), any(), any(), anyBoolean()))
+                when(extractionAgent.extract(any(), any(), any(), any()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", criteria));
 
-                lenient().when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
+                when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
                                 .thenReturn("Found suitable hotels for Antalya");
 
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
@@ -133,7 +133,7 @@ class ChatOrchestrationServiceTest {
                                         .sessionId("session-forbidden-test")
                                         .build(), 456L);
                 }).isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
-                  .hasMessageContaining("Access denied to session");
+                                .hasMessageContaining("Access denied to session");
         }
 
         @Test
@@ -165,10 +165,10 @@ class ChatOrchestrationServiceTest {
                 criteria.setCheckOutDate(java.time.LocalDate.of(2026, 7, 20));
                 criteria.setCurrency("EUR");
 
-                when(extractionAgent.extract(any(), any(), any(), any(), anyBoolean()))
+                when(extractionAgent.extract(any(), any(), any(), any()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", new SearchCriteria()));
 
-                lenient().when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
+                when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
                                 .thenReturn("Found suitable hotels");
 
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
@@ -216,10 +216,10 @@ class ChatOrchestrationServiceTest {
                 criteria.setAdultCount(2);
                 criteria.setCurrency("EUR");
 
-                when(extractionAgent.extract(any(), any(), any(), any(), anyBoolean()))
+                when(extractionAgent.extract(any(), any(), any(), any()))
                                 .thenReturn(new ExtractionResult("HOTEL_SEARCH", new SearchCriteria()));
 
-                lenient().when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
+                when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
                                 .thenReturn("Found suitable hotels");
 
                 when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
@@ -236,5 +236,63 @@ class ChatOrchestrationServiceTest {
 
                 assertThat(criteria.getCheckOutDate()).isEqualTo(java.time.LocalDate.of(2026, 7, 23));
                 assertThat(response.getSuccess()).isTrue();
+        }
+
+        @Test
+        void orchestrate_shouldTerminateSessionAfterThreeConsecutiveOutOfScopeMessages() {
+                ChatSessionManager chatSessionManager = new ChatSessionManager();
+                ChatSessionStore sessionStore = new ChatSessionStore();
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor();
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService();
+
+                ChatOrchestrationService service = new ChatOrchestrationService(
+                                intentDetectionService,
+                                chatSessionManager,
+                                sessionStore,
+                                extractor,
+                                missingFieldsService, criteriaValidator,
+                                extractionAgent,
+                                responseAgent,
+                                hotelSearchService,
+                                flightSearchService);
+
+                String sessionId = "session-consecutive-test";
+
+                // Set up intentDetectionService for out of scope message
+                when(intentDetectionService.detectIntent("some random stuff"))
+                                .thenReturn("OUT_OF_SCOPE");
+                when(responseAgent.decline(any(), org.mockito.ArgumentMatchers.anyBoolean(), any()))
+                                .thenReturn("I can't help with that");
+
+                // 1st out of scope
+                ChatResponse r1 = service.orchestrate(ChatRequest.builder()
+                                .message("some random stuff")
+                                .sessionId(sessionId)
+                                .build());
+                assertThat(r1.getChatStatus()).isEqualTo("ACTIVE");
+                assertThat(chatSessionManager.getSessionState(sessionId).getOutOfScopeCount()).isEqualTo(1);
+
+                // 2nd out of scope
+                ChatResponse r2 = service.orchestrate(ChatRequest.builder()
+                                .message("some random stuff")
+                                .sessionId(sessionId)
+                                .build());
+                assertThat(r2.getChatStatus()).isEqualTo("ACTIVE");
+                assertThat(chatSessionManager.getSessionState(sessionId).getOutOfScopeCount()).isEqualTo(2);
+
+                // 3rd out of scope
+                ChatResponse r3 = service.orchestrate(ChatRequest.builder()
+                                .message("some random stuff")
+                                .sessionId(sessionId)
+                                .build());
+                assertThat(r3.getChatStatus()).isEqualTo("TERMINATED");
+                assertThat(chatSessionManager.getSessionState(sessionId).getOutOfScopeCount()).isEqualTo(3);
+
+                // 4th message - should decline immediately because session is TERMINATED
+                ChatResponse r4 = service.orchestrate(ChatRequest.builder()
+                                .message("Antalya hotel")
+                                .sessionId(sessionId)
+                                .build());
+                assertThat(r4.getChatStatus()).isEqualTo("TERMINATED");
         }
 }

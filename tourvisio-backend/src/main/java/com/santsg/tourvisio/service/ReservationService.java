@@ -21,10 +21,26 @@ public class ReservationService {
 
     private final ReservationRepository reservationRepository;
     private final EmailService emailService;
+    private final UserRepository userRepository;
 
-    public ReservationService(ReservationRepository reservationRepository, EmailService emailService) {
+    public ReservationService(ReservationRepository reservationRepository, EmailService emailService, UserRepository userRepository) {
         this.reservationRepository = reservationRepository;
         this.emailService = emailService;
+        this.userRepository = userRepository;
+    }
+
+    public PassengerPrefillResponse getPrefillData(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
+        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User with ID " + userId + " not found"));
+        return PassengerPrefillResponse.builder()
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .email(user.getEmail())
+                .phoneNumber(user.getPhone())
+                .build();
     }
 
     private void validateReservationRequest(ReservationRequest request) {

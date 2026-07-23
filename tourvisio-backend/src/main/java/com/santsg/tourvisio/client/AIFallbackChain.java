@@ -45,15 +45,50 @@ public class AIFallbackChain implements AIProviderClient {
                     log.info("[AIFallbackChain:{}] '{}' sağlayıcısına düşüldü (önceki {} sağlayıcı başarısız).",
                             chainLabel, provider.providerName(), i);
                 }
+                logLlmRequest(provider.providerName(), prompt, response);
                 return response;
             }
 
+            logLlmRequest(provider.providerName() + " (FAILED)", prompt, response);
             log.warn("[AIFallbackChain:{}] '{}' sağlayıcısı geçersiz yanıt döndürdü, bir sonrakine geçiliyor.",
                     chainLabel, provider.providerName());
         }
 
         log.error("[AIFallbackChain:{}] Tüm sağlayıcılar ({} adet) başarısız oldu.", chainLabel, providers.size());
+        logLlmRequest(chainLabel + " (ALL FAILED)", prompt, lastResponse);
         return lastResponse;
+    }
+
+    private void logLlmRequest(String providerName, String prompt, String response) {
+        StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
+        StackTraceElement caller = null;
+        for (StackTraceElement element : stackTrace) {
+            String className = element.getClassName();
+            if (className.contains("Thread") || 
+                className.contains("java.lang") || 
+                className.contains("sun.reflect") || 
+                className.contains("jdk.internal") || 
+                className.contains("org.mockito") || 
+                className.contains("AIProviderClient") || 
+                className.contains("AIFallbackChain") ||
+                className.equals(this.getClass().getName())) {
+                continue;
+            }
+            caller = element;
+            break;
+        }
+
+        System.out.println("==================================================");
+        System.out.println("[LLM REQUEST DEBUG]");
+        if (caller != null) {
+            System.out.println("Source File: " + caller.getFileName());
+            System.out.println("Line Number: " + caller.getLineNumber());
+            System.out.println("Class/Method: " + caller.getClassName() + "." + caller.getMethodName());
+        }
+        System.out.println("Provider: " + providerName);
+        System.out.println("Prompt:\n" + prompt);
+        System.out.println("Response:\n" + response);
+        System.out.println("==================================================");
     }
 
     /** Alternatif isim — bazı çağıranlar geriye dönük uyumluluk için generate() bekliyor. */
