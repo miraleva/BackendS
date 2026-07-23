@@ -411,10 +411,29 @@ public class ResponseAgent {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
 
-        String location = criteria != null ? criteria.getLocationOrHotelName() : "the selected destination";
+        // Uçuş aramalarında konum/tarih bilgisi locationOrHotelName/checkInDate'de değil,
+        // departureLocation+arrivalLocation / departureDate+returnDate'de tutulur. Bunu
+        // ayırt etmeden hep otel alanlarını okumak, uçuş aramalarında modele "Location: null"
+        // göndermeye yol açıyordu — model de boş bırakmak yerine rastgele bir şehir/tarih
+        // uyduruyordu (ör. hiç aranmamış "Bodrum").
+        boolean isFlightSearch = criteria != null && "FLIGHT_SEARCH".equals(criteria.getSearchType());
+        String location;
+        String checkIn;
+        String checkOut;
+        if (isFlightSearch) {
+            String departure = criteria.getDepartureLocation();
+            String arrival = criteria.getArrivalLocation();
+            location = (departure != null || arrival != null)
+                    ? (departure != null ? departure : "?") + " → " + (arrival != null ? arrival : "?")
+                    : "the selected destination";
+            checkIn = criteria.getDepartureDate() != null ? criteria.getDepartureDate().toString() : "?";
+            checkOut = criteria.getReturnDate() != null ? criteria.getReturnDate().toString() : "?";
+        } else {
+            location = criteria != null ? criteria.getLocationOrHotelName() : "the selected destination";
+            checkIn = criteria != null && criteria.getCheckInDate() != null ? criteria.getCheckInDate().toString() : "?";
+            checkOut = criteria != null && criteria.getCheckOutDate() != null ? criteria.getCheckOutDate().toString() : "?";
+        }
         String adults = criteria != null && criteria.getAdultCount() != null ? String.valueOf(criteria.getAdultCount()) : "?";
-        String checkIn = criteria != null && criteria.getCheckInDate() != null ? criteria.getCheckInDate().toString() : "?";
-        String checkOut = criteria != null && criteria.getCheckOutDate() != null ? criteria.getCheckOutDate().toString() : "?";
         boolean hasSuggestions = suggestedDates != null && !suggestedDates.isEmpty();
         String suggestedDatesText = hasSuggestions ? String.join(", ", suggestedDates) : null;
         // Sadece yetişkin sayısını yazınca, kullanıcı bir önceki turdan "sticky" kalmış
@@ -430,7 +449,9 @@ public class ResponseAgent {
                 "Never give a bare 'not found' message with zero context. IMPORTANT: the Guests value already includes " +
                 "children/infants carried over from earlier in the conversation even if the user's latest message didn't " +
                 "mention them — state the FULL guest composition honestly (e.g. \"3 adults, 3 infants\"), do not silently " +
-                "drop the children/infants just because this message only talked about adults.%s\n" +
+                "drop the children/infants just because this message only talked about adults. " +
+                "NEVER invent or guess a value that isn't given above — if Location, a date, or Guests shows as unspecified/\"?\", " +
+                "phrase the sentence to omit that detail rather than making one up (e.g. do not state a city or date that wasn't provided).%s\n" +
                 "Write the response in the language of this user message: \"%s\" (Target: %s).\n" +
                 "Return ONLY the response itself, no extra notes.",
                 location, checkIn, checkOut, guestsDescription,
