@@ -172,6 +172,13 @@ public class ReservationService {
         return reservationRepository.findAll();
     }
 
+    public List<Reservation> getReservationsByUserId(Long userId) {
+        if (userId == null) {
+            return new ArrayList<>();
+        }
+        return reservationRepository.findByUserId(userId);
+    }
+
     public Reservation getReservationById(Long id) {
         return reservationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation with ID " + id + " not found"));
