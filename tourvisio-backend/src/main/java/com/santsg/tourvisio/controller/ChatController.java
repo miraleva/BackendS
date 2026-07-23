@@ -60,7 +60,7 @@ public class ChatController {
      * response'da döner.</li>
      * </ul>
      */
-    @PostMapping(value = "/message", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = "/message", consumes = MediaType.APPLICATION_JSON_VALUE, produces = "application/json;charset=UTF-8")
     @Operation(summary = "Chatbot'a mesaj gönder", description = """
             Kullanıcıdan gelen mesajı işler:
             1. Otel mi uçak mı arandığını algılar (intent detection).
