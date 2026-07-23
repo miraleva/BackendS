@@ -1,10 +1,12 @@
 package com.santsg.tourvisio.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -16,6 +18,7 @@ import java.util.ArrayList;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString(exclude = "password")
 public class User {
 
     @Id
@@ -34,7 +37,8 @@ public class User {
     @Column(name = "phone", unique = true, nullable = true, length = 16)
     private String phone;
 
-    @Column(name = "password", nullable = true)
+    @Column(name = "password", nullable = true, length = 255)
+    @JsonIgnore
     private String password;
 
     @Column(name = "country", nullable = true, length = 100)

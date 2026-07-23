@@ -16,7 +16,7 @@ public class GetPasswords {
             ResultSet rs = stmt.executeQuery(query);
 
             while (rs.next()) {
-                System.out.println("USER: ID=" + rs.getLong("id") + " EMAIL=" + rs.getString("email") + " PASS=" + rs.getString("password"));
+                System.out.println("USER: ID=" + rs.getLong("id") + " EMAIL=[REDACTED] PASS=[REDACTED]");
             }
         } catch (Exception e) {
             e.printStackTrace();

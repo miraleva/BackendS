@@ -14,7 +14,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
-import org.mindrot.jbcrypt.BCrypt;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -33,25 +33,27 @@ public class AuthController {
     private final UserRepository userRepository;
     private final JwtProvider jwtProvider;
     private final OAuthService oAuthService;
+    private final PasswordEncoder passwordEncoder;
 
-    // application.properties dosyasındaki "sanny.admin.password" değerini okur. 
-    // Bulamazsa varsayılan olarak "admin2026" şifresini geçerli kılar.
-    private final String correctAdminPassword = "admin2026";
+    // application.properties → sanny.admin.password (env: ADMIN_PASSWORD) değerini okur
+    @Value("${sanny.admin.password}")
+    private String correctAdminPassword;
 
-    public AuthController(UserRepository userRepository, JwtProvider jwtProvider, OAuthService oAuthService) {
+    public AuthController(UserRepository userRepository, JwtProvider jwtProvider, OAuthService oAuthService, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.jwtProvider = jwtProvider;
         this.oAuthService = oAuthService;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @PostMapping(value = "/signup", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "User Signup", description = "Register a new user in the system")
     public ResponseEntity<?> signup(@Valid @RequestBody SignupRequest request) {
-        log.info("[AuthController] Signup request received for email={}", request.getEmail());
+        log.info("[AuthController] Signup request received");
 
         // Validate password confirmation match
         if (!request.getPassword().equals(request.getConfirmPassword())) {
-            log.warn("[AuthController] Signup failed: passwords do not match for email={}", request.getEmail());
+            log.warn("[AuthController] Signup failed: passwords do not match");
             return ResponseEntity.badRequest().body(Map.of(
                     "error", "Bad Request",
                     "message", "Password and confirmPassword do not match"
@@ -66,12 +68,12 @@ public class AuthController {
             java.util.List<String> messages = new java.util.ArrayList<>();
             java.util.List<String> fields = new java.util.ArrayList<>();
             if (emailExists) {
-                log.warn("[AuthController] Signup failed: email={} already exists", request.getEmail());
+                log.warn("[AuthController] Signup failed: email already exists");
                 messages.add("Email already exists");
                 fields.add("email");
             }
             if (phoneExists) {
-                log.warn("[AuthController] Signup failed: phone={} already exists", request.getPhone());
+                log.warn("[AuthController] Signup failed: phone number already exists");
                 messages.add("Phone number already exists");
                 fields.add("phone");
             }
@@ -82,8 +84,8 @@ public class AuthController {
             ));
         }
 
-        // Hash the password using BCrypt
-        String hashedPassword = BCrypt.hashpw(request.getPassword(), BCrypt.gensalt());
+        // Hash the password using PasswordEncoder (BCrypt)
+        String hashedPassword = passwordEncoder.encode(request.getPassword());
 
         // Map and save the user
         User user = User.builder()
@@ -115,21 +117,21 @@ public class AuthController {
     @PostMapping(value = "/login", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "User Login", description = "Authenticate credentials and generate a JWT token")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
-        log.info("[AuthController] Login request received for email={}", request.getEmail());
+        log.info("[AuthController] Login request received");
 
         // Find user by email
         User user = userRepository.findByEmail(request.getEmail()).orElse(null);
         if (user == null) {
-            log.warn("[AuthController] Login failed: user not found for email={}", request.getEmail());
+            log.warn("[AuthController] Login failed: user not found");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
                     "error", "Unauthorized",
                     "message", "Invalid email or password"
             ));
         }
 
-        // Verify password hash
-        if (user.getPassword() == null || !BCrypt.checkpw(request.getPassword(), user.getPassword())) {
-            log.warn("[AuthController] Login failed: incorrect password for email={}", request.getEmail());
+        // Verify password hash using PasswordEncoder matches
+        if (user.getPassword() == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            log.warn("[AuthController] Login failed: incorrect password");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
                     "error", "Unauthorized",
                     "message", "Invalid email or password"
@@ -138,7 +140,7 @@ public class AuthController {
 
         // Generate JWT token
         String token = jwtProvider.generateToken(user.getId(), user.getEmail());
-        log.info("[AuthController] Login successful for email={}, generated JWT", request.getEmail());
+        log.info("[AuthController] Login successful for userId={}, generated JWT", user.getId());
 
         // Build response payload
         UserResponse userResponse = UserResponse.builder()
@@ -164,7 +166,7 @@ public class AuthController {
     @Operation(summary = "OAuth Social Login", description = "Authenticate via Google OAuth2 ID token")
     public ResponseEntity<?> oauthLogin(
             @RequestHeader(value = org.springframework.http.HttpHeaders.AUTHORIZATION, required = false) String authHeader,
-            @RequestBody(required = false) OAuthLoginRequest request
+            @RequestBody(required = false) @Valid OAuthLoginRequest request
     ) {
         String provider = (request != null && request.getProvider() != null) ? request.getProvider().toLowerCase() : "google";
         String idToken = (request != null && request.getIdToken() != null && !request.getIdToken().isBlank())
@@ -205,7 +207,7 @@ public class AuthController {
 
             // Generate JWT token
             String token = jwtProvider.generateToken(user.getId(), user.getEmail());
-            log.info("[AuthController] OAuth login successful for email={}, provider={}", user.getEmail(), provider);
+            log.info("[AuthController] OAuth login successful for userId={}, provider={}", user.getId(), provider);
 
             // Build response payload (same format as regular login)
             UserResponse userResponse = UserResponse.builder()

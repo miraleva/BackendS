@@ -36,7 +36,7 @@ public class EmailService {
 
             mailSender.send(message);
         } catch (Exception e) {
-            log.error("[EmailService] Failed to send password reset email to {}: {}", toEmail, e.getMessage());
+            log.error("[EmailService] Failed to send password reset email: {}", e.getMessage());
         }
     }
 
@@ -59,9 +59,9 @@ public class EmailService {
             helper.setText(html, true);
 
             mailSender.send(mimeMessage);
-            log.info("[EmailService] Asynchronous confirmation email sent successfully to {} for PNR {}", recipientEmail, reservation.getReservationNumber());
+            log.info("[EmailService] Asynchronous confirmation email sent successfully for PNR {}", reservation.getReservationNumber());
         } catch (Exception e) {
-            log.error("[EmailService] Failed to send confirmation email to {}: {}", recipientEmail, e.getMessage(), e);
+            log.error("[EmailService] Failed to send confirmation email for PNR {}: {}", reservation.getReservationNumber(), e.getMessage());
         }
     }
 

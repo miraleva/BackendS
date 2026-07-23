@@ -2,6 +2,7 @@ package com.santsg.tourvisio.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -19,6 +20,7 @@ import lombok.NoArgsConstructor;
 public class ChatRequest {
 
     @NotBlank(message = "Kullanıcı mesajı boş olamaz")
+    @Size(max = 2000, message = "Mesaj en fazla 2000 karakter olabilir")
     @Schema(description = "Kullanıcının chatbot'a yazdığı mesaj", example = "İstanbul'a uçak bileti arıyorum")
     private String message;
 
@@ -39,3 +41,4 @@ public class ChatRequest {
         this.sessionId = sessionId;
     }
 }
+

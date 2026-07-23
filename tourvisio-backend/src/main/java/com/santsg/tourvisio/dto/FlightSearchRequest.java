@@ -13,8 +13,10 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class FlightSearchRequest {
 
+    @jakarta.validation.constraints.Size(max = 100, message = "Departure location cannot exceed 100 characters")
     private String departureLocation;
 
+    @jakarta.validation.constraints.Size(max = 100, message = "Arrival location cannot exceed 100 characters")
     private String arrivalLocation;
 
     @NotNull(message = "Departure date cannot be null")
