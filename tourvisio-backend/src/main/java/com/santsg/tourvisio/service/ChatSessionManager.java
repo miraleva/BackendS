@@ -391,6 +391,15 @@ public class ChatSessionManager {
         return state;
     }
 
+    @Transactional
+    public void updateChatStatus(String sessionId, String newStatus) {
+        SessionState state = getSessionState(sessionId);
+        if (state != null) {
+            state.setChatStatus(newStatus);
+            saveSession(state);
+        }
+    }
+
     public List<SessionSummaryResponse> getAllSessionSummaries() {
         if (chatSessionRepository != null) {
             return chatSessionRepository.findAll().stream()

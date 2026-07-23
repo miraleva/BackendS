@@ -182,4 +182,46 @@ public class ChatController {
         chatSessionManager.removeSession(id);
         return ResponseEntity.ok(java.util.Map.of("message", "Session deleted successfully"));
     }
+
+    @PatchMapping(value = "/sessions/{id}/status", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Update chat session status",
+               description = "Marks a session with a new chatStatus (COMPLETED, TERMINATED, ACTIVE). Called by the frontend after a successful reservation to lock chat input.")
+    public ResponseEntity<?> updateSessionStatus(
+            @PathVariable String id,
+            @RequestBody java.util.Map<String, String> body,
+            @RequestAttribute(value = "userId", required = false) Long userId) {
+
+        if (userId == null) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body(java.util.Map.of(
+                "error", "Unauthorized",
+                "message", "User session is invalid or missing"
+            ));
+        }
+
+        String newStatus = body.get("chatStatus");
+        if (newStatus == null
+                || (!newStatus.equals("COMPLETED") && !newStatus.equals("TERMINATED") && !newStatus.equals("ACTIVE"))) {
+            return ResponseEntity.badRequest().body(java.util.Map.of(
+                "error", "Bad Request",
+                "message", "chatStatus must be one of: COMPLETED, TERMINATED, ACTIVE"
+            ));
+        }
+
+        ChatSessionManager.SessionState sessionState = chatSessionManager.getSessionState(id);
+        if (sessionState == null) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(java.util.Map.of(
+                "error", "Not Found",
+                "message", "Session not found: " + id
+            ));
+        }
+        if (!userId.equals(sessionState.getUserId())) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(java.util.Map.of(
+                "error", "Forbidden",
+                "message", "Access denied to session: " + id
+            ));
+        }
+
+        chatSessionManager.updateChatStatus(id, newStatus);
+        return ResponseEntity.ok(java.util.Map.of("sessionId", id, "chatStatus", newStatus));
+    }
 }

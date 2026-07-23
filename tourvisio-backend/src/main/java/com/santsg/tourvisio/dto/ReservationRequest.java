@@ -39,6 +39,8 @@ public class ReservationRequest {
     @NotBlank(message = "Currency cannot be blank")
     private String currency;
 
+    private String chatSessionId;
+
     @NotEmpty(message = "Reservation must have at least one passenger")
     @Valid
     private List<PassengerRequest> passengers;
