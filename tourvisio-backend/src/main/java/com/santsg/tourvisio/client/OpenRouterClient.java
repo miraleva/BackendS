@@ -54,7 +54,8 @@ public class OpenRouterClient implements AIProviderClient {
 
         try {
             HttpHeaders headers = new HttpHeaders();
-            headers.set(HttpHeaders.CONTENT_TYPE, "application/json; charset=utf-8");
+            headers.setContentType(new org.springframework.http.MediaType("application", "json", java.nio.charset.StandardCharsets.UTF_8));
+            headers.setAccept(java.util.List.of(new org.springframework.http.MediaType("application", "json", java.nio.charset.StandardCharsets.UTF_8)));
             headers.setBearerAuth(apiKey);
             // OpenRouter, hangi uygulamanın istek attığını görebilmek için bu iki
             // header'ı önerir (zorunlu değil, atlanırsa istek yine çalışır).

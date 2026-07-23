@@ -213,6 +213,14 @@ public class ResponseAgent {
         }
 
         // Fallback localization pathway
+        if ("FLIGHT_SEARCH".equals(criteria.getSearchType()) && 
+            (criteria.getDepartureLocation() == null || criteria.getDepartureLocation().isBlank() ||
+             criteria.getArrivalLocation() == null || criteria.getArrivalLocation().isBlank())) {
+            if ("tr".equals(locale.getLanguage())) {
+                return "Harika bir seyahat planı yapalım! Size en uygun uçak biletini bulabilmem için öncelikle nereden nereye uçacağınızı, hangi tarihte seyahat etmek istediğinizi, biletin tek yön mü yoksa gidiş-dönüş mü olacağını ve kaç yolcu olacağını öğrenebilir miyim?";
+            }
+        }
+
         List<String> translatedFields = missingFields.stream()
                 .map(field -> {
                     String fieldKey = getFieldKey(field);
@@ -411,7 +419,22 @@ public class ResponseAgent {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = (criteria != null && criteria.getPreferredLanguage() != null) ? criteria.getPreferredLanguage() : "English";
 
-        String location = criteria != null ? criteria.getLocationOrHotelName() : "the selected destination";
+        String location = "the selected destination";
+        if (criteria != null) {
+            if ("FLIGHT_SEARCH".equals(criteria.getSearchType())) {
+                String dep = criteria.getDepartureLocation();
+                String arr = criteria.getArrivalLocation();
+                if (dep != null && !dep.isBlank() && arr != null && !arr.isBlank()) {
+                    location = dep + " to " + arr;
+                } else if (dep != null && !dep.isBlank()) {
+                    location = "from " + dep;
+                } else if (arr != null && !arr.isBlank()) {
+                    location = "to " + arr;
+                }
+            } else if (criteria.getLocationOrHotelName() != null && !criteria.getLocationOrHotelName().isBlank()) {
+                location = criteria.getLocationOrHotelName();
+            }
+        }
         String adults = criteria != null && criteria.getAdultCount() != null ? String.valueOf(criteria.getAdultCount()) : "?";
         String checkIn = criteria != null && criteria.getCheckInDate() != null ? criteria.getCheckInDate().toString() : "?";
         String checkOut = criteria != null && criteria.getCheckOutDate() != null ? criteria.getCheckOutDate().toString() : "?";
