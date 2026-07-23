@@ -125,7 +125,13 @@ public class ChatOrchestrationService {
         if (request.getCountry() != null && !request.getCountry().isBlank()) {
             existingCriteria.setCountry(request.getCountry());
         }
-        if (request.getCurrencySymbol() != null && !request.getCurrencySymbol().isBlank()) {
+        // Frontend her mesajda Ayarlar sayfasındaki tercih edilen para birimini
+        // gönderiyor. Bunu sadece oturumda HENÜZ bir para birimi belirlenmemişse
+        // (yeni/başlangıç değeri olarak) uyguluyoruz — aksi hâlde kullanıcı
+        // sohbet içinde "dolar olarak göster" dediğinde bir sonraki mesajda bu
+        // satır onu sessizce Ayarlar'daki varsayılana geri döndürüyordu.
+        if (existingCriteria.getCurrency() == null
+                && request.getCurrencySymbol() != null && !request.getCurrencySymbol().isBlank()) {
             existingCriteria.setCurrency(request.getCurrencySymbol());
         }
         // Dil tercihi: önce bu mesajın gerçek dilini algılamayı dene (kullanıcı
