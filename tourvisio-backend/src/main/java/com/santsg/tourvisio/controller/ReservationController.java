@@ -47,9 +47,15 @@ public class ReservationController {
     }
 
     @GetMapping
-    @Operation(summary = "Get all reservations", description = "Retrieves all hotel and flight bookings.")
-    public ResponseEntity<List<Reservation>> getAllReservations() {
-        List<Reservation> list = reservationService.getAllReservations();
+    @Operation(summary = "Get user reservations", description = "Retrieves all bookings for the logged-in user.")
+    public ResponseEntity<List<Reservation>> getUserReservations(
+            @RequestAttribute(value = "userId", required = false) Long userId) {
+        
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        
+        List<Reservation> list = reservationService.getReservationsByUserId(userId);
         return ResponseEntity.ok(list);
     }
 

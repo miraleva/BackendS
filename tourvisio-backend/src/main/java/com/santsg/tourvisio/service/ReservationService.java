@@ -127,6 +127,7 @@ public class ReservationService {
                 .endDate(request.getEndDate())
                 .totalPrice(request.getTotalPrice())
                 .currency(request.getCurrency())
+                .chatSessionId(request.getChatSessionId())
                 .build();
 
         List<Passenger> passengers = new ArrayList<>();
@@ -171,6 +172,7 @@ public class ReservationService {
         reservation.setEndDate(request.getEndDate());
         reservation.setTotalPrice(request.getTotalPrice());
         reservation.setCurrency(request.getCurrency());
+        reservation.setChatSessionId(request.getChatSessionId());
 
         // Cascade ALL + orphanRemoval: clear and re-add
         reservation.getPassengers().clear();
@@ -194,6 +196,13 @@ public class ReservationService {
 
     public List<Reservation> getAllReservations() {
         return reservationRepository.findAll();
+    }
+
+    public List<Reservation> getReservationsByUserId(Long userId) {
+        if (userId == null) {
+            return new ArrayList<>();
+        }
+        return reservationRepository.findByUserId(userId);
     }
 
     public Reservation getReservationById(Long id) {
