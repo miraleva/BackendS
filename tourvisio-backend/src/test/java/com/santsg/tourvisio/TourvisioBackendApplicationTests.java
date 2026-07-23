@@ -106,12 +106,14 @@ class TourvisioBackendApplicationTests {
 				LocalDate.now().plusDays(12),
 				9000.0,
 				"TRY",
-				List.of(passenger));
+				List.of(passenger),
+				null);
 
 		// 1. Create Reservation
 		String responseJson = mockMvc.perform(post("/api/reservations")
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(objectMapper.writeValueAsString(request)))
+				.content(objectMapper.writeValueAsString(request))
+				.requestAttr("userId", 1L))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.id", notNullValue()))
 				.andExpect(jsonPath("$.reservationNumber", startsWith("RES-")))
@@ -123,7 +125,8 @@ class TourvisioBackendApplicationTests {
 		Long createdId = objectMapper.readTree(responseJson).get("id").asLong();
 
 		// 2. Get All Reservations
-		mockMvc.perform(get("/api/reservations"))
+		mockMvc.perform(get("/api/reservations")
+				.requestAttr("userId", 1L))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$", hasSize(greaterThan(0))));
 
@@ -172,7 +175,8 @@ class TourvisioBackendApplicationTests {
 				LocalDate.now().plusDays(12),
 				9000.0,
 				"TRY",
-				List.of(primary, secondary));
+				List.of(primary, secondary),
+				null);
 
 		// 1. Create reservation
 		String responseJson = mockMvc.perform(post("/api/reservations")
@@ -198,7 +202,8 @@ class TourvisioBackendApplicationTests {
 				LocalDate.now().plusDays(12),
 				9000.0,
 				"TRY",
-				List.of(primary, secondary));
+				List.of(primary, secondary),
+				null);
 
 		mockMvc.perform(put("/api/reservations/" + createdId)
 				.contentType(MediaType.APPLICATION_JSON)

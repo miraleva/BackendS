@@ -41,4 +41,6 @@ public class ReservationRequest {
     @NotEmpty(message = "Reservation must have at least one passenger")
     @Valid
     private List<PassengerRequest> passengers;
+
+    private String chatSessionId;
 }
