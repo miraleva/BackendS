@@ -5,7 +5,7 @@ import com.santsg.tourvisio.entity.User;
 import com.santsg.tourvisio.repository.PasswordResetTokenRepository;
 import com.santsg.tourvisio.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.mindrot.jbcrypt.BCrypt;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +18,7 @@ public class PasswordResetService {
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository tokenRepository;
     private final EmailService emailService;
+    private final PasswordEncoder passwordEncoder;
 
     private static final int EXPIRATION_MINUTES = 15;
 
@@ -57,8 +58,8 @@ public class PasswordResetService {
 
         User user = resetToken.getUser();
         
-        // BCrypt ile şifreyi tuzlayarak (hash) kaydediyoruz
-        String hashedPassword = BCrypt.hashpw(newPassword, BCrypt.gensalt());
+        // BCrypt ile PasswordEncoder kullanarak şifreyi hash'leyip kaydediyoruz
+        String hashedPassword = passwordEncoder.encode(newPassword);
         user.setPassword(hashedPassword);
         userRepository.save(user);
 

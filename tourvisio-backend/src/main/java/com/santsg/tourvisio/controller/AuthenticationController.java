@@ -6,6 +6,7 @@ import com.santsg.tourvisio.dto.tourvisio.AuthResponse;
 import com.santsg.tourvisio.dto.tourvisio.TourVisioLoginRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
@@ -32,8 +33,9 @@ public class AuthenticationController {
 
     @PostMapping(value = "/login", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Login Method", description = "Use this method for getting token by using your credentials.")
-    public ResponseEntity<?> login(@RequestBody TourVisioLoginRequest request) {
-        log.info("[AuthController] Login request received for agency={}, user={}", request.getAgency(), request.getUser());
+    public ResponseEntity<?> login(@Valid @RequestBody TourVisioLoginRequest request) {
+
+        log.info("[AuthController] Login request received for agency={}", request.getAgency());
 
         if (config.isMockMode()) {
             log.info("[AuthController] Mock mode is active. Returning mock token response.");
