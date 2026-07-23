@@ -36,6 +36,10 @@ public class ChatRequest {
     @Schema(description = "Seçilen para birimi sembolü (ISO 4217)", example = "TRY")
     private String currencySymbol;
 
+    private Double maxPrice;
+    private Double minPrice;
+    private Integer minStars;
+
     public ChatRequest(String message, String sessionId) {
         this.message = message;
         this.sessionId = sessionId;

@@ -114,9 +114,12 @@ public class ExtractionAgent {
                     "childAges": "array of integers, ages 3-12, one per child",
                     "infantCount": "integer — number of travelers aged 0 to 2 (inclusive), i.e. infants/babies ('bebek'). If the user says 'infant'/'bebek' but later gives an age of 3-12, that person belongs in childCount instead, not here. Same negative-number preservation rule as adultCount applies.",
                     "infantAges": "array of integers, ages 0-2, one per infant",
-                    "currency": currency (TRY, EUR, USD, GBP),
+                    "currency": "currency (TRY, EUR, USD, GBP)",
                     "roomCount": "integer. Same negative-number preservation rule as adultCount applies.",
-                    "nationality": nationality code (e.g. TR)
+                    "nationality": "nationality code (e.g. TR)",
+                    "maxPrice": "double. Extract the maximum price/budget limit if the user specifies one (e.g. '8 bin liradan düşükleri göster' -> 8000.0, 'maksimum 10000 TL' -> 10000.0)",
+                    "minPrice": "double. Extract the minimum price if specified (e.g. '5000 TL üzeri' -> 5000.0)",
+                    "minStars": "integer. Extract the minimum star rating or specified stars (e.g. 'sadece 5 yıldızlılar' -> 5, '4 yıldız ve üzeri' -> 4)",
 
                     // For FLIGHT_SEARCH:
                     "departureLocation": "departure location (e.g. Istanbul). CRITICAL: Do NOT fill this with general POI/amenity names (such as havalimanı, otogar, etc.) if no specific city/airport is mentioned.",

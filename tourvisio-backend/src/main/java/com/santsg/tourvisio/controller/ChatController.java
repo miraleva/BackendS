@@ -220,6 +220,28 @@ public class ChatController {
         return ResponseEntity.ok(ChatCriteriaSummary.from(chatSessionStore.getOrCreate(id)));
     }
 
+    @PostMapping(value = "/sessions/{id}/criteria", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Bir oturum için o ana kadar toplanmış arama kriterlerini günceller")
+    public ResponseEntity<ChatCriteriaSummary> updateSessionCriteria(
+            @PathVariable String id,
+            @RequestBody com.santsg.tourvisio.chat.SearchCriteria incoming,
+            @RequestAttribute(value = "userId", required = false) Long userId) {
+        ChatSessionManager.SessionState state = chatSessionManager.getSessionState(id);
+        if (state == null) {
+            throw new ResourceNotFoundException("Session not found: " + id);
+        }
+        if (userId != null && !userId.equals(state.getUserId())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.FORBIDDEN, "Access denied to session: " + id
+            );
+        }
+        com.santsg.tourvisio.chat.SearchCriteria criteria = chatSessionStore.getOrCreate(id);
+        criteria.mergeWith(incoming);
+        chatSessionStore.save(id, criteria);
+        return ResponseEntity.ok(ChatCriteriaSummary.from(criteria));
+    }
+
+
     @DeleteMapping(value = "/sessions/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Delete a chat session and all its messages")
     public ResponseEntity<?> deleteSession(
