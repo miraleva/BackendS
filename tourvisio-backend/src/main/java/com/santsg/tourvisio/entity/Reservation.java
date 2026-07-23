@@ -63,6 +63,9 @@ public class Reservation {
     @Builder.Default
     private String status = "Completed";
 
+    @Column(name = "image_url", length = 1000)
+    private String imageUrl;
+
     @OneToMany(mappedBy = "reservation", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @Builder.Default
     private List<Passenger> passengers = new ArrayList<>();
