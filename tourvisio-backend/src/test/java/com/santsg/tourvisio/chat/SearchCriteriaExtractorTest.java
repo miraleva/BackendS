@@ -108,4 +108,16 @@ class SearchCriteriaExtractorTest {
         assertThat(criteria.getReturnDate()).isEqualTo(LocalDate.of(currentYear, 7, 22));
         assertThat(criteria.getDepartureDate()).isNull();
     }
+
+    @Test
+    void testGeneralPoiExclusion() {
+        String location = extractor.parseLocation("lunapark", false);
+        assertThat(location).isNull();
+
+        String locationWithPunctuation = extractor.parseLocation("müze!", false);
+        assertThat(locationWithPunctuation).isNull();
+
+        String validCity = extractor.parseLocation("Antalya", false);
+        assertThat(validCity).isEqualTo("Antalya");
+    }
 }
