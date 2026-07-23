@@ -15,13 +15,13 @@ public class CheckUsersTable {
             System.out.println("--- USERS TABLE ---");
             ResultSet rs = stmt.executeQuery("SELECT id, email, first_name FROM users");
             while (rs.next()) {
-                System.out.println("User ID=" + rs.getLong("id") + " Email=" + rs.getString("email"));
+                System.out.println("User ID=" + rs.getLong("id") + " Email=[REDACTED]");
             }
             
             System.out.println("--- RESERVATIONS TABLE (ALL user_ids) ---");
             ResultSet rsRes = stmt.executeQuery("SELECT id, user_id, email FROM reservations");
             while (rsRes.next()) {
-                System.out.println("Res ID=" + rsRes.getLong("id") + " user_id=" + rsRes.getLong("user_id") + " email=" + rsRes.getString("email"));
+                System.out.println("Res ID=" + rsRes.getLong("id") + " user_id=" + rsRes.getLong("user_id") + " email=[REDACTED]");
             }
 
         } catch (Exception e) {

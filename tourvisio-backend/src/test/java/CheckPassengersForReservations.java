@@ -33,10 +33,7 @@ public class CheckPassengersForReservations {
                     System.out.println("Reservation ID=" + resId + " (" + itemName + ") -> NO PASSENGERS");
                     resCount++;
                 } else {
-                    String firstName = rs.getString("first_name");
-                    String lastName = rs.getString("last_name");
-                    String email = rs.getString("email");
-                    System.out.println("Reservation ID=" + resId + " (" + itemName + ") -> Passenger: " + firstName + " " + lastName + " (" + email + ")");
+                    System.out.println("Reservation ID=" + resId + " (" + itemName + ") -> Passenger: [REDACTED]");
                     passCount++;
                 }
             }

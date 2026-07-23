@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -23,9 +24,11 @@ import java.util.Map;
 public class ProfileController {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public ProfileController(UserRepository userRepository) {
+    public ProfileController(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
@@ -134,7 +137,7 @@ public class ProfileController {
     @Operation(summary = "Change Password", description = "Change the logged-in user's password")
     public ResponseEntity<?> changePassword(
             @RequestAttribute(value = "userId", required = false) Long userId,
-            @RequestBody Map<String, String> requestBody) {
+            @Valid @RequestBody com.santsg.tourvisio.dto.auth.ChangePasswordRequest request) {
         
         if (userId == null) {
             log.warn("[ProfileController] Password change denied: userId attribute not found in request");
@@ -144,13 +147,7 @@ public class ProfileController {
             ));
         }
 
-        String password = requestBody.get("password");
-        if (password == null || password.trim().length() < 6) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "error", "Bad Request",
-                    "message", "Password must be at least 6 characters"
-            ));
-        }
+        String password = request.getPassword();
 
         log.info("[ProfileController] Changing password for userId={}", userId);
         User user = userRepository.findById(userId).orElse(null);
@@ -162,8 +159,8 @@ public class ProfileController {
             ));
         }
 
-        // Hash the new password using BCrypt
-        String hashedPassword = org.mindrot.jbcrypt.BCrypt.hashpw(password, org.mindrot.jbcrypt.BCrypt.gensalt());
+        // Hash the new password using PasswordEncoder (BCrypt)
+        String hashedPassword = passwordEncoder.encode(password);
         user.setPassword(hashedPassword);
         userRepository.save(user);
 
@@ -172,6 +169,7 @@ public class ProfileController {
                 "message", "Password changed successfully"
         ));
     }
+
 
     private UserResponse mapToUserResponse(User user) {
         return UserResponse.builder()

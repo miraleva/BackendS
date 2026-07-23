@@ -16,7 +16,7 @@ public class GetUsers {
             ResultSet rs = stmt.executeQuery(query);
 
             while (rs.next()) {
-                System.out.println("USER_INFO: ID=" + rs.getLong("id") + " EMAIL=" + rs.getString("email"));
+                System.out.println("USER_INFO: ID=" + rs.getLong("id") + " EMAIL=[REDACTED]");
             }
         } catch (Exception e) {
             e.printStackTrace();

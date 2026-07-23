@@ -6,6 +6,7 @@ import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
 import com.santsg.tourvisio.entity.User;
 import com.santsg.tourvisio.repository.UserRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -23,12 +24,14 @@ import java.util.Optional;
 public class OAuthService {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Value("${oauth.google.client-id:}")
     private String googleClientId;
 
-    public OAuthService(UserRepository userRepository) {
+    public OAuthService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     // ──────────────────────────────────────────────────────────────────
@@ -72,8 +75,8 @@ public class OAuthService {
             try {
                 GoogleIdToken unverifiedToken = GoogleIdToken.parse(GsonFactory.getDefaultInstance(), idToken);
                 GoogleIdToken.Payload payload = unverifiedToken.getPayload();
-                log.warn("[OAuthService] Verification failed! Token payload -> aud={}, iss={}, sub={}, email={}, exp={}",
-                        payload.getAudience(), payload.getIssuer(), payload.getSubject(), payload.getEmail(), payload.getExpirationTimeSeconds());
+                log.warn("[OAuthService] Verification failed! Token payload -> aud={}, iss={}, exp={}",
+                        payload.getAudience(), payload.getIssuer(), payload.getExpirationTimeSeconds());
 
                 if (!googleClientId.equals(payload.getAudience())) {
                     log.error("[OAuthService] Audience Mismatch! Configured backend googleClientId='{}' but Token audience='{}'",
@@ -97,7 +100,7 @@ public class OAuthService {
         if (firstName.length() > 40) firstName = firstName.substring(0, 40);
         if (lastName.length() > 40) lastName = lastName.substring(0, 40);
 
-        log.info("[OAuthService] Google token verified successfully for email={}", email);
+        log.info("[OAuthService] Google token verified successfully.");
 
         return Map.of(
                 "email", email,
@@ -127,7 +130,7 @@ public class OAuthService {
 
         if (existingUser.isPresent()) {
             User user = existingUser.get();
-            log.info("[OAuthService] Existing user found for email={}, provider={}", email, provider);
+            log.info("[OAuthService] Existing user found for userId={}, provider={}", user.getId(), provider);
             if (user.getAuthProvider() == null) {
                 user.setAuthProvider(safeProvider);
                 return userRepository.save(user);
@@ -143,7 +146,7 @@ public class OAuthService {
 
         // Create new user for OAuth login
         // Assign a secure random hashed dummy password to support DB schemas with NOT NULL constraints
-        String dummyPassword = org.mindrot.jbcrypt.BCrypt.hashpw(java.util.UUID.randomUUID().toString(), org.mindrot.jbcrypt.BCrypt.gensalt());
+        String dummyPassword = passwordEncoder.encode(java.util.UUID.randomUUID().toString());
 
         User newUser = User.builder()
                 .firstName(safeFirstName)
@@ -154,7 +157,7 @@ public class OAuthService {
                 .build();
 
         User savedUser = userRepository.save(newUser);
-        log.info("[OAuthService] New OAuth user created: id={}, email={}, provider={}", savedUser.getId(), email, provider);
+        log.info("[OAuthService] New OAuth user created: id={}, provider={}", savedUser.getId(), provider);
 
         return savedUser;
     }

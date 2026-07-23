@@ -14,7 +14,7 @@ import lombok.ToString;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString(exclude = "reservation")
+@ToString(exclude = {"reservation", "identityNumber"})
 public class Passenger {
 
     @Id

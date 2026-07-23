@@ -16,7 +16,7 @@ public class SearchDataForA {
             System.out.println("--- SEARCHING PASSENGERS ---");
             ResultSet rsPass = stmt.executeQuery("SELECT p.id, p.reservation_id, p.email, p.first_name FROM passengers p WHERE p.email LIKE '%a@gmail.com%'");
             while (rsPass.next()) {
-                System.out.println("Passenger ID=" + rsPass.getLong("id") + " ResID=" + rsPass.getLong("reservation_id") + " Email=" + rsPass.getString("email"));
+                System.out.println("Passenger ID=" + rsPass.getLong("id") + " ResID=" + rsPass.getLong("reservation_id") + " Email=[REDACTED]");
             }
             
             // Search by user_id = 1
