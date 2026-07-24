@@ -193,6 +193,20 @@ public class AdminController {
         return ResponseEntity.ok(stats);
     }
 
+    @GetMapping("/reservations")
+    @Operation(summary = "Get all reservations across all users")
+    public ResponseEntity<?> getAllReservations(@RequestAttribute(value = "userId", required = false) Long userId) {
+        if (!isAdmin(userId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Access Denied", "message", "Only admins are allowed to access this resource."));
+        }
+
+        List<Reservation> allReservations = reservationRepository.findAll(
+                Sort.by(Sort.Direction.DESC, "createdAt")
+        );
+        return ResponseEntity.ok(allReservations);
+    }
+
     @GetMapping("/users")
     @Operation(summary = "Get list of all registered users")
     public ResponseEntity<?> getAllUsers(@RequestAttribute(value = "userId", required = false) Long userId) {
@@ -297,9 +311,9 @@ public class AdminController {
             String answer = "";
             for (ChatMessageResponse msg : messagesList) {
                 if ("user".equalsIgnoreCase(msg.getSender()) && question.isEmpty()) {
-                    question = msg.getText();
+                    question = msg.getText() != null ? msg.getText() : "";
                 } else if ("bot".equalsIgnoreCase(msg.getSender()) && answer.isEmpty()) {
-                    answer = msg.getText();
+                    answer = msg.getText() != null ? msg.getText() : "";
                 }
                 if (!question.isEmpty() && !answer.isEmpty()) {
                     break;
@@ -307,7 +321,7 @@ public class AdminController {
             }
 
             if (question.isEmpty()) {
-                question = session.getTitle();
+                question = session.getTitle() != null ? session.getTitle() : "";
             }
             if (answer.isEmpty()) {
                 answer = "No response yet.";
