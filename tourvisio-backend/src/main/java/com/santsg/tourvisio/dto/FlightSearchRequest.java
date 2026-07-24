@@ -36,6 +36,10 @@ public class FlightSearchRequest {
     private String departureAirport;
     private String arrivalAirport;
     private LocalDate returnDate;
+    private Integer childCount;
+    private java.util.List<Integer> childAges;
+    private Integer infantCount;
+    private Integer roomCount;
 
     // Custom constructor for backward compatibility with 6-arg usage in tests/controllers
     public FlightSearchRequest(String departureLocation, String arrivalLocation, LocalDate departureDate,

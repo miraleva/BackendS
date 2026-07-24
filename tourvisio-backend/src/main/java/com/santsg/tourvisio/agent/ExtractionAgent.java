@@ -110,12 +110,13 @@ public class ExtractionAgent {
                     "checkInDate": "check-in date in YYYY-MM-DD format, ONLY if the user's message contains an actual date reference (a specific date, weekday, or relative expression like 'tomorrow'/'yarın'/'next week'). Today's date is %s, used only to resolve relative/partial dates. Handle multiple formats robustly (e.g. '13.6.26' -> '2026-06-13', '13/04/2027', '12-08-2026'). If only month/day (e.g. 15 July, haziran 13) is specified, resolve to the nearest future occurrence using today's date. NEVER output today's date as checkInDate just because no date was mentioned — leave it null/omitted instead.",
                     "checkOutDate": "check-out date in YYYY-MM-DD format. If night count is given, calculate check-out by adding it to check-in. Same 'only if explicitly mentioned' rule as checkInDate applies.",
                     "adultCount": "integer. If the user writes an explicit negative number (e.g. '-3 yetişkin', '-2 adults'), output the negative value AS-IS (e.g. -3) — do NOT silently convert it to its positive/absolute value. A downstream system rejects negative counts and warns the user; it needs to see the real negative number to do that.",
-                    "childCount": "integer — number of travelers aged 3 to 12 (inclusive). If the user says 'child'/'çocuk' but later gives an age of 0-2, that person belongs in infantCount instead, not here. Same negative-number preservation rule as adultCount applies.",
-                    "childAges": "array of integers, ages 3-12, one per child",
+                    "hasChildren": "boolean — true if user mentions having children or child ages, false if user explicitly states no children, null if omitted",
+                    "childCount": "integer — number of child travelers aged 3 to 12 (inclusive). If the user explicitly says no children, output 0. Same negative-number preservation rule as adultCount applies.",
+                    "childAges": "array of integers — ages 3-12, one per child. Required when children are present.",
                     "infantCount": "integer — number of travelers aged 0 to 2 (inclusive), i.e. infants/babies ('bebek'). If the user says 'infant'/'bebek' but later gives an age of 3-12, that person belongs in childCount instead, not here. Same negative-number preservation rule as adultCount applies.",
-                    "infantAges": "array of integers, ages 0-2, one per infant",
+                    "infantAges": "array of integers — ages 0-2, one per infant",
                     "currency": "currency (TRY, EUR, USD, GBP)",
-                    "roomCount": "integer. Same negative-number preservation rule as adultCount applies.",
+                    "roomCount": "integer — number of requested rooms (e.g. 1, 2). Same negative-number preservation rule as adultCount applies.",
                     "nationality": "nationality code (e.g. TR)",
                     "maxPrice": "double. Extract the maximum price/budget limit if the user specifies one (e.g. '8 bin liradan düşükleri göster' -> 8000.0, 'maksimum 10000 TL' -> 10000.0)",
                     "minPrice": "double. Extract the minimum price if specified (e.g. '5000 TL üzeri' -> 5000.0)",
@@ -185,6 +186,10 @@ public class ExtractionAgent {
                 - Eğer kullanıcı spesifik bir şehir/il/ilçe/ülke adı (örn: Antalya, Belek, Paris, İstanbul) belirtmediyse, 'locationOrHotelName', 'departureLocation' veya 'arrivalLocation' alanlarını KESİNLİKLE doldurma (null bırak veya boş string dön).
                 - Konaklama süresi / gece sayısı ifadeleri (örn: "5 gece", "3 gün", "5 gece kalacağım", "1 hafta", "night", "stay", vb.) KESİNLİKLE şehir/lokasyon adı DEĞİLDİR. Bu tür süre ifadeleri kesinlikle 'locationOrHotelName', 'departureLocation' veya 'arrivalLocation' alanlarına YAZILMAMALIDIR.
                 - Genel mekan/ilgi noktası (POI) isimleri (örn: "lunapark", "havalimanı", "müze", "plaj", "merkez", "otogar", "istasyon", "sahil", vb.) şehir veya lokasyon adı DEĞİLDİR. Bu tür genel ifadeler kesinlikle 'locationOrHotelName', 'departureLocation' veya 'arrivalLocation' alanlarına yazılmamalıdır. Bunlar 'nearby_poi' veya 'search_keywords' parametresi olarak değerlendirilmelidir.
+
+                CRITICAL ÇOCUK VE YAŞ AYIKLAMA KURALI (CHILD & AGE EXTRACTION RULE):
+                - Eğer kullanıcı "2 yetişkin 1 çocuk" veya benzeri bir ifade yazarsa, 'adultCount': 2 ve 'childCount': 1 (veya belirtilen sayılar) olarak EKSİKSİZ çıkar. 'hasChildren' değerini true yap.
+                - 'childCount' 0'dan büyükse ve mesajda henüz çocuk yaşı söylenmediyse, 'childAges' dizisini boş [] bırak. Sistem yaş öğrenilmeden aramaya geçmeyecektir.
 
                 LANGUAGE AND CHARACTER PRESERVATION HINT:
                 The user message is in Turkish. It is critical to preserve Turkish characters ('ş', 'ğ', 'ı', 'ö', 'ü', 'ç', 'Ş', 'Ğ', 'İ', 'I', 'Ö', 'Ü', 'Ç') with high precision in all extracted place names, hotel names, cities, or any criteria fields (e.g., "Eskişehir", "Muğla", "Beşiktaş", "Şişli", "Göcek"). Do not remove, simplify, normalize, or distort these characters in the JSON output.

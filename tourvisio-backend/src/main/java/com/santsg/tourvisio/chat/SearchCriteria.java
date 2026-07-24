@@ -266,7 +266,10 @@ public class SearchCriteria {
      */
     public HotelSearchRequest toHotelSearchRequest() {
         if (locationOrHotelName == null || checkInDate == null
-                || checkOutDate == null || adultCount == null || currency == null) {
+                || checkOutDate == null || adultCount == null || currency == null
+                || roomCount == null
+                || (childCount != null && childCount > 0 && (childAges == null || childAges.isEmpty() || childAges.size() != childCount))
+                || (infantCount != null && infantCount > 0 && (infantAges == null || infantAges.isEmpty() || infantAges.size() != infantCount))) {
             return null;
         }
         HotelSearchRequest req = new HotelSearchRequest();
@@ -306,6 +309,10 @@ public class SearchCriteria {
         req.setDepartureAirport(departureLocation);
         req.setArrivalAirport(arrivalLocation);
         req.setReturnDate(returnDate);
+        req.setChildCount(childCount);
+        req.setChildAges(childAges);
+        req.setInfantCount(infantCount);
+        req.setRoomCount(roomCount);
         return req;
     }
 }
