@@ -75,17 +75,19 @@ public class AIFallbackChain implements AIProviderClient {
 
     /**
      * Ücretsiz yedek modeller (ör. OpenRouter free tier) ara sıra üretilen metnin
-     * içine, hiçbir bağlamla ilgisi olmayan Arapça alfabe karakterleri karıştırıyor
-     * (ör. "tarihleriniz" → "tarihوهleriniz", "maalesef" → "maalesف"). Uygulama
-     * sadece Latin/Türkçe ve Kiril (Rusça desteği) alfabelerini kullanıyor, bu
-     * yüzden Arapça blok karakterlerini güvenle temizleyip kelimeyi olduğu gibi
-     * bırakabiliyoruz.
+     * içine, hiçbir bağlamla ilgisi olmayan Arapça/İbranice alfabe karakterleri
+     * karıştırıyor (ör. "tarihleriniz" → "tarihوهleriniz", "maalesef" → "maalesف"
+     * ve İbranice "maalesף"). Uygulama sadece Latin/Türkçe ve Kiril (Rusça
+     * desteği) alfabelerini kullanıyor, bu yüzden bu blokların karakterlerini
+     * güvenle temizleyip kelimeyi olduğu gibi bırakabiliyoruz.
      */
     private static String stripStrayArabicScript(String response) {
         if (response == null || response.isEmpty()) {
             return response;
         }
-        String cleaned = response.replaceAll("[\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]", "");
+        // ֐-׿ İbranice; ؀-ࣿ Arapça blokları;
+        // יִ-﷿ + ﹰ-﻿ her iki alfabenin sunum formları.
+        String cleaned = response.replaceAll("[\\u0590-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB1D-\\uFDFF\\uFE70-\\uFEFF]", "");
         return cleaned.equals(response) ? response : cleaned;
     }
 }

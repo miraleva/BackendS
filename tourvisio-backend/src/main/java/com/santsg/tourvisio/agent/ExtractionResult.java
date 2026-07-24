@@ -6,6 +6,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+// LLM üst seviyeye de şemada olmayan alanlar ekleyebiliyor; bilinmeyen alan
+// tüm çıkarımı geçersiz kılmasın diye yok sayılıyor (bkz. SearchCriteria).
+@com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
 @Data
 @Builder
 @NoArgsConstructor
