@@ -105,6 +105,7 @@ public class ReservationService {
                 .totalPrice(request.getTotalPrice())
                 .currency(request.getCurrency())
                 .chatSessionId(request.getChatSessionId())
+                .imageUrl(request.getImageUrl())
                 .build();
 
         List<Passenger> passengers = new ArrayList<>();
@@ -149,6 +150,7 @@ public class ReservationService {
         reservation.setTotalPrice(request.getTotalPrice());
         reservation.setCurrency(request.getCurrency());
         reservation.setChatSessionId(request.getChatSessionId());
+        reservation.setImageUrl(request.getImageUrl());
 
         // Cascade ALL + orphanRemoval: clear and re-add
         reservation.getPassengers().clear();
@@ -178,11 +180,18 @@ public class ReservationService {
         if (userId == null) {
             return new ArrayList<>();
         }
-        return reservationRepository.findByUserId(userId);
+        return reservationRepository.findByUserIdOrderByIdDesc(userId);
     }
 
     public Reservation getReservationById(Long id) {
         return reservationRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation with ID " + id + " not found"));
+    }
+
+    @Transactional
+    public void cancelReservation(Long id) {
+        Reservation reservation = getReservationById(id);
+        reservation.setStatus("CANCELLED");
+        reservationRepository.save(reservation);
     }
 }
