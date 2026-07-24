@@ -59,7 +59,5 @@ public class ReservationRequest {
         return hasEmail && hasPhone;
     }
 
-    private String chatSessionId;
-
     private String imageUrl;
 }
