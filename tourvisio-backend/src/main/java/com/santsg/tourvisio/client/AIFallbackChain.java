@@ -11,10 +11,12 @@ import java.util.List;
  * sonrakine geçer. Böylece örn. Gemini kota/hata verdiğinde otomatik olarak
  * ücretsiz bir yedek modele (OpenRouter üzerinden) düşülür.
  *
- * <p>Tüm sağlayıcılar başarısız olursa, son denenen sağlayıcının (geçersiz)
+ * <p>
+ * Tüm sağlayıcılar başarısız olursa, son denenen sağlayıcının (geçersiz)
  * yanıtı olduğu gibi döner — böylece çağıran taraf (ör. {@code isValidResponse}
  * kontrolleri) mevcut "[MOCK]" tabanlı hata algılama mantığını değiştirmeden
- * kullanmaya devam edebilir.</p>
+ * kullanmaya devam edebilir.
+ * </p>
  */
 public class AIFallbackChain implements AIProviderClient {
 
@@ -45,8 +47,7 @@ public class AIFallbackChain implements AIProviderClient {
                     log.info("[AIFallbackChain:{}] '{}' sağlayıcısına düşüldü (önceki {} sağlayıcı başarısız).",
                             chainLabel, provider.providerName(), i);
                 }
-                logLlmRequest(provider.providerName(), prompt, response);
-                return response;
+                return stripStrayArabicScript(response);
             }
 
             logLlmRequest(provider.providerName() + " (FAILED)", prompt, response);
@@ -64,14 +65,14 @@ public class AIFallbackChain implements AIProviderClient {
         StackTraceElement caller = null;
         for (StackTraceElement element : stackTrace) {
             String className = element.getClassName();
-            if (className.contains("Thread") || 
-                className.contains("java.lang") || 
-                className.contains("sun.reflect") || 
-                className.contains("jdk.internal") || 
-                className.contains("org.mockito") || 
-                className.contains("AIProviderClient") || 
-                className.contains("AIFallbackChain") ||
-                className.equals(this.getClass().getName())) {
+            if (className.contains("Thread") ||
+                    className.contains("java.lang") ||
+                    className.contains("sun.reflect") ||
+                    className.contains("jdk.internal") ||
+                    className.contains("org.mockito") ||
+                    className.contains("AIProviderClient") ||
+                    className.contains("AIFallbackChain") ||
+                    className.equals(this.getClass().getName())) {
                 continue;
             }
             caller = element;
@@ -91,7 +92,10 @@ public class AIFallbackChain implements AIProviderClient {
         System.out.println("==================================================");
     }
 
-    /** Alternatif isim — bazı çağıranlar geriye dönük uyumluluk için generate() bekliyor. */
+    /**
+     * Alternatif isim — bazı çağıranlar geriye dönük uyumluluk için generate()
+     * bekliyor.
+     */
     public String generate(String prompt) {
         return complete(prompt);
     }
@@ -106,5 +110,22 @@ public class AIFallbackChain implements AIProviderClient {
                 && !response.trim().isEmpty()
                 && !response.trim().startsWith("[MOCK]")
                 && !response.contains("Gemini service could not be reached");
+    }
+
+    /**
+     * Ücretsiz yedek modeller (ör. OpenRouter free tier) ara sıra üretilen metnin
+     * içine, hiçbir bağlamla ilgisi olmayan Arapça alfabe karakterleri karıştırıyor
+     * (ör. "tarihleriniz" → "tarihوهleriniz", "maalesef" → "maalesف"). Uygulama
+     * sadece Latin/Türkçe ve Kiril (Rusça desteği) alfabelerini kullanıyor, bu
+     * yüzden Arapça blok karakterlerini güvenle temizleyip kelimeyi olduğu gibi
+     * bırakabiliyoruz.
+     */
+    private static String stripStrayArabicScript(String response) {
+        if (response == null || response.isEmpty()) {
+            return response;
+        }
+        String cleaned = response
+                .replaceAll("[\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]", "");
+        return cleaned.equals(response) ? response : cleaned;
     }
 }

@@ -306,6 +306,34 @@ public class ChatOrchestrationService {
             sessionState.setLastRequestedField(null);
         }
 
+        // Sistem bu turda SADECE "yetişkin sayısı" sorduysa
+        // (CriteriaMissingFieldsService bunu
+        // ancak çocuk/bebek yaşları zaten çözülmüşken sorar — bkz. o servisteki
+        // sıralama kuralı),
+        // kullanıcı direkt o soruyu cevaplıyordur; yeni bir "sadece N yetişkin" partisi
+        // öne
+        // sürmüyor. Modelin yine de (çocuk/bebek tekrar anılmadı diye) sıfırlama
+        // sinyali
+        // döndürdüğü gözlemlendi — bu turda o sinyali güvenilir biçimde yok sayıyoruz.
+        if (hasActiveSearch && lastField != null && lastField.contains("yetişkin sayısı") && incoming != null) {
+            incoming.setChildCount(null);
+            incoming.setChildAges(null);
+            incoming.setInfantCount(null);
+            incoming.setInfantAges(null);
+        }
+
+        // Uçuş aramasında ayrı bir yetişkin/çocuk ayrımı yok, tek alan
+        // passengerCount'tur.
+        // Ama model "2 yetişkin uçak bileti" gibi bir mesajda bazen adultCount'u
+        // dolduruyor,
+        // passengerCount'u boş bırakıyor — bu da yolcu sayısı zaten verilmişken tekrar
+        // sorulmasına yol açıyordu. Uçuş aramasında adultCount'u passengerCount'un
+        // karşılığı sayıyoruz.
+        if ("FLIGHT_SEARCH".equals(intent) && incoming != null
+                && incoming.getPassengerCount() == null && incoming.getAdultCount() != null) {
+            incoming.setPassengerCount(incoming.getAdultCount());
+        }
+
         // 6. Yeni kriterler önceki session kriterleri üzerine birleştir
         existingCriteria.mergeWith(incoming);
         // Bebek/çocuk/yetişkin yaş yeniden-sınıflandırma notu varsa bir kez tüketilir
@@ -800,6 +828,25 @@ public class ChatOrchestrationService {
             SearchCriteria criteria,
             String userMessage,
             String reclassificationNote) {
+
+        // Guardrail Interceptor: Çocuk var ama yaşlar eksikse arama tetiklenemez
+        if ("HOTEL_SEARCH".equals(intent) && criteria.getChildCount() != null && criteria.getChildCount() > 0
+                && (criteria.getChildAges() == null || criteria.getChildAges().isEmpty()
+                        || criteria.getChildAges().size() != criteria.getChildCount())) {
+            log.warn(
+                    "[Orchestration Interceptor] MISSING_CHILDREN_AGES guardrail triggered: childCount={}, childAges={}",
+                    criteria.getChildCount(), criteria.getChildAges());
+            String reply = "Çocuğunuzun yaşını öğrenebilir miyim? (Otel fiyatlandırması çocuğun yaşına göre yapılmaktadır.)";
+            return ChatResponse.builder()
+                    .reply(reply)
+                    .sessionId(sessionId)
+                    .searchType("HOTEL_SEARCH")
+                    .missingFields(List.of("çocuk yaşları"))
+                    .chatStatus("ACTIVE")
+                    .success(false)
+                    .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(criteria))
+                    .build();
+        }
 
         log.info(
                 "[Orchestration] Executing Search to TourVisio API with Final Criteria: Location={}, CheckIn={}, CheckOut={}, Adults={}, Children={}, ChildAges={}",

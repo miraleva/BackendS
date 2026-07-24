@@ -30,6 +30,15 @@ public class HotelSearchService {
     private static final int MAX_SUGGESTED_DATES = 3;
     private static final DateTimeFormatter DISPLAY_DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
+    /**
+     * TourVisio pricesearch bazen gerçekte dolu olan bir rota/tarih için de
+     * boş sonuç döndürebiliyor (uçuş aramasında da aynı davranış gözlemlendi,
+     * bkz. FlightSearchService). Kullanıcıya "sonuç yok" demeden önce aynı
+     * aramayı kısa bir bekleme ile birkaç kez daha deniyoruz.
+     */
+    private static final int EMPTY_RESULT_RETRY_COUNT = 2;
+    private static final long EMPTY_RESULT_RETRY_DELAY_MS = 600;
+
     private final TourVisioHotelApiClient hotelApiClient;
     private final MessageSource messageSource;
 
@@ -42,7 +51,31 @@ public class HotelSearchService {
      * Mevcut REST endpoint'ten çağrılan otel arama metodu.
      */
     public List<HotelSearchResponseItem> searchHotels(HotelSearchRequest request) {
+        log.info("Hotel Search Payload: destination={}, checkIn={}, checkOut={}, roomCount={}, adultCount={}, childCount={}, childrenAges={}",
+                request.getLocationOrHotelName(),
+                request.getCheckInDate(),
+                request.getCheckOutDate(),
+                request.getRoomCount(),
+                request.getAdultCount(),
+                request.getChildCount(),
+                request.getChildAges());
         return hotelApiClient.searchHotels(request);
+    }
+
+    private List<HotelSearchResponseItem> searchWithRetry(SearchCriteria criteria) {
+        List<HotelSearchResponseItem> results = hotelApiClient.searchHotelsFromCriteria(criteria);
+        for (int attempt = 1; (results == null || results.isEmpty()) && attempt <= EMPTY_RESULT_RETRY_COUNT; attempt++) {
+            log.warn("[HotelSearchService] Boş sonuç, {}. tekrar deneme yapılıyor ({})",
+                    attempt, criteria.getLocationOrHotelName());
+            try {
+                Thread.sleep(EMPTY_RESULT_RETRY_DELAY_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            results = hotelApiClient.searchHotelsFromCriteria(criteria);
+        }
+        return results;
     }
 
     /**
@@ -52,10 +85,30 @@ public class HotelSearchService {
      */
     public ChatSearchResponse searchFromCriteria(SearchCriteria criteria) {
         Locale locale = LocaleResolver.resolveLocale(criteria);
+        log.info("Hotel Search Payload: destination={}, checkIn={}, checkOut={}, roomCount={}, adultCount={}, childCount={}, childrenAges={}",
+                criteria.getLocationOrHotelName(),
+                criteria.getCheckInDate(),
+                criteria.getCheckOutDate(),
+                criteria.getRoomCount(),
+                criteria.getAdultCount(),
+                criteria.getChildCount(),
+                criteria.getChildAges());
+
+        if (criteria.getChildCount() != null && criteria.getChildCount() > 0
+                && (criteria.getChildAges() == null || criteria.getChildAges().isEmpty())) {
+            log.warn("[HotelSearchService] Arama engellendi: Çocuk sayısı ({}) var fakat çocuk yaşları eksik!", criteria.getChildCount());
+            return ChatSearchResponse.builder()
+                    .reply("Eksik bilgi: Çocuk yaşları belirtilmedi. Lütfen çocuklarınızın yaşını giriniz.")
+                    .searchType("HOTEL_SEARCH")
+                    .success(false)
+                    .results(List.of())
+                    .build();
+        }
+
         try {
             // Önce SearchCriteria'dan doğrudan arama yap
             // (culture, dil, para birimi criteria'dan okunur)
-            List<HotelSearchResponseItem> results = hotelApiClient.searchHotelsFromCriteria(criteria);
+            List<HotelSearchResponseItem> results = searchWithRetry(criteria);
 
             if (results == null || results.isEmpty()) {
                 return buildNoResultsResponse(criteria, locale);
