@@ -73,6 +73,25 @@ public class Reservation {
     @Builder.Default
     private List<Passenger> passengers = new ArrayList<>();
 
+    @Transient
+    public String getPnrCode() {
+        return this.reservationNumber;
+    }
+
+    @Transient
+    public String getBookingNumber() {
+        return this.reservationNumber;
+    }
+
+    @Transient
+    public String getPrimaryGuestName() {
+        if (passengers != null && !passengers.isEmpty()) {
+            Passenger p = passengers.get(0);
+            return ((p.getFirstName() != null ? p.getFirstName() : "") + " " + (p.getLastName() != null ? p.getLastName() : "")).trim();
+        }
+        return null;
+    }
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
