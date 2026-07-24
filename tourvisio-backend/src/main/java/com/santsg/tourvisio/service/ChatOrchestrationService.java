@@ -293,6 +293,16 @@ public class ChatOrchestrationService {
             incoming.setInfantAges(null);
         }
 
+        // Uçuş aramasında ayrı bir yetişkin/çocuk ayrımı yok, tek alan passengerCount'tur.
+        // Ama model "2 yetişkin uçak bileti" gibi bir mesajda bazen adultCount'u dolduruyor,
+        // passengerCount'u boş bırakıyor — bu da yolcu sayısı zaten verilmişken tekrar
+        // sorulmasına yol açıyordu. Uçuş aramasında adultCount'u passengerCount'un
+        // karşılığı sayıyoruz.
+        if ("FLIGHT_SEARCH".equals(intent) && incoming != null
+                && incoming.getPassengerCount() == null && incoming.getAdultCount() != null) {
+            incoming.setPassengerCount(incoming.getAdultCount());
+        }
+
         // 6. Yeni kriterler önceki session kriterleri üzerine birleştir
         // Merge öncesi bir anlık görüntü (snapshot) alınıyor — aşağıda validasyon
         // başarısız olursa oturumu buna geri döndürüyoruz (rollback). Aksi hâlde

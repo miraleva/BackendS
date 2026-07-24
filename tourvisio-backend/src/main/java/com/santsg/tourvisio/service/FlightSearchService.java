@@ -30,6 +30,15 @@ public class FlightSearchService {
     private static final int MAX_SUGGESTED_DATES = 3;
     private static final DateTimeFormatter DISPLAY_DATE_FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy");
 
+    /**
+     * TourVisio pricesearch bazen gerçekte dolu olan bir rota/tarih için de
+     * boş sonuç döndürebiliyor (aynı kriterle art arda denemede tutarsız
+     * sonuç gözlemlendi). Kullanıcıya "sonuç yok" demeden önce aynı aramayı
+     * kısa bir bekleme ile birkaç kez daha deniyoruz.
+     */
+    private static final int EMPTY_RESULT_RETRY_COUNT = 2;
+    private static final long EMPTY_RESULT_RETRY_DELAY_MS = 600;
+
     private final TourVisioFlightApiClient flightApiClient;
     private final MessageSource messageSource;
 
@@ -40,6 +49,22 @@ public class FlightSearchService {
 
     public List<FlightSearchResponseItem> searchFlights(FlightSearchRequest request) {
         return flightApiClient.searchFlights(request);
+    }
+
+    private List<FlightSearchResponseItem> searchWithRetry(FlightSearchRequest request) {
+        List<FlightSearchResponseItem> results = flightApiClient.searchFlights(request);
+        for (int attempt = 1; (results == null || results.isEmpty()) && attempt <= EMPTY_RESULT_RETRY_COUNT; attempt++) {
+            log.warn("[FlightSearchService] Boş sonuç, {}. tekrar deneme yapılıyor ({} -> {})",
+                    attempt, request.getDepartureLocation(), request.getArrivalLocation());
+            try {
+                Thread.sleep(EMPTY_RESULT_RETRY_DELAY_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            results = flightApiClient.searchFlights(request);
+        }
+        return results;
     }
 
     public ChatSearchResponse searchFromCriteria(SearchCriteria criteria) {
@@ -56,7 +81,7 @@ public class FlightSearchService {
                         .build();
             }
 
-            List<FlightSearchResponseItem> results = flightApiClient.searchFlights(request);
+            List<FlightSearchResponseItem> results = searchWithRetry(request);
             if (results == null || results.isEmpty()) {
                 return buildNoResultsResponse(request, locale);
             }
