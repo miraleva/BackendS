@@ -106,6 +106,9 @@ class TourvisioBackendApplicationTests {
 				LocalDate.now().plusDays(12),
 				9000.0,
 				"TRY",
+				List.of(passenger),
+				null,
+				null);
 				null,
 				List.of(passenger));
 
@@ -175,6 +178,9 @@ class TourvisioBackendApplicationTests {
 				LocalDate.now().plusDays(12),
 				9000.0,
 				"TRY",
+				List.of(primary, secondary),
+				null,
+				null);
 				null,
 				List.of(primary, secondary));
 
@@ -202,6 +208,9 @@ class TourvisioBackendApplicationTests {
 				LocalDate.now().plusDays(12),
 				9000.0,
 				"TRY",
+				List.of(primary, secondary),
+				null,
+				null);
 				null,
 				List.of(primary, secondary));
 
@@ -217,7 +226,8 @@ class TourvisioBackendApplicationTests {
 	@Test
 	void testHotelSearchMultiTurnChatWorkflow() throws Exception {
 		// Turn 1: Initial query
-		ChatRequest request1 = new ChatRequest("Antalya'da 2 yetişkin için 25 Temmuz girişli 5 gece otel bakıyorum", "hotel-session-123");
+		ChatRequest request1 = new ChatRequest("Antalya'da 2 yetişkin için 25 Temmuz girişli 5 gece otel bakıyorum",
+				"hotel-session-123");
 		mockMvc.perform(post("/api/chat/message")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(request1)))
@@ -241,7 +251,8 @@ class TourvisioBackendApplicationTests {
 	@Test
 	void testFlightSearchMultiTurnChatWorkflow() throws Exception {
 		// Turn 1: Initial query
-		ChatRequest request1 = new ChatRequest("İstanbul'dan Ankara'ya 25 Temmuz'da uçak bakıyorum", "flight-session-123");
+		ChatRequest request1 = new ChatRequest("İstanbul'dan Ankara'ya 25 Temmuz'da uçak bakıyorum",
+				"flight-session-123");
 		mockMvc.perform(post("/api/chat/message")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(request1)))
@@ -263,7 +274,6 @@ class TourvisioBackendApplicationTests {
 				.andExpect(jsonPath("$.chatStatus", equalTo("ACTIVE")));
 	}
 
-
 	@Test
 	void testUnknownIntentWelcome() throws Exception {
 		ChatRequest request1 = new ChatRequest("merhaba", "unknown-session-123");
@@ -273,9 +283,6 @@ class TourvisioBackendApplicationTests {
 				.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
 				.andExpect(status().isOk());
 	}
-
-
-
 
 	@Test
 	void testWelcomeTriggerConsistency() throws Exception {
@@ -300,6 +307,5 @@ class TourvisioBackendApplicationTests {
 				.content(objectMapper.writeValueAsString(req3)))
 				.andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print());
 	}
-
 
 }

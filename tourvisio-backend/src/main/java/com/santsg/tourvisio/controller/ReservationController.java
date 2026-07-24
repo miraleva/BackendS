@@ -72,4 +72,11 @@ public class ReservationController {
         Reservation updated = reservationService.updateReservation(id, request);
         return ResponseEntity.ok(updated);
     }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Cancel a reservation", description = "Soft deletes a reservation by setting its status to CANCELLED.")
+    public ResponseEntity<Void> cancelReservation(@PathVariable Long id) {
+        reservationService.cancelReservation(id);
+        return ResponseEntity.noContent().build();
+    }
 }
