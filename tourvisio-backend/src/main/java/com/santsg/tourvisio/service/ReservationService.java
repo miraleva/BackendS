@@ -90,8 +90,8 @@ public class ReservationService {
     public Reservation createReservation(ReservationRequest request, Long userId) {
         validateReservationRequest(request);
 
-        // Generate a unique reservation number (e.g. RES-ABC12D)
-        String reservationNum = "RES-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        // Generate a unique PNR / reservation number (e.g. PNR-849201)
+        String reservationNum = "PNR-" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
 
         Reservation reservation = Reservation.builder()
                 .reservationNumber(reservationNum)
