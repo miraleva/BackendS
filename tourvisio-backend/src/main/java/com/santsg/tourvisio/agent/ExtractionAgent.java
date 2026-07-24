@@ -106,7 +106,7 @@ public class ExtractionAgent {
                   "intent": "Determine the user's intent. Must be one of: HOTEL_SEARCH, FLIGHT_SEARCH, UNKNOWN, OUT_OF_SCOPE",
                   "criteria": {
                     // For HOTEL_SEARCH:
-                    "locationOrHotelName": "city or hotel name (e.g. Antalya)",
+                    "locationOrHotelName": "city or hotel name (e.g. Antalya). CRITICAL: If the user did not specify a specific city/province/district/country name (e.g. Antalya, Belek, Paris, Istanbul), DO NOT fill this field; leave it null or return an empty string. General POI/amenity names (such as lunapark, plaj, havalimanı, otogar, müze, merkez, beach, theme park, airport, etc.) are NOT city or location names and must NOT be put into this field.",
                     "checkInDate": "check-in date in YYYY-MM-DD format, ONLY if the user's message contains an actual date reference (a specific date, weekday, or relative expression like 'tomorrow'/'yarın'/'next week'). Today's date is %s, used only to resolve relative/partial dates. Handle multiple formats robustly (e.g. '13.6.26' -> '2026-06-13', '13/04/2027', '12-08-2026'). If only month/day (e.g. 15 July, haziran 13) is specified, resolve to the nearest future occurrence using today's date. NEVER output today's date as checkInDate just because no date was mentioned — leave it null/omitted instead.",
                     "checkOutDate": "check-out date in YYYY-MM-DD format. If night count is given, calculate check-out by adding it to check-in. Same 'only if explicitly mentioned' rule as checkInDate applies.",
                     "adultCount": "integer. If the user writes an explicit negative number (e.g. '-3 yetişkin', '-2 adults'), output the negative value AS-IS (e.g. -3) — do NOT silently convert it to its positive/absolute value. A downstream system rejects negative counts and warns the user; it needs to see the real negative number to do that.",
@@ -114,13 +114,16 @@ public class ExtractionAgent {
                     "childAges": "array of integers, ages 3-12, one per child",
                     "infantCount": "integer — number of travelers aged 0 to 2 (inclusive), i.e. infants/babies ('bebek'). If the user says 'infant'/'bebek' but later gives an age of 3-12, that person belongs in childCount instead, not here. Same negative-number preservation rule as adultCount applies.",
                     "infantAges": "array of integers, ages 0-2, one per infant",
-                    "currency": currency (TRY, EUR, USD, GBP),
+                    "currency": "currency (TRY, EUR, USD, GBP)",
                     "roomCount": "integer. Same negative-number preservation rule as adultCount applies.",
-                    "nationality": nationality code (e.g. TR)
+                    "nationality": "nationality code (e.g. TR)",
+                    "maxPrice": "double. Extract the maximum price/budget limit if the user specifies one (e.g. '8 bin liradan düşükleri göster' -> 8000.0, 'maksimum 10000 TL' -> 10000.0)",
+                    "minPrice": "double. Extract the minimum price if specified (e.g. '5000 TL üzeri' -> 5000.0)",
+                    "minStars": "integer. Extract the minimum star rating or specified stars (e.g. 'sadece 5 yıldızlılar' -> 5, '4 yıldız ve üzeri' -> 4)",
 
                     // For FLIGHT_SEARCH:
-                    "departureLocation": "departure location (e.g. Istanbul)",
-                    "arrivalLocation": "arrival location (e.g. Antalya)",
+                    "departureLocation": "departure location (e.g. Istanbul). CRITICAL: Do NOT fill this with general POI/amenity names (such as havalimanı, otogar, etc.) if no specific city/airport is mentioned.",
+                    "arrivalLocation": "arrival location (e.g. Antalya). CRITICAL: Do NOT fill this with general POI/amenity names (such as havalimanı, otogar, etc.) if no specific city/airport is mentioned.",
                     "departureDate": "departure date in YYYY-MM-DD format. Same 'only if explicitly mentioned' rule as checkInDate applies.",
                     "returnDate": "return date in YYYY-MM-DD format. Same 'only if explicitly mentioned' rule as checkOutDate applies.",
                     "passengerCount": "integer. Same negative-number preservation rule as adultCount applies.",
@@ -177,6 +180,11 @@ public class ExtractionAgent {
                 Extract travel criteria and identify user intent from the message below.
                 Return the output strictly as a single JSON object matching the schema. Do not add any markdown blocks (like ```json), notes, or extra text.
                 If some criteria fields are not found in the message, omit them or set them to null.
+
+                CRITICAL LOKASYON / DESTİNASYON KURALI (LOCATION EXTRACTION RULE):
+                - Eğer kullanıcı spesifik bir şehir/il/ilçe/ülke adı (örn: Antalya, Belek, Paris, İstanbul) belirtmediyse, 'locationOrHotelName', 'departureLocation' veya 'arrivalLocation' alanlarını KESİNLİKLE doldurma (null bırak veya boş string dön).
+                - Konaklama süresi / gece sayısı ifadeleri (örn: "5 gece", "3 gün", "5 gece kalacağım", "1 hafta", "night", "stay", vb.) KESİNLİKLE şehir/lokasyon adı DEĞİLDİR. Bu tür süre ifadeleri kesinlikle 'locationOrHotelName', 'departureLocation' veya 'arrivalLocation' alanlarına YAZILMAMALIDIR.
+                - Genel mekan/ilgi noktası (POI) isimleri (örn: "lunapark", "havalimanı", "müze", "plaj", "merkez", "otogar", "istasyon", "sahil", vb.) şehir veya lokasyon adı DEĞİLDİR. Bu tür genel ifadeler kesinlikle 'locationOrHotelName', 'departureLocation' veya 'arrivalLocation' alanlarına yazılmamalıdır. Bunlar 'nearby_poi' veya 'search_keywords' parametresi olarak değerlendirilmelidir.
 
                 LANGUAGE AND CHARACTER PRESERVATION HINT:
                 The user message is in Turkish. It is critical to preserve Turkish characters ('ş', 'ğ', 'ı', 'ö', 'ü', 'ç', 'Ş', 'Ğ', 'İ', 'I', 'Ö', 'Ü', 'Ç') with high precision in all extracted place names, hotel names, cities, or any criteria fields (e.g., "Eskişehir", "Muğla", "Beşiktaş", "Şişli", "Göcek"). Do not remove, simplify, normalize, or distort these characters in the JSON output.
@@ -235,6 +243,20 @@ public class ExtractionAgent {
                 throw new RuntimeException("Parsed extraction result is null or missing intent.");
             }
             if (result.getCriteria() != null) {
+                // Safeguard: nullify general POIs extracted as locations
+                String loc = result.getCriteria().getLocationOrHotelName();
+                if (loc != null && isGeneralPoi(loc.toLowerCase(java.util.Locale.forLanguageTag("tr-TR")))) {
+                    result.getCriteria().setLocationOrHotelName(null);
+                }
+                String dep = result.getCriteria().getDepartureLocation();
+                if (dep != null && isGeneralPoi(dep.toLowerCase(java.util.Locale.forLanguageTag("tr-TR")))) {
+                    result.getCriteria().setDepartureLocation(null);
+                }
+                String arr = result.getCriteria().getArrivalLocation();
+                if (arr != null && isGeneralPoi(arr.toLowerCase(java.util.Locale.forLanguageTag("tr-TR")))) {
+                    result.getCriteria().setArrivalLocation(null);
+                }
+
                 result.getCriteria().setSearchType(result.getIntent());
                 log.info("[ExtractionAgent] Parsed message: \"{}\"", message);
                 log.info("[ExtractionAgent] -> checkInDate: {}", result.getCriteria().getCheckInDate());
@@ -247,5 +269,21 @@ public class ExtractionAgent {
             log.error("[ExtractionAgent] Failed to parse JSON response: {}", response, e);
             throw new RuntimeException("JSON parsing failure in ExtractionAgent: " + e.getMessage(), e);
         }
+    }
+
+    private boolean isGeneralPoi(String text) {
+        if (text == null) return false;
+        java.util.List<String> invalidLocationKeywords = java.util.List.of(
+            "lunapark", "plaj", "havalimanı", "havalimani", "havaalanı", "havaalani",
+            "otogar", "müze", "muze", "merkez", "beach", "museum", "airport",
+            "theme park", "themepark", "aquapark", "su park",
+            "gece", "gün", "gun", "kalacağım", "kalacagim", "kalmak", "günlük", "gunluk", "gecelik", "hafta"
+        );
+        for (String invalid : invalidLocationKeywords) {
+            if (text.contains(invalid)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

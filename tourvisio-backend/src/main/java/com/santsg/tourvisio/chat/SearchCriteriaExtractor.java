@@ -614,6 +614,10 @@ public class SearchCriteriaExtractor {
 
     public String parseLocation(String text, boolean isFlight) {
         if (text == null || text.isBlank()) return null;
+        String lower = text.toLowerCase(java.util.Locale.forLanguageTag("tr-TR")).trim();
+        if (isGeneralPoi(lower)) {
+            return null;
+        }
         List<String> cities = isFlight ? FLIGHT_CITIES : HOTEL_CITIES;
         for (String city : cities) {
             if (containsCity(text, city)) {
@@ -623,9 +627,27 @@ public class SearchCriteriaExtractor {
         // Fallback: strip punctuation and capitalize
         String cleaned = text.replaceAll("[.,!?']", "").trim();
         if (cleaned.length() > 0) {
+            if (isGeneralPoi(cleaned.toLowerCase(java.util.Locale.forLanguageTag("tr-TR")))) {
+                return null;
+            }
             return capitalize(cleaned);
         }
         return null;
+    }
+
+    private boolean isGeneralPoi(String text) {
+        if (text == null) return false;
+        List<String> pois = List.of(
+            "lunapark", "plaj", "havalimanı", "havalimani", "havaalanı", "havaalani",
+            "otogar", "müze", "muze", "merkez", "beach", "museum", "airport",
+            "theme park", "themepark", "aquapark", "su park"
+        );
+        for (String poi : pois) {
+            if (text.contains(poi)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public String parseCurrency(String text) {
