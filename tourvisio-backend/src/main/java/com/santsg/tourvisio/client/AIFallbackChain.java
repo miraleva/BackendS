@@ -45,7 +45,7 @@ public class AIFallbackChain implements AIProviderClient {
                     log.info("[AIFallbackChain:{}] '{}' sağlayıcısına düşüldü (önceki {} sağlayıcı başarısız).",
                             chainLabel, provider.providerName(), i);
                 }
-                return response;
+                return stripStrayArabicScript(response);
             }
 
             log.warn("[AIFallbackChain:{}] '{}' sağlayıcısı geçersiz yanıt döndürdü, bir sonrakine geçiliyor.",
@@ -71,5 +71,21 @@ public class AIFallbackChain implements AIProviderClient {
                 && !response.trim().isEmpty()
                 && !response.trim().startsWith("[MOCK]")
                 && !response.contains("Gemini service could not be reached");
+    }
+
+    /**
+     * Ücretsiz yedek modeller (ör. OpenRouter free tier) ara sıra üretilen metnin
+     * içine, hiçbir bağlamla ilgisi olmayan Arapça alfabe karakterleri karıştırıyor
+     * (ör. "tarihleriniz" → "tarihوهleriniz", "maalesef" → "maalesف"). Uygulama
+     * sadece Latin/Türkçe ve Kiril (Rusça desteği) alfabelerini kullanıyor, bu
+     * yüzden Arapça blok karakterlerini güvenle temizleyip kelimeyi olduğu gibi
+     * bırakabiliyoruz.
+     */
+    private static String stripStrayArabicScript(String response) {
+        if (response == null || response.isEmpty()) {
+            return response;
+        }
+        String cleaned = response.replaceAll("[\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]", "");
+        return cleaned.equals(response) ? response : cleaned;
     }
 }
