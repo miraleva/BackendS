@@ -193,14 +193,36 @@ public class ResponseAgent {
             }
         }
 
+        String knownDetailsInstruction = "";
+        if (criteria != null) {
+            boolean hasLocation = (criteria.getLocationOrHotelName() != null && !criteria.getLocationOrHotelName().isBlank())
+                    || (criteria.getArrivalLocation() != null && !criteria.getArrivalLocation().isBlank());
+            if (!hasLocation && (criteria.getCheckInDate() != null || criteria.getDepartureDate() != null || criteria.getAdultCount() != null || criteria.getPassengerCount() != null)) {
+                String datesStr = "";
+                if (criteria.getCheckInDate() != null && criteria.getCheckOutDate() != null) {
+                    datesStr = criteria.getCheckInDate() + " - " + criteria.getCheckOutDate();
+                } else if (criteria.getCheckInDate() != null) {
+                    datesStr = criteria.getCheckInDate().toString();
+                }
+                String guestsStr = criteria.getAdultCount() != null ? (criteria.getAdultCount() + " kişi") : "";
+
+                knownDetailsInstruction = String.format(
+                    "\nSPECIAL RULE: We already know some details (Dates: '%s', Guests: '%s'), but the destination/city is still missing. " +
+                    "Acknowledge the known details naturally and politely ask which city/destination they would like to stay or travel to. " +
+                    "Example response format: 'Harika, %s %s için rezervasyon planlıyoruz. Peki hangi şehirde/bölgede konaklamak istersiniz?'",
+                    datesStr, guestsStr, datesStr, guestsStr
+                );
+            }
+        }
+
         String fieldsCsv = String.join(", ", missingFields);
         String prompt = String.format(
                 "The user is planning a trip, but the following mandatory search criteria are missing: [%s]. " +
                 "Ask the user for ALL of this information together in a single, friendly, and natural question. " +
                 "Do NOT use bare technical terms (e.g., say 'How many people will be traveling?' instead of 'adult count'). " +
-                "Write the question in %s — the same language the user is writing in.%s%s " +
+                "Write the question in %s — the same language the user is writing in.%s%s%s " +
                 "Return ONLY the question itself, no extra notes.",
-                fieldsCsv, targetLanguage, userMessageClause(userMessage), poiInstruction
+                fieldsCsv, targetLanguage, userMessageClause(userMessage), poiInstruction, knownDetailsInstruction
         );
 
         try {

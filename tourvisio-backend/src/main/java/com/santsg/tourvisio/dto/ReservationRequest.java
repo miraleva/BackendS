@@ -43,4 +43,6 @@ public class ReservationRequest {
     private List<PassengerRequest> passengers;
 
     private String chatSessionId;
+
+    private String imageUrl;
 }
