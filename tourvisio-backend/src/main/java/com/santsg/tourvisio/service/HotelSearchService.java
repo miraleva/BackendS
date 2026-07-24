@@ -42,6 +42,14 @@ public class HotelSearchService {
      * Mevcut REST endpoint'ten çağrılan otel arama metodu.
      */
     public List<HotelSearchResponseItem> searchHotels(HotelSearchRequest request) {
+        log.info("Hotel Search Payload: destination={}, checkIn={}, checkOut={}, roomCount={}, adultCount={}, childCount={}, childrenAges={}",
+                request.getLocationOrHotelName(),
+                request.getCheckInDate(),
+                request.getCheckOutDate(),
+                request.getRoomCount(),
+                request.getAdultCount(),
+                request.getChildCount(),
+                request.getChildAges());
         return hotelApiClient.searchHotels(request);
     }
 
@@ -52,6 +60,26 @@ public class HotelSearchService {
      */
     public ChatSearchResponse searchFromCriteria(SearchCriteria criteria) {
         Locale locale = LocaleResolver.resolveLocale(criteria);
+        log.info("Hotel Search Payload: destination={}, checkIn={}, checkOut={}, roomCount={}, adultCount={}, childCount={}, childrenAges={}",
+                criteria.getLocationOrHotelName(),
+                criteria.getCheckInDate(),
+                criteria.getCheckOutDate(),
+                criteria.getRoomCount(),
+                criteria.getAdultCount(),
+                criteria.getChildCount(),
+                criteria.getChildAges());
+
+        if (criteria.getChildCount() != null && criteria.getChildCount() > 0
+                && (criteria.getChildAges() == null || criteria.getChildAges().isEmpty())) {
+            log.warn("[HotelSearchService] Arama engellendi: Çocuk sayısı ({}) var fakat çocuk yaşları eksik!", criteria.getChildCount());
+            return ChatSearchResponse.builder()
+                    .reply("Eksik bilgi: Çocuk yaşları belirtilmedi. Lütfen çocuklarınızın yaşını giriniz.")
+                    .searchType("HOTEL_SEARCH")
+                    .success(false)
+                    .results(List.of())
+                    .build();
+        }
+
         try {
             // Önce SearchCriteria'dan doğrudan arama yap
             // (culture, dil, para birimi criteria'dan okunur)

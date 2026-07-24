@@ -215,14 +215,19 @@ public class ResponseAgent {
             }
         }
 
+        String ageInstruction = "";
+        if (missingFields.contains("çocuk yaşları") || missingFields.contains("bebek yaşları")) {
+            ageInstruction = "\nSTRICT PRIORITY RULE: The child/infant age is missing. Your ONLY priority question MUST be asking for the age(s) of the child/children (e.g. 'Çocuğunuzun/Çocuklarınızın yaşı kaçtır?'). Do NOT ask for dates, destination, or other fields until child ages are provided.";
+        }
+
         String fieldsCsv = String.join(", ", missingFields);
         String prompt = String.format(
                 "The user is planning a trip, but the following mandatory search criteria are missing: [%s]. " +
                 "Ask the user for ALL of this information together in a single, friendly, and natural question. " +
                 "Do NOT use bare technical terms (e.g., say 'How many people will be traveling?' instead of 'adult count'). " +
-                "Write the question in %s — the same language the user is writing in.%s%s%s " +
+                "Write the question in %s — the same language the user is writing in.%s%s%s%s " +
                 "Return ONLY the question itself, no extra notes.",
-                fieldsCsv, targetLanguage, userMessageClause(userMessage), poiInstruction, knownDetailsInstruction
+                fieldsCsv, targetLanguage, userMessageClause(userMessage), poiInstruction, knownDetailsInstruction, ageInstruction
         );
 
         try {

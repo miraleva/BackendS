@@ -29,25 +29,23 @@ public class CriteriaMissingFieldsService {
         if ("HOTEL_SEARCH".equals(searchType)) {
             boolean childAgesPending = criteria.getChildCount() != null
                     && criteria.getChildCount() > 0
-                    && criteria.getChildAges().isEmpty();
+                    && (criteria.getChildAges() == null || criteria.getChildAges().isEmpty() || criteria.getChildAges().size() != criteria.getChildCount());
             boolean infantAgesPending = criteria.getInfantCount() != null
                     && criteria.getInfantCount() > 0
-                    && criteria.getInfantAges().isEmpty();
+                    && (criteria.getInfantAges() == null || criteria.getInfantAges().isEmpty() || criteria.getInfantAges().size() != criteria.getInfantCount());
+
+            // Çocuk/bebek yaşları birinci önceliktir — yaşlar öğrenilmeden tarihlere geçilmez
+            if (childAgesPending)                             missing.add("çocuk yaşları");
+            if (infantAgesPending)                             missing.add("bebek yaşları");
 
             if (isBlank(criteria.getLocationOrHotelName())) missing.add("konum veya otel adı");
             if (criteria.getCheckInDate()  == null)          missing.add("giriş tarihi");
             if (criteria.getCheckOutDate() == null)          missing.add("çıkış tarihi");
-            // Yetişkin sayısı, çocuk/bebek yaşları eksikken AYNI TURDA sorulmaz: ikisi de
-            // sayısal olduğu için "5 6" gibi bare bir cevapta hangisinin hangi alana ait
-            // olduğu belirsizleşiyor (örn. "2 çocuk"tan sonra yaş soruluyor, kullanıcı "5 6"
-            // dediğinde bu iki çocuğun yaşı, ama yetişkin sayısı sorusu da aynı anda
-            // sorulduğu için modelde "5"i yetişkin sayısına da yazma eğilimi oluşuyor).
-            // Yaşlar netleşmeden yetişkin sayısını sormayıp bir sonraki tura bırakıyoruz.
+            if (criteria.getRoomCount() == null)             missing.add("oda sayısı");
+            if (criteria.getChildCount() == null)            missing.add("çocuk sayısı");
             if (!childAgesPending && !infantAgesPending && criteria.getAdultCount() == null) {
                 missing.add("yetişkin sayısı");
             }
-            if (childAgesPending)                             missing.add("çocuk yaşları");
-            if (infantAgesPending)                             missing.add("bebek yaşları");
             if (isBlank(criteria.getCurrency()))              missing.add("para birimi");
 
         } else if ("FLIGHT_SEARCH".equals(searchType)) {

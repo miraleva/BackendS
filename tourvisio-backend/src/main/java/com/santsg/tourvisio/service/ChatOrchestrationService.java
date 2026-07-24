@@ -854,6 +854,23 @@ public class ChatOrchestrationService {
             String userMessage,
             String reclassificationNote) {
 
+        // Guardrail Interceptor: Çocuk var ama yaşlar eksikse arama tetiklenemez
+        if ("HOTEL_SEARCH".equals(intent) && criteria.getChildCount() != null && criteria.getChildCount() > 0
+                && (criteria.getChildAges() == null || criteria.getChildAges().isEmpty() || criteria.getChildAges().size() != criteria.getChildCount())) {
+            log.warn("[Orchestration Interceptor] MISSING_CHILDREN_AGES guardrail triggered: childCount={}, childAges={}",
+                    criteria.getChildCount(), criteria.getChildAges());
+            String reply = "Çocuğunuzun yaşını öğrenebilir miyim? (Otel fiyatlandırması çocuğun yaşına göre yapılmaktadır.)";
+            return ChatResponse.builder()
+                    .reply(reply)
+                    .sessionId(sessionId)
+                    .searchType("HOTEL_SEARCH")
+                    .missingFields(List.of("çocuk yaşları"))
+                    .chatStatus("ACTIVE")
+                    .success(false)
+                    .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(criteria))
+                    .build();
+        }
+
         log.info("[Orchestration] Executing Search to TourVisio API with Final Criteria: Location={}, CheckIn={}, CheckOut={}, Adults={}, Children={}, ChildAges={}",
                 criteria.getLocationOrHotelName(),
                 criteria.getCheckInDate(),

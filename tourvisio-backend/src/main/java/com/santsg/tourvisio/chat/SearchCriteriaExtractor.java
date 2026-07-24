@@ -84,11 +84,13 @@ public class SearchCriteriaExtractor {
     // ifadesindeki tireyi eksi işareti sanmıyoruz (önünde başka bir rakam varsa
     // eksi işareti almıyoruz).
     private static final Pattern ADULT_PATTERN = Pattern.compile(
-            "((?<!\\d)-?\\d+)\\s*(?:yetişkin|yetiskin|adult|kişi|kisi)");
+            "((?<!\\d)-?\\d+)\\s*(?:yetişkin|yetiskin|adult|adults|kişi|kisi)");
     private static final Pattern CHILD_PATTERN = Pattern.compile(
-            "((?<!\\d)-?\\d+)\\s*(?:çocuk|cocuk|child|kids)");
+            "((?<!\\d)-?\\d+)\\s*(?:çocuk|cocuk|child|children|kids)");
     private static final Pattern INFANT_PATTERN = Pattern.compile(
             "((?<!\\d)-?\\d+)\\s*(?:bebek|infant|infants|baby|babies)");
+    private static final Pattern ROOM_PATTERN = Pattern.compile(
+            "((?<!\\d)-?\\d+)\\s*(?:oda|room|rooms)");
     private static final Pattern PASSENGER_PATTERN = Pattern.compile(
             "((?<!\\d)-?\\d+)\\s*(?:yolcu|kişi|kisi|passenger|passengers|person|people|kişilik|kisilik|yetişkin|yetiskin|adult|adults)");
 
@@ -189,6 +191,11 @@ public class SearchCriteriaExtractor {
                 break;
             }
         }
+
+        // Oda
+        Matcher rm = ROOM_PATTERN.matcher(lower);
+        if (rm.find())
+            c.setRoomCount(Integer.parseInt(rm.group(1)));
 
         // Yetişkin
         Matcher am = ADULT_PATTERN.matcher(lower);
