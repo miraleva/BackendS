@@ -206,11 +206,27 @@ public class TourVisioFlightApiClient {
                 nights = 1;
             }
 
-            TourVisioFlightSearchRequest.PassengerCriteria adults =
-                    TourVisioFlightSearchRequest.PassengerCriteria.builder()
-                            .type(1) // Passenger Types: 1 = Adult
-                            .count(request.getPassengerCount())
-                            .build();
+            // Passenger Types tablosu: 1 = Adult, 2 = Child, 3 = Infant.
+            // Çocuk/bebek sayıları kendi tipleriyle gönderilmezse arama sadece
+            // yetişkinler için fiyatlanır ve toplam fiyat gerçek yolcu
+            // kompozisyonunu yansıtmaz.
+            List<TourVisioFlightSearchRequest.PassengerCriteria> passengers = new ArrayList<>();
+            passengers.add(TourVisioFlightSearchRequest.PassengerCriteria.builder()
+                    .type(1)
+                    .count(request.getPassengerCount())
+                    .build());
+            if (request.getChildCount() != null && request.getChildCount() > 0) {
+                passengers.add(TourVisioFlightSearchRequest.PassengerCriteria.builder()
+                        .type(2)
+                        .count(request.getChildCount())
+                        .build());
+            }
+            if (request.getInfantCount() != null && request.getInfantCount() > 0) {
+                passengers.add(TourVisioFlightSearchRequest.PassengerCriteria.builder()
+                        .type(3)
+                        .count(request.getInfantCount())
+                        .build());
+            }
 
             TourVisioFlightSearchRequest tvRequest = TourVisioFlightSearchRequest.builder()
                     .productType(FLIGHT_PRODUCT_TYPE)
@@ -220,7 +236,7 @@ public class TourVisioFlightApiClient {
                     .night(nights)
                     .departureLocations(List.of(dep))
                     .arrivalLocations(List.of(arr))
-                    .passengers(List.of(adults))
+                    .passengers(passengers)
                     .showOnlyNonStopFlight(false)
                     .acceptPendingProviders(false)
                     .forceFlightBundlePackage(false)

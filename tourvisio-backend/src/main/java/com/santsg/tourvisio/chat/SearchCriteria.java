@@ -22,6 +22,10 @@ import java.util.List;
  * İleride {@code ChatSession} JPA entity'siyle database'e taşınabilir.
  * </p>
  */
+// LLM bazen şemada olmayan fazladan alanlar ("hasChildren" gibi) üretebiliyor;
+// bilinmeyen alan yüzünden TÜM (doğru) çıkarımın çöpe atılıp zayıf regex
+// yedeğine düşülmesini engellemek için bilinmeyen alanları yok sayıyoruz.
+@com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
 @Data
 @NoArgsConstructor
 public class SearchCriteria {
@@ -302,7 +306,10 @@ public class SearchCriteria {
         req.setDepartureLocation(departureLocation);
         req.setArrivalLocation(arrivalLocation);
         req.setDepartureDate(departureDate);
-        req.setPassengerCount(passengerCount);
+        // passengerCount tarihsel olarak "yetişkin sayısı" gibi kullanılıyor; çocuk/bebek
+        // ayrı yolcu tipleriyle (2=Child, 3=Infant) gönderilir. adultCount doluysa onu
+        // tercih ediyoruz ki "2 yetişkin 1 çocuk" derken çocuk yetişkin koltuğu sayılmasın.
+        req.setPassengerCount(adultCount != null && adultCount > 0 ? adultCount : passengerCount);
         req.setTripType(tripType);
         req.setCurrency(currency);
         // Set new fields
