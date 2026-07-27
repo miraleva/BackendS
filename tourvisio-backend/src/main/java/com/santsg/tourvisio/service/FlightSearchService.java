@@ -186,6 +186,9 @@ public class FlightSearchService {
             candidate.setDepartureAirport(baseRequest.getDepartureAirport());
             candidate.setArrivalAirport(baseRequest.getArrivalAirport());
             candidate.setPassengerCount(baseRequest.getPassengerCount());
+            candidate.setChildCount(baseRequest.getChildCount());
+            candidate.setChildAges(baseRequest.getChildAges());
+            candidate.setInfantCount(baseRequest.getInfantCount());
             candidate.setTripType(baseRequest.getTripType());
             candidate.setCurrency(baseRequest.getCurrency());
             candidate.setDepartureDate(candidateDeparture);
