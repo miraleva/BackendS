@@ -40,5 +40,35 @@ public class DatabaseSchemaInitializer implements CommandLineRunner {
                 log.debug("[DatabaseSchemaInitializer] DDL notice for '{}': {}", sql, e.getMessage());
             }
         }
+
+        // Mock verileri temizleme rutini (Jane Doe ve Test User'ları temizler)
+        try {
+            log.info("[DatabaseSchemaInitializer] Temizlik işlemi başlatılıyor: Örnek test kullanıcıları ve bağlı kayıtları temizleniyor...");
+            
+            // 1. example.com uzantılı kullanıcıların rezervasyonlarını sil
+            int deletedReservations = jdbcTemplate.update(
+                "DELETE FROM reservations WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%example.com')"
+            );
+            
+            // 2. example.com uzantılı kullanıcıların sohbet mesajlarını sil
+            int deletedMessages = jdbcTemplate.update(
+                "DELETE FROM chat_messages WHERE session_id IN (SELECT id FROM chat_sessions WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%example.com'))"
+            );
+            
+            // 3. example.com uzantılı kullanıcıların sohbet oturumlarını sil
+            int deletedSessions = jdbcTemplate.update(
+                "DELETE FROM chat_sessions WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%example.com')"
+            );
+            
+            // 4. example.com uzantılı kullanıcıları sil
+            int deletedUsers = jdbcTemplate.update(
+                "DELETE FROM users WHERE email LIKE '%example.com'"
+            );
+            
+            log.info("[DatabaseSchemaInitializer] Temizlik tamamlandı: {} rezervasyon, {} mesaj, {} oturum, {} test kullanıcısı silindi.", 
+                deletedReservations, deletedMessages, deletedSessions, deletedUsers);
+        } catch (Exception e) {
+            log.warn("[DatabaseSchemaInitializer] Temizlik esnasında hata/uyarı oluştu: {}", e.getMessage());
+        }
     }
 }
