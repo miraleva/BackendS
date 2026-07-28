@@ -454,7 +454,7 @@ public class ChatOrchestrationService {
         if (note == null || note.isBlank()) {
             return reply;
         }
-        return trimmed;
+        return note.trim() + "\n" + reply;
     }
 
     private void adjustIncomingCriteria(SearchCriteria incoming, String lastField, String message) {
@@ -1047,5 +1047,40 @@ public class ChatOrchestrationService {
                 .results(slicedResults)
                 .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(criteria))
                 .build();
+    }
+
+    /**
+     * Sanitizes a location field value extracted by the AI model.
+     * <p>
+     * The model occasionally violates the "leave blank if no city/province is given"
+     * instruction and writes a full sentence (e.g. "Anıtkabir yakınlarında olabilir")
+     * into a location field.  Such values never match anything in TourVisio and always
+     * result in "no results found".
+     * <p>
+     * Real location names are short (≤ 4 words) and do not contain filler words like
+     * "yakın", "civar", or "olabilir".  Anything that looks like a sentence is rejected
+     * and returned as {@code null} so the user will be prompted again.
+     *
+     * @param value the raw location string extracted by the AI model
+     * @return the original value if it looks like a genuine location name, or {@code null}
+     */
+    private String sanitizeLocationField(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String trimmed = value.trim();
+        // Reject sentence-like filler phrases (Turkish keywords that indicate vague descriptions)
+        String lower = trimmed.toLowerCase(java.util.Locale.forLanguageTag("tr"));
+        if (lower.contains("yakın") || lower.contains("civar") || lower.contains("olabilir")
+                || lower.contains("gibi") || lower.contains("bölge") || lower.contains("çevres")
+                || lower.contains("çevren") || lower.contains("taraf")) {
+            return null;
+        }
+        // Reject values that are longer than 4 words — real city/hotel names are short
+        String[] words = trimmed.split("\\s+");
+        if (words.length > 4) {
+            return null;
+        }
+        return trimmed;
     }
 }
