@@ -102,14 +102,30 @@ public class ChatController {
     }
 
     @GetMapping(value = "/sessions", produces = MediaType.APPLICATION_JSON_VALUE)
-    @Operation(summary = "List all chat sessions")
+    @Operation(summary = "List or search chat sessions")
     public ResponseEntity<List<ChatSessionManager.SessionSummaryResponse>> getSessions(
+            @RequestParam(value = "query", required = false) String query,
             @RequestAttribute(value = "userId", required = false) Long userId) {
         if (userId == null) {
             return ResponseEntity.ok(List.of());
         }
+        if (query != null && !query.trim().isEmpty()) {
+            return ResponseEntity.ok(chatSessionManager.searchSessionsForUser(userId, query));
+        }
         return ResponseEntity.ok(chatSessionManager.getSessionSummariesForUser(userId));
     }
+
+    @GetMapping(value = "/sessions/search", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Search chat sessions by keyword")
+    public ResponseEntity<List<ChatSessionManager.SessionSummaryResponse>> searchSessions(
+            @RequestParam(value = "query", required = false) String query,
+            @RequestAttribute(value = "userId", required = false) Long userId) {
+        if (userId == null) {
+            return ResponseEntity.ok(List.of());
+        }
+        return ResponseEntity.ok(chatSessionManager.searchSessionsForUser(userId, query));
+    }
+
 
     @GetMapping(value = "/sessions/{id}/messages", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get full message history for a session")

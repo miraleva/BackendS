@@ -25,6 +25,7 @@ public class ChatSessionManager {
     private final ChatSessionStore chatSessionStore;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final com.santsg.tourvisio.repository.ReservationRepository reservationRepository;
     private final Map<String, SessionState> sessions = new ConcurrentHashMap<>();
 
     // Autowired constructor
@@ -32,11 +33,13 @@ public class ChatSessionManager {
     public ChatSessionManager(ChatSessionRepository chatSessionRepository,
             ChatSessionStore chatSessionStore,
             UserRepository userRepository,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) com.santsg.tourvisio.repository.ReservationRepository reservationRepository) {
         this.chatSessionRepository = chatSessionRepository;
         this.chatSessionStore = chatSessionStore;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
+        this.reservationRepository = reservationRepository;
     }
 
     // Default constructor for testing fallback
@@ -44,6 +47,7 @@ public class ChatSessionManager {
         this.chatSessionRepository = null;
         this.chatSessionStore = null;
         this.userRepository = null;
+        this.reservationRepository = null;
         this.objectMapper = new ObjectMapper()
                 .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
     }
@@ -56,6 +60,16 @@ public class ChatSessionManager {
         private String id;
         private String title;
         private java.time.Instant lastMessageTimestamp;
+        private String category;
+        private String snippet;
+
+        public SessionSummaryResponse(String id, String title, java.time.Instant lastMessageTimestamp) {
+            this.id = id;
+            this.title = title;
+            this.lastMessageTimestamp = lastMessageTimestamp;
+            this.category = "General SOP";
+            this.snippet = "";
+        }
     }
 
     @lombok.Data
@@ -125,8 +139,13 @@ public class ChatSessionManager {
          */
         private boolean lastSearchHadNoResults = false;
 
-        public boolean isLastSearchHadNoResults() { return lastSearchHadNoResults; }
-        public void setLastSearchHadNoResults(boolean lastSearchHadNoResults) { this.lastSearchHadNoResults = lastSearchHadNoResults; }
+        public boolean isLastSearchHadNoResults() {
+            return lastSearchHadNoResults;
+        }
+
+        public void setLastSearchHadNoResults(boolean lastSearchHadNoResults) {
+            this.lastSearchHadNoResults = lastSearchHadNoResults;
+        }
 
         private java.util.List<?> allSearchResults;
         private int resultOffset = 0;
@@ -391,25 +410,106 @@ public class ChatSessionManager {
         return state;
     }
 
-    @Transactional
-    public void updateChatStatus(String sessionId, String newStatus) {
-        SessionState state = getSessionState(sessionId);
-        if (state != null) {
-            state.setChatStatus(newStatus);
-            saveSession(state);
+    private String inferCategory(String title, String criteriaJson, List<ChatMessage> messages) {
+        String t = (title != null ? title : "").toLowerCase();
+
+        StringBuilder userMsgs = new StringBuilder();
+        if (messages != null) {
+            for (ChatMessage m : messages) {
+                if ("user".equalsIgnoreCase(m.getSender()) && m.getText() != null) {
+                    userMsgs.append(" ").append(m.getText().toLowerCase());
+                }
+            }
         }
+        String combined = t + " " + userMsgs.toString();
+
+        if (combined.contains("uçak") || combined.contains("uçuş") || combined.contains("bilet")
+                || combined.contains("flight") || combined.contains("havayolu") || combined.contains("havalimanı")
+                || combined.contains("havaalanı") || combined.contains("gidiş") || combined.contains("dönüş")) {
+            return "Flight";
+        }
+        if (combined.contains("otel") || combined.contains("hotel") || combined.contains("konaklama")
+                || combined.contains("oda") || combined.contains("resort") || combined.contains("pansiyon")) {
+            return "Hotel";
+        }
+        if (combined.contains("transfer") || combined.contains("servis") || combined.contains("taksi")
+                || combined.contains("shuttle")) {
+            return "Transfer";
+        }
+        return "General SOP";
+    }
+
+    private String getLastSnippet(List<ChatMessage> messages) {
+        if (messages == null || messages.isEmpty())
+            return "";
+        ChatMessage last = messages.get(messages.size() - 1);
+        String text = last.getText();
+        if (text == null)
+            return "";
+        return text.length() > 120 ? text.substring(0, 120) + "..." : text;
+    }
+
+    private SessionSummaryResponse mapToSummary(ChatSession s) {
+        String cat = inferCategory(s.getTitle(), s.getSearchCriteriaJson(), s.getMessages());
+        String snippet = getLastSnippet(s.getMessages());
+        return new SessionSummaryResponse(s.getId(), s.getTitle(), s.getLastMessageTimestamp(), cat, snippet);
+    }
+
+    private SessionSummaryResponse mapStateToSummary(SessionState s) {
+        String t = (s.getTitle() != null ? s.getTitle() : "").toLowerCase();
+
+        StringBuilder userMsgs = new StringBuilder();
+        if (s.getMessages() != null) {
+            for (MessageHistoryItem m : s.getMessages()) {
+                if ("user".equalsIgnoreCase(m.getSender()) && m.getText() != null) {
+                    userMsgs.append(" ").append(m.getText().toLowerCase());
+                }
+            }
+        }
+        String combined = t + " " + userMsgs.toString();
+
+        String cat = "General SOP";
+        if (combined.contains("uçak") || combined.contains("uçuş") || combined.contains("bilet")
+                || combined.contains("flight") || combined.contains("havayolu") || combined.contains("havalimanı")
+                || combined.contains("havaalanı") || combined.contains("gidiş") || combined.contains("dönüş")) {
+            cat = "Flight";
+        } else if (combined.contains("otel") || combined.contains("hotel") || combined.contains("konaklama")
+                || combined.contains("oda") || combined.contains("resort") || combined.contains("pansiyon")) {
+            cat = "Hotel";
+        } else if (combined.contains("transfer") || combined.contains("servis") || combined.contains("taksi")
+                || combined.contains("shuttle")) {
+            cat = "Transfer";
+        }
+        if (s.getMode() != null) {
+            String mLower = s.getMode().toLowerCase();
+            if ("hotel".equals(mLower) || "hotels".equals(mLower))
+                cat = "Hotel";
+            else if ("flight".equals(mLower) || "flights".equals(mLower))
+                cat = "Flight";
+            else if ("transfer".equals(mLower))
+                cat = "Transfer";
+        }
+
+        String snippet = "";
+        if (!s.getMessages().isEmpty()) {
+            MessageHistoryItem last = s.getMessages().get(s.getMessages().size() - 1);
+            if (last.getText() != null) {
+                snippet = last.getText().length() > 120 ? last.getText().substring(0, 120) + "..." : last.getText();
+            }
+        }
+        return new SessionSummaryResponse(s.getId(), s.getTitle(), s.getLastMessageTimestamp(), cat, snippet);
     }
 
     public List<SessionSummaryResponse> getAllSessionSummaries() {
         if (chatSessionRepository != null) {
             return chatSessionRepository.findAll().stream()
-                    .map(s -> new SessionSummaryResponse(s.getId(), s.getTitle(), s.getLastMessageTimestamp()))
+                    .map(this::mapToSummary)
                     .sorted((s1, s2) -> s2.getLastMessageTimestamp().compareTo(s1.getLastMessageTimestamp()))
                     .collect(Collectors.toList());
         }
 
         return sessions.values().stream()
-                .map(s -> new SessionSummaryResponse(s.getId(), s.getTitle(), s.getLastMessageTimestamp()))
+                .map(this::mapStateToSummary)
                 .sorted((s1, s2) -> s2.getLastMessageTimestamp().compareTo(s1.getLastMessageTimestamp()))
                 .collect(Collectors.toList());
     }
@@ -417,14 +517,78 @@ public class ChatSessionManager {
     public List<SessionSummaryResponse> getSessionSummariesForUser(Long userId) {
         if (chatSessionRepository != null) {
             return chatSessionRepository.findByUserIdOrderByLastMessageTimestampDesc(userId).stream()
-                    .map(s -> new SessionSummaryResponse(s.getId(), s.getTitle(), s.getLastMessageTimestamp()))
+                    .map(this::mapToSummary)
                     .collect(Collectors.toList());
         }
 
         return sessions.values().stream()
                 .filter(s -> userId == null ? s.getUserId() == null : userId.equals(s.getUserId()))
-                .map(s -> new SessionSummaryResponse(s.getId(), s.getTitle(), s.getLastMessageTimestamp()))
+                .map(this::mapStateToSummary)
                 .sorted((s1, s2) -> s2.getLastMessageTimestamp().compareTo(s1.getLastMessageTimestamp()))
                 .collect(Collectors.toList());
     }
+
+    public List<SessionSummaryResponse> searchSessionsForUser(Long userId, String query) {
+        List<SessionSummaryResponse> list = getSessionSummariesForUser(userId);
+        if (query == null || query.trim().isEmpty()) {
+            return list;
+        }
+        String rawQuery = query.trim().toLowerCase();
+        String cleanQuery = rawQuery.replaceAll("^(?i)pnr-?", "").trim();
+
+        java.util.Set<String> matchingSessionIdsFromReservations = new java.util.HashSet<>();
+        if (reservationRepository != null) {
+            try {
+                List<com.santsg.tourvisio.entity.Reservation> userReservations = (userId != null)
+                        ? reservationRepository.findByUserId(userId)
+                        : reservationRepository.findAll();
+                for (com.santsg.tourvisio.entity.Reservation res : userReservations) {
+                    if (res.getReservationNumber() != null && res.getChatSessionId() != null) {
+                        String resNum = res.getReservationNumber().toLowerCase();
+                        if (resNum.contains(rawQuery) || resNum.contains(cleanQuery)
+                                || resNum.replace("pnr-", "").contains(cleanQuery)) {
+                            matchingSessionIdsFromReservations.add(res.getChatSessionId());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // Ignore reservation lookup error
+            }
+        }
+
+        return list.stream().filter(s -> {
+            if (matchingSessionIdsFromReservations.contains(s.getId())) {
+                return true;
+            }
+
+            boolean titleMatch = s.getTitle() != null && (s.getTitle().toLowerCase().contains(rawQuery)
+                    || s.getTitle().toLowerCase().contains(cleanQuery));
+            boolean categoryMatch = s.getCategory() != null && s.getCategory().toLowerCase().contains(rawQuery);
+            boolean snippetMatch = s.getSnippet() != null && (s.getSnippet().toLowerCase().contains(rawQuery)
+                    || s.getSnippet().toLowerCase().contains(cleanQuery));
+
+            boolean messageMatch = false;
+            SessionState state = sessions.get(s.getId());
+            if (state != null) {
+                messageMatch = state.getMessages().stream().anyMatch(m -> {
+                    if (m.getText() == null)
+                        return false;
+                    String txt = m.getText().toLowerCase();
+                    return txt.contains(rawQuery) || txt.contains(cleanQuery);
+                });
+            } else if (chatSessionRepository != null) {
+                Optional<ChatSession> opt = chatSessionRepository.findById(s.getId());
+                if (opt.isPresent() && opt.get().getMessages() != null) {
+                    messageMatch = opt.get().getMessages().stream().anyMatch(m -> {
+                        if (m.getText() == null)
+                            return false;
+                        String txt = m.getText().toLowerCase();
+                        return txt.contains(rawQuery) || txt.contains(cleanQuery);
+                    });
+                }
+            }
+            return titleMatch || categoryMatch || snippetMatch || messageMatch;
+        }).collect(Collectors.toList());
+    }
+
 }
