@@ -89,7 +89,15 @@ public class UserAuthInterceptor implements HandlerInterceptor {
                 uriLower.contains("/api-docs") ||
                 uriLower.contains("/api/reservations") ||
                 uriLower.contains("/api/tickets") ||
-                uriLower.contains("/api/chat")) {
+                uriLower.contains("/api/chat") ||
+                // Otel/uçuş arama sonucundan detay görüntüleme (fotoğraf, açıklama,
+                // olanaklar) misafir kullanıcılar için de çalışmalı — sohbetin kendisi
+                // zaten girişsiz kullanılabiliyor, detay sayfası da öyle olmalı. Bu
+                // whitelist'te olmadığı için misafirlerde her zaman 401 alıp otel
+                // detayının sadece tek bir (arama sonucundaki küçük) fotoğrafla
+                // kalmasına sebep oluyordu.
+                uriLower.contains("/api/hotels") ||
+                uriLower.contains("/api/flights")) {
                 return true;
             }
         }

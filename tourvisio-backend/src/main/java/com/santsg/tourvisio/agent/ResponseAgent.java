@@ -598,11 +598,31 @@ public class ResponseAgent {
         return " The user's exact message was: \"" + userMessage.replace("\"", "\\\"") + "\".";
     }
 
+    private static final java.util.regex.Pattern JSON_KEY_VALUE_PATTERN =
+            java.util.regex.Pattern.compile("\"[\\w.]+\"\\s*:\\s*\"");
+
     private boolean isValidResponse(String response) {
-        return response != null 
-                && !response.trim().isEmpty() 
-                && !response.trim().startsWith("[MOCK]")
-                && !response.contains("Gemini service could not be reached");
+        if (response == null || response.trim().isEmpty()
+                || response.trim().startsWith("[MOCK]")
+                || response.contains("Gemini service could not be reached")) {
+            return false;
+        }
+        // Ücretsiz yedek modeller ara sıra cevaba alakasız ham içerik (ör. bir
+        // i18n JSON dosyasının içeriği: {"searchAgainButton": "...", ...})
+        // karıştırıyor. Doğal dil cevabında art arda birden fazla JSON
+        // key-value çifti görülmesi beklenmez — görülürse cevabı reddedip
+        // şablon tabanlı güvenli mesaja düşüyoruz.
+        java.util.regex.Matcher matcher = JSON_KEY_VALUE_PATTERN.matcher(response);
+        int matchCount = 0;
+        while (matcher.find()) {
+            matchCount++;
+            if (matchCount >= 2) {
+                log.warn("[ResponseAgent] AI cevabında JSON benzeri içerik tespit edildi, reddediliyor: {}",
+                        response.length() > 200 ? response.substring(0, 200) + "..." : response);
+                return false;
+            }
+        }
+        return true;
     }
 
     private Locale resolveLocale(SearchCriteria criteria) {

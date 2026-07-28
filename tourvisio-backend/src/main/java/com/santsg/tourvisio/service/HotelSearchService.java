@@ -36,8 +36,8 @@ public class HotelSearchService {
      * bkz. FlightSearchService). Kullanıcıya "sonuç yok" demeden önce aynı
      * aramayı kısa bir bekleme ile birkaç kez daha deniyoruz.
      */
-    private static final int EMPTY_RESULT_RETRY_COUNT = 2;
-    private static final long EMPTY_RESULT_RETRY_DELAY_MS = 600;
+    private static final int EMPTY_RESULT_RETRY_COUNT = 5;
+    private static final long EMPTY_RESULT_RETRY_DELAY_MS = 800;
 
     private final TourVisioHotelApiClient hotelApiClient;
     private final MessageSource messageSource;

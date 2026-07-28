@@ -264,6 +264,19 @@ public class ChatOrchestrationService {
             sessionState.resetOutOfScopeCount();
         }
 
+        // Model bazen "belirli bir şehir/il verilmediyse boş bırak" talimatına uymayıp
+        // tüm cümleyi (ör. "Anıtkabir yakınlarında olabilir") konum alanına yazıyor —
+        // TourVisio'da hiçbir zaman eşleşmeyen, garanti "sonuç yok" ile biten bir
+        // değer.
+        // Gerçek konum adları kısa olur; 4 kelimeden uzun veya cümle-benzeri ifadeleri
+        // (yakın/civar/olabilir gibi) reddedip null'a çeviriyoruz ki kullanıcıya tekrar
+        // sorulsun.
+        if (incoming != null) {
+            incoming.setLocationOrHotelName(sanitizeLocationField(incoming.getLocationOrHotelName()));
+            incoming.setDepartureLocation(sanitizeLocationField(incoming.getDepartureLocation()));
+            incoming.setArrivalLocation(sanitizeLocationField(incoming.getArrivalLocation()));
+        }
+
         // Handle OUT_OF_SCOPE and UNKNOWN immediately if this is a new search session
         if (!hasActiveSearch) {
             if ("OUT_OF_SCOPE".equals(intent)) {
@@ -441,7 +454,7 @@ public class ChatOrchestrationService {
         if (note == null || note.isBlank()) {
             return reply;
         }
-        return (reply == null || reply.isBlank()) ? note : note + "\n\n" + reply;
+        return trimmed;
     }
 
     private void adjustIncomingCriteria(SearchCriteria incoming, String lastField, String message) {
