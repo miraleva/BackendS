@@ -106,11 +106,9 @@ class TourvisioBackendApplicationTests {
 				LocalDate.now().plusDays(12),
 				9000.0,
 				"TRY",
+				null,
 				List.of(passenger),
-				null,
 				null);
-				null,
-				List.of(passenger));
 
 		// 1. Create Reservation
 		String responseJson = mockMvc.perform(post("/api/reservations")
@@ -156,8 +154,7 @@ class TourvisioBackendApplicationTests {
 				"12345678901",
 				LocalDate.of(1990, 1, 1),
 				"MR",
-				"TR"
-		);
+				"TR");
 
 		PassengerRequest secondary = new PassengerRequest(
 				"John",
@@ -167,8 +164,7 @@ class TourvisioBackendApplicationTests {
 				"PASSPORT123",
 				LocalDate.of(2010, 5, 15),
 				"CHD",
-				"DE"
-		);
+				"DE");
 
 		ReservationRequest request = new ReservationRequest(
 				"HOTEL",
@@ -178,11 +174,9 @@ class TourvisioBackendApplicationTests {
 				LocalDate.now().plusDays(12),
 				9000.0,
 				"TRY",
+				null,
 				List.of(primary, secondary),
-				null,
 				null);
-				null,
-				List.of(primary, secondary));
 
 		// 1. Create reservation
 		String responseJson = mockMvc.perform(post("/api/reservations")
@@ -208,11 +202,9 @@ class TourvisioBackendApplicationTests {
 				LocalDate.now().plusDays(12),
 				9000.0,
 				"TRY",
+				null,
 				List.of(primary, secondary),
-				null,
 				null);
-				null,
-				List.of(primary, secondary));
 
 		mockMvc.perform(put("/api/reservations/" + createdId)
 				.contentType(MediaType.APPLICATION_JSON)
