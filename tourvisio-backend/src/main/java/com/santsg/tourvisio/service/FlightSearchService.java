@@ -81,17 +81,47 @@ public class FlightSearchService {
                         .build();
             }
 
-            List<FlightSearchResponseItem> results = searchWithRetry(request);
-            if (results == null || results.isEmpty()) {
+            log.info("[FlightSearchService] Executing flight search request with passengerCount={}", request.getPassengerCount());
+            List<FlightSearchResponseItem> rawResults = searchWithRetry(request);
+            if (rawResults == null || rawResults.isEmpty()) {
                 return buildNoResultsResponse(request, locale);
             }
 
+            int pax = (request.getPassengerCount() != null && request.getPassengerCount() > 0) ? request.getPassengerCount() : 1;
+            List<FlightSearchResponseItem> results = new ArrayList<>();
+            for (FlightSearchResponseItem item : rawResults) {
+                Double rawPrice = item.getPrice();
+                Double totalPrice = rawPrice != null ? rawPrice * pax : null;
+                FlightSearchResponseItem updatedItem = FlightSearchResponseItem.builder()
+                        .airline(item.getAirline())
+                        .departureTime(item.getDepartureTime())
+                        .arrivalTime(item.getArrivalTime())
+                        .transfers(item.getTransfers())
+                        .baggage(item.getBaggage())
+                        .price(totalPrice)
+                        .unitPrice(rawPrice)
+                        .currency(item.getCurrency())
+                        .returnAirline(item.getReturnAirline())
+                        .returnDepartureTime(item.getReturnDepartureTime())
+                        .returnArrivalTime(item.getReturnArrivalTime())
+                        .returnTransfers(item.getReturnTransfers())
+                        .returnBaggage(item.getReturnBaggage())
+                        .build();
+                results.add(updatedItem);
+            }
+
             FlightSearchResponseItem best = results.get(0);
-            String bestInfo = String.format("%s — %.2f %s",
-                    best.getAirline(),
-                    best.getPrice() != null ? best.getPrice() : 0.0,
-                    best.getCurrency());
-            String reply = messageSource.getMessage("flight.search.success",
+            Double totalPrice = best.getPrice() != null ? best.getPrice() : 0.0;
+            Double unitPrice = best.getUnitPrice() != null ? best.getUnitPrice() : 0.0;
+            String bestInfo = pax > 1
+                    ? String.format("%s — %.2f %s (Kişi Başı: %.2f %s)",
+                    best.getAirline(), totalPrice, best.getCurrency(), unitPrice, best.getCurrency())
+                    : String.format("%s — %.2f %s",
+                    best.getAirline(), totalPrice, best.getCurrency());
+
+            String reply = pax > 1
+                    ? String.format("%d kişi için en iyi teklif: %s — %.2f %s", pax, best.getAirline(), totalPrice, best.getCurrency())
+                    : messageSource.getMessage("flight.search.success",
                     new Object[]{results.size(), criteria.getDepartureLocation(), criteria.getArrivalLocation(), bestInfo},
                     locale);
 

@@ -128,6 +128,7 @@ public class AdminController {
         private String fullName;
         private String email;
         private String role;
+        @com.fasterxml.jackson.annotation.JsonProperty("isActive")
         private boolean isActive;
         private long reservationCount;
 

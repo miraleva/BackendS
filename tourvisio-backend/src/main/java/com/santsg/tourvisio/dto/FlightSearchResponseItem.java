@@ -19,6 +19,7 @@ public class FlightSearchResponseItem {
 
     // Fiyat: tek yonde o ucusun fiyati; gidis-donusde ikisinin TOPLAM fiyati.
     private Double price;
+    private Double unitPrice;
     private String currency;
 
     // Donus bacagi — sadece gidis-donus sonuclarinda dolu, tek yonde null.

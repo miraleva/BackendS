@@ -266,6 +266,7 @@ public class ExtractionAgent {
                 log.info("[ExtractionAgent] Parsed message: \"{}\"", message);
                 log.info("[ExtractionAgent] -> checkInDate: {}", result.getCriteria().getCheckInDate());
                 log.info("[ExtractionAgent] -> checkOutDate: {}", result.getCriteria().getCheckOutDate());
+                log.info("[ExtractionAgent] -> passengerCount: {}", result.getCriteria().getPassengerCount());
                 log.info("[ExtractionAgent] -> childAges: {}", result.getCriteria().getChildAges());
             }
             log.debug("[ExtractionAgent] Extraction successful: {}", result);
