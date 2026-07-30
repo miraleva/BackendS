@@ -22,4 +22,5 @@ public class UserResponse {
     private Instant createdAt;
     private Boolean isEmailVerified;
     private Boolean isPhoneVerified;
+    private Boolean isTwoFactorEnabled;
 }

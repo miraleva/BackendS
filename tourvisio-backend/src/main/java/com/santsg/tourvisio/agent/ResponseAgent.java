@@ -456,10 +456,12 @@ public class ResponseAgent {
         }
 
         String countNote = "";
-        if (totalResults > shownResults) {
-            countNote = String.format("\nFound %d matches for your criteria. Here are the top %d best options:", totalResults, shownResults);
-        } else {
-            countNote = String.format("\nFound %d matches for your criteria. Here they are:", totalResults);
+        if (!"FLIGHT_SEARCH".equalsIgnoreCase(intent)) {
+            if (totalResults > shownResults) {
+                countNote = String.format("\nFound %d matches for your criteria. Here are the top %d best options:", totalResults, shownResults);
+            } else {
+                countNote = String.format("\nFound %d matches for your criteria. Here they are:", totalResults);
+            }
         }
 
         String prompt = String.format(
@@ -471,28 +473,33 @@ public class ResponseAgent {
                 "Adopt a delightful travel consultant tone. Express enthusiasm for helping them plan their trip.\n\n" +
                 "CRITICAL PRESENTATION & FORMATTING RULES:\n" +
                 "- For Hotel Search (HOTEL_SEARCH):\n" +
-                "  Present up to top 5 hotels in the list using short, visually separated blocks:\n" +
-                "  🏨 [Hotel Name]\n" +
-                "  ⭐⭐⭐⭐ (Repeat the ⭐ emoji exactly N times matching the hotel's stars count on its OWN line. NEVER write '(4★)' or put stars in parentheses! If stars is 0 or missing, omit this line.)\n" +
-                "  📍 [Location/Region] (Put location on its OWN line with 📍 emoji)\n" +
-                "  💰 [Price] [Currency] (total stay price) (Put price on its OWN line with 💰 emoji)\n\n" +
-                "  Separate each hotel block with a divider line (────────────).\n\n" +
-                "  At the end of the hotel list, ALWAYS include a natural closing sentence directing the user to the side panel:\n" +
+                "  Present up to top 5 hotels in the list using a clean, well-formatted Markdown Table:\n\n" +
+                "  | 🏨 Otel | ⭐ Yıldız | 📍 Bölge | 💰 Fiyat |\n" +
+                "  |---|---|---|---|\n" +
+                "  | **[Hotel Name]** | [⭐ repeated N times matching star count, e.g. ⭐⭐⭐⭐] | [City / Region] | [Formatted Price, e.g. 8.629,99 TRY] |\n\n" +
+                "  Rules for Hotels:\n" +
+                "  - Always bold the hotel name (`**Hotel Name**`).\n" +
+                "  - Repeat the ⭐ emoji N times for stars. If stars is 0 or missing, leave empty.\n" +
+                "  - Format price with Turkish number format (thousands separator dot, decimal comma) + currency (e.g. `8.629,99 TRY`).\n\n" +
+                "  At the end of the hotel table, ALWAYS include a natural closing sentence directing the user to the side panel:\n" +
                 "  TR for Hotel: 'Yandaki panelden otellerin detaylarını ve görsellerini inceleyebilirsiniz 😊 İsterseniz bu seçenekleri filtreleyebilirim de.'\n" +
                 "  EN for Hotel: 'You can check hotel details and photos in the side panel 😊 Let me know if you\\'d like to filter these options as well.'\n\n" +
                 "- For Flight Search (FLIGHT_SEARCH):\n" +
-                "  ✈️ [Airline Name] — [Flight Number/Code if available]\n" +
-                "  🛫 [Departure Location] → [Arrival Location]\n" +
-                "  🕐 Kalkış: [Departure Time] — Varış: [Arrival Time]\n" +
-                "  💰 [Price] [Currency] (Put price on its OWN line with 💰 emoji)\n\n" +
-                "  Separate each flight block with a divider line (────────────).\n\n" +
-                "  At the end of the flight list, include a natural closing sentence:\n" +
-                "  TR for Flight: 'İsterseniz bunları en erken saatli veya en uygun fiyatlı uçuşlar olarak da sıralayabilirim ✈️'\n" +
-                "  EN for Flight: 'If you\\'d like, I can also sort these by earliest departure or best price ✈️'\n\n" +
+                "  Present up to top 5 flights in the list using a clean, well-formatted Markdown Table:\n\n" +
+                "  | ✈️ Havayolu | 🛫 Kalkış | 🛬 Varış | 💰 Fiyat |\n" +
+                "  |---|---|---|---|\n" +
+                "  | **[Airline Name]** | [Formatted Dep Time, e.g. 11:35] | [Formatted Arr Time, e.g. 13:00] | [Formatted Price, e.g. 1.300,97 TRY] |\n\n" +
+                "  Rules for Flights:\n" +
+                "  - Always bold the airline name (`**Airline Name**`).\n" +
+                "  - Extract clean times (HH:mm format like `11:35`, `00:10`). NEVER display raw ISO datetimes like `2026-08-02T00:10:00`.\n" +
+                "  - Format price with Turkish number format (thousands separator dot, decimal comma) + currency (e.g. `1.300,97 TRY`).\n\n" +
+                "  At the end of the flight table, ALWAYS include a natural closing sentence:\n" +
+                "  TR for Flight: 'Yandaki panelden uçuş detaylarını inceleyebilirsiniz ✈️ İsterseniz bunları en erken saatli veya en uygun fiyatlı seçeneklere göre sıralayabilirim de.'\n" +
+                "  EN for Flight: 'You can check flight details in the side panel ✈️ If you\\'d like, I can also sort these by earliest departure or best price.'\n\n" +
                 "Include the following context naturally in your response:\n%s%s\n\n" +
                 "IMPORTANT CONSTRAINTS:\n" +
                 "1. Write the response in %s — matching the user's language.%s\n" +
-                "2. ONLY mention facts present in the JSON results (hotel name, stars, location, price). If an attribute is missing/null, omit it without fabricating data.\n" +
+                "2. ONLY mention facts present in the JSON results (hotel name, stars, location, price, airline, times). If an attribute is missing/null, leave the cell empty without fabricating data.\n" +
                 "3. Never invent nicer names for raw system/sandbox data.\n" +
                 "4. Return ONLY the assistant response itself, no extra notes.",
                 intent, resultsJson, countNote, childNote, targetLanguage, userMessageClause(userMessage)

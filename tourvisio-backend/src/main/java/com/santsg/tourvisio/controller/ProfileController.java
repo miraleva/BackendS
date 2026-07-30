@@ -170,6 +170,40 @@ public class ProfileController {
         ));
     }
 
+    @PutMapping(value = "/two-factor", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Toggle Two-Factor Authentication", description = "Enable or disable two-factor authentication for the logged-in user")
+    public ResponseEntity<?> toggleTwoFactor(
+            @RequestAttribute(value = "userId", required = false) Long userId,
+            @RequestBody Map<String, Boolean> body) {
+        
+        if (userId == null) {
+            log.warn("[ProfileController] Two-factor toggle denied: userId attribute not found in request");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "error", "Unauthorized",
+                    "message", "User session is invalid or missing"
+            ));
+        }
+
+        Boolean enabled = body != null ? body.get("enabled") : null;
+        if (enabled == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Bad Request", "message", "Missing 'enabled' parameter"));
+        }
+
+        log.info("[ProfileController] Toggling two-factor to {} for userId={}", enabled, userId);
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Not Found", "message", "User profile not found"));
+        }
+
+        user.setIsTwoFactorEnabled(enabled);
+        User updatedUser = userRepository.save(user);
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "isTwoFactorEnabled", updatedUser.getIsTwoFactorEnabled(),
+                "message", "Two-factor authentication status updated successfully"
+        ));
+    }
 
     private UserResponse mapToUserResponse(User user) {
         return UserResponse.builder()
@@ -183,6 +217,7 @@ public class ProfileController {
                 .createdAt(user.getCreatedAt())
                 .isEmailVerified(Boolean.TRUE.equals(user.getIsEmailVerified()))
                 .isPhoneVerified(Boolean.TRUE.equals(user.getIsPhoneVerified()))
+                .isTwoFactorEnabled(Boolean.TRUE.equals(user.getIsTwoFactorEnabled()))
                 .build();
     }
 }

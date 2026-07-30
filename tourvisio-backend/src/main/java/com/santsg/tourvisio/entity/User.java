@@ -74,6 +74,10 @@ public class User {
     @Builder.Default
     private Boolean isPhoneVerified = false;
 
+    @Column(name = "is_two_factor_enabled")
+    @Builder.Default
+    private Boolean isTwoFactorEnabled = false;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<ChatSession> chatSessions = new ArrayList<>();
@@ -89,6 +93,10 @@ public class User {
 
     public Boolean getIsActive() {
         return isActive != null ? isActive : true;
+    }
+
+    public Boolean getIsTwoFactorEnabled() {
+        return isTwoFactorEnabled != null ? isTwoFactorEnabled : false;
     }
 }
 

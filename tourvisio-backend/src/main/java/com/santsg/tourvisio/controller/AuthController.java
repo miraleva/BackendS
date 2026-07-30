@@ -53,6 +53,25 @@ public class AuthController {
         }
     }
 
+    // In-Memory store for 2FA verification: Key = tempToken, Value = VerificationInfo
+    private static final java.util.concurrent.ConcurrentHashMap<String, VerificationInfo> tempStore = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static class VerificationInfo {
+        String email;
+        String code;
+        long expiryTime;
+
+        VerificationInfo(String email, String code, long expiryTime) {
+            this.email = email;
+            this.code = code;
+            this.expiryTime = expiryTime;
+        }
+
+        boolean isValid(String inputCode) {
+            return System.currentTimeMillis() <= expiryTime && code.equals(inputCode);
+        }
+    }
+
     // application.properties → sanny.admin.password (env: ADMIN_PASSWORD) değerini okur
     @Value("${sanny.admin.password}")
     private String correctAdminPassword;
@@ -167,6 +186,25 @@ public class AuthController {
             ));
         }
 
+        // Verify two-factor active
+        if (Boolean.TRUE.equals(user.getIsTwoFactorEnabled())) {
+            String code = String.format("%06d", new java.util.Random().nextInt(1000000));
+            String tempToken = java.util.UUID.randomUUID().toString();
+            
+            // Store details for verification with 5 mins validity (300,000 ms)
+            tempStore.put(tempToken, new VerificationInfo(user.getEmail(), code, System.currentTimeMillis() + 300000));
+            
+            // Send OTP email
+            emailService.sendOtpEmail(user.getEmail(), code);
+            
+            log.info("[AuthController] Login triggers 2FA for userId={}, tempToken={}", user.getId(), tempToken);
+            return ResponseEntity.ok(Map.of(
+                    "twoFactorRequired", true,
+                    "tempToken", tempToken,
+                    "message", "İki adımlı doğrulama kodu e-posta adresinize gönderildi."
+            ));
+        }
+
         // Generate JWT token
         String token = jwtProvider.generateToken(user.getId(), user.getEmail());
         log.info("[AuthController] Login successful for userId={}, generated JWT", user.getId());
@@ -242,6 +280,25 @@ public class AuthController {
                         "error", "Forbidden",
                         "code", "ACCOUNT_RESTRICTED",
                         "message", "Hesabınız yönetici tarafından kısıtlanmıştır."
+                ));
+            }
+
+            // Verify two-factor active
+            if (Boolean.TRUE.equals(user.getIsTwoFactorEnabled())) {
+                String code = String.format("%06d", new java.util.Random().nextInt(1000000));
+                String tempToken = java.util.UUID.randomUUID().toString();
+                
+                // Store details for verification with 5 mins validity (300,000 ms)
+                tempStore.put(tempToken, new VerificationInfo(user.getEmail(), code, System.currentTimeMillis() + 300000));
+                
+                // Send OTP email
+                emailService.sendOtpEmail(user.getEmail(), code);
+                
+                log.info("[AuthController] OAuth triggers 2FA for userId={}, tempToken={}", user.getId(), tempToken);
+                return ResponseEntity.ok(Map.of(
+                        "twoFactorRequired", true,
+                        "tempToken", tempToken,
+                        "message", "İki adımlı doğrulama kodu e-posta adresinize gönderildi."
                 ));
             }
 
@@ -412,5 +469,59 @@ public class AuthController {
                 "success", true,
                 "message", "Email verified successfully"
         ));
+    }
+
+    @PostMapping(value = "/verify-2fa", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Verify Two-Factor OTP", description = "Validate OTP code and generate final JWT login token")
+    public ResponseEntity<?> verifyTwoFactor(@RequestBody Map<String, String> request) {
+        String tempToken = request.get("tempToken");
+        String code = request.get("code");
+
+        if (tempToken == null || code == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Bad Request", "message", "Missing 'tempToken' or 'code'"));
+        }
+
+        VerificationInfo info = tempStore.get(tempToken);
+        if (info == null || System.currentTimeMillis() > info.expiryTime) {
+            if (info != null) tempStore.remove(tempToken);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Unauthorized", "message", "Doğrulama kodu süresi doldu veya geçersiz."));
+        }
+
+        if (!info.code.equals(code.trim())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Unauthorized", "message", "Hatalı doğrulama kodu."));
+        }
+
+        // Code is valid! Remove from tempStore
+        tempStore.remove(tempToken);
+
+        // Fetch user
+        User user = userRepository.findByEmail(info.email).orElse(null);
+        if (user == null || Boolean.FALSE.equals(user.getIsActive())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Forbidden", "message", "Kullanıcı hesabı aktif değil."));
+        }
+
+        // Generate JWT token
+        String token = jwtProvider.generateToken(user.getId(), user.getEmail());
+
+        UserResponse userResponse = UserResponse.builder()
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .email(user.getEmail())
+                .phone(user.getPhone())
+                .country(user.getCountry())
+                .gender(user.getGender())
+                .dateOfBirth(user.getDateOfBirth())
+                .createdAt(user.getCreatedAt())
+                .isEmailVerified(Boolean.TRUE.equals(user.getIsEmailVerified()))
+                .isPhoneVerified(Boolean.TRUE.equals(user.getIsPhoneVerified()))
+                .isTwoFactorEnabled(Boolean.TRUE.equals(user.getIsTwoFactorEnabled()))
+                .build();
+
+        LoginResponse loginResponse = LoginResponse.builder()
+                .token(token)
+                .user(userResponse)
+                .build();
+
+        return ResponseEntity.ok(loginResponse);
     }
 }
