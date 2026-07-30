@@ -272,6 +272,7 @@ public class ResponseAgent {
             }
         }
 
+        boolean isEnglish = "English".equalsIgnoreCase(targetLanguage);
         String knownDetailsInstruction = "";
         String dateStateInstruction = "";
 
@@ -282,7 +283,15 @@ public class ResponseAgent {
 
             if (startDate != null && endDate == null) {
                 if (isFlight) {
-                    dateStateInstruction = String.format(
+                    dateStateInstruction = isEnglish ? String.format(
+                        "\nSTRICT DATE ACKNOWLEDGMENT RULE (FLIGHT):\n" +
+                        "- Departure Date is ALREADY KNOWN: '%s'.\n" +
+                        "- Return Date is MISSING / UNCLEAR.\n" +
+                        "- You MUST explicitly acknowledge the Departure Date ('Noted your departure date (%s) ✈️').\n" +
+                        "- Then ask ONLY whether they want a return flight or a one-way ticket (e.g. 'Is this a one-way trip, or should I look for a return flight too?').\n" +
+                        "- NEVER call '%s' a return date or ask for departure date again!",
+                        formatDisplayDate(startDate), formatDisplayDate(startDate), formatDisplayDate(startDate)
+                    ) : String.format(
                         "\nSTRICT DATE ACKNOWLEDGMENT RULE (FLIGHT):\n" +
                         "- Departure Date (Gidiş Tarihi) is ALREADY KNOWN: '%s'.\n" +
                         "- Return Date (Dönüş Tarihi) is MISSING / UNCLEAR.\n" +
@@ -292,7 +301,15 @@ public class ResponseAgent {
                         formatDisplayDate(startDate), formatDisplayDate(startDate), formatDisplayDate(startDate)
                     );
                 } else {
-                    dateStateInstruction = String.format(
+                    dateStateInstruction = isEnglish ? String.format(
+                        "\nSTRICT DATE ACKNOWLEDGMENT RULE (HOTEL):\n" +
+                        "- Check-in Date is ALREADY KNOWN: '%s'.\n" +
+                        "- Check-out Date is MISSING.\n" +
+                        "- You MUST explicitly acknowledge the Check-in Date ('Noted your check-in date (%s).').\n" +
+                        "- Then ask ONLY for the Check-out Date ('When do you plan to check out / how many nights will you be staying?').\n" +
+                        "- NEVER call '%s' return date or ask for departure date again!",
+                        formatDisplayDate(startDate), formatDisplayDate(startDate), formatDisplayDate(startDate)
+                    ) : String.format(
                         "\nSTRICT DATE ACKNOWLEDGMENT RULE (HOTEL):\n" +
                         "- Check-in Date (Giriş Tarihi) is ALREADY KNOWN: '%s'.\n" +
                         "- Check-out Date (Çıkış Tarihi) is MISSING.\n" +
@@ -304,7 +321,14 @@ public class ResponseAgent {
                 }
             } else if (startDate == null && endDate != null) {
                 if (isFlight) {
-                    dateStateInstruction = String.format(
+                    dateStateInstruction = isEnglish ? String.format(
+                        "\nSTRICT DATE ACKNOWLEDGMENT RULE (FLIGHT):\n" +
+                        "- Return Date is ALREADY KNOWN: '%s'.\n" +
+                        "- Departure Date is MISSING.\n" +
+                        "- You MUST explicitly acknowledge the Return Date ('Noted your return date (%s) ✈️').\n" +
+                        "- Then ask ONLY for the Departure Date ('What date are you planning to depart?').",
+                        formatDisplayDate(endDate), formatDisplayDate(endDate)
+                    ) : String.format(
                         "\nSTRICT DATE ACKNOWLEDGMENT RULE (FLIGHT):\n" +
                         "- Return Date (Dönüş Tarihi) is ALREADY KNOWN: '%s'.\n" +
                         "- Departure Date (Gidiş Tarihi) is MISSING.\n" +
@@ -313,7 +337,14 @@ public class ResponseAgent {
                         formatDisplayDate(endDate), formatDisplayDate(endDate)
                     );
                 } else {
-                    dateStateInstruction = String.format(
+                    dateStateInstruction = isEnglish ? String.format(
+                        "\nSTRICT DATE ACKNOWLEDGMENT RULE (HOTEL):\n" +
+                        "- Check-out Date is ALREADY KNOWN: '%s'.\n" +
+                        "- Check-in Date is MISSING.\n" +
+                        "- You MUST explicitly acknowledge the Check-out Date ('Noted your check-out date (%s).').\n" +
+                        "- Then ask ONLY for the Check-in Date ('What date do you plan to check in to the hotel?').",
+                        formatDisplayDate(endDate), formatDisplayDate(endDate)
+                    ) : String.format(
                         "\nSTRICT DATE ACKNOWLEDGMENT RULE (HOTEL):\n" +
                         "- Check-out Date (Çıkış Tarihi) is ALREADY KNOWN: '%s'.\n" +
                         "- Check-in Date (Giriş Tarihi) is MISSING.\n" +
@@ -323,7 +354,13 @@ public class ResponseAgent {
                     );
                 }
             } else if (startDate != null && endDate != null) {
-                dateStateInstruction = String.format(
+                dateStateInstruction = isEnglish ? String.format(
+                    "\nSTRICT DATE ACKNOWLEDGMENT RULE:\n" +
+                    "- Both dates are already known: %s to %s.\n" +
+                    "- Acknowledge the stay/flight period naturally ('For your stay/flight between %s - %s...').",
+                    formatDisplayDate(startDate), formatDisplayDate(endDate),
+                    formatDisplayDate(startDate), formatDisplayDate(endDate)
+                ) : String.format(
                     "\nSTRICT DATE ACKNOWLEDGMENT RULE:\n" +
                     "- Both dates are already known: %s to %s.\n" +
                     "- Acknowledge the stay/flight period naturally ('%s - %s tarihleri arasındaki konaklamanız/uçuşunuz için...').",
@@ -338,14 +375,21 @@ public class ResponseAgent {
             if (!hasLocation && (startDate != null || criteria.getAdultCount() != null || criteria.getPassengerCount() != null)) {
                 String datesStr = (startDate != null && endDate != null) ? (startDate + " - " + endDate)
                         : (startDate != null ? startDate.toString() : "");
-                String guestsStr = criteria.getAdultCount() != null ? (criteria.getAdultCount() + " kişi")
-                        : (criteria.getPassengerCount() != null ? (criteria.getPassengerCount() + " yolcu") : "");
+                String guestsStr = criteria.getAdultCount() != null ? (criteria.getAdultCount() + (isEnglish ? " guests" : " kişi"))
+                        : (criteria.getPassengerCount() != null ? (criteria.getPassengerCount() + (isEnglish ? " passengers" : " yolcu")) : "");
 
                 if (isFlight) {
                     String origin = criteria.getDepartureLocation();
                     String dest = criteria.getArrivalLocation();
                     String routeStr = (origin != null ? origin : "?") + " → " + (dest != null ? dest : "?");
-                    knownDetailsInstruction = String.format(
+                    knownDetailsInstruction = isEnglish ? String.format(
+                        "\nKNOWN DETAILS ACKNOWLEDGMENT (FLIGHT):\n" +
+                        "- Route: '%s', Dates: '%s', Passengers: '%s'.\n" +
+                        "- Structure into two paragraphs separated by \\n\\n:\n" +
+                        "  Paragraph 1: 'I am so excited to help you plan your upcoming flight on the %s route ✈️'\n" +
+                        "  Paragraph 2: 'To help me find the best flight options for you, could you please let me know your preferred **departure date**, whether this will be a **one-way / round-trip** flight, and the exact **number of passengers**?'",
+                        routeStr, datesStr, guestsStr, routeStr
+                    ) : String.format(
                         "\nKNOWN DETAILS ACKNOWLEDGMENT (FLIGHT):\n" +
                         "- Route: '%s', Dates: '%s', Passengers: '%s'.\n" +
                         "- Structure into two paragraphs separated by \\n\\n:\n" +
@@ -354,7 +398,14 @@ public class ResponseAgent {
                         routeStr, datesStr, guestsStr, routeStr
                     );
                 } else {
-                    knownDetailsInstruction = String.format(
+                    knownDetailsInstruction = isEnglish ? String.format(
+                        "\nKNOWN DETAILS ACKNOWLEDGMENT (HOTEL):\n" +
+                        "- Dates: '%s', Guests: '%s', but destination/city is missing.\n" +
+                        "- Structure into two paragraphs separated by \\n\\n:\n" +
+                        "  Paragraph 1: 'I am so excited to help you plan a wonderful trip 🏖️'\n" +
+                        "  Paragraph 2: 'To help me find the best hotel options, could you please share your **check-in date**, **check-out date**, and how many **guests** will be traveling?'",
+                        datesStr, guestsStr
+                    ) : String.format(
                         "\nKNOWN DETAILS ACKNOWLEDGMENT (HOTEL):\n" +
                         "- Dates: '%s', Guests: '%s', but destination/city is missing.\n" +
                         "- Structure into two paragraphs separated by \\n\\n:\n" +
@@ -370,13 +421,23 @@ public class ResponseAgent {
         if (missingFields.contains("çocuk yaşları") || missingFields.contains("bebek yaşları")) {
             boolean isFlightSearch = criteria != null && "FLIGHT_SEARCH".equals(criteria.getSearchType());
             if (isFlightSearch) {
-                ageInstruction = "\nSTRICT PRIORITY RULE & WHY (FLIGHT):\n" +
+                ageInstruction = isEnglish ? "\nSTRICT PRIORITY RULE & WHY (FLIGHT):\n" +
+                        "- Structure into two paragraphs separated by \\n\\n:\n" +
+                        "- If child age is missing: Paragraph 1 opening, Paragraph 2 asking: 'Could you please share your **children\\'s ages**? Some airlines offer varying discounts based on age groups.'\n" +
+                        "- If infant age is missing: Paragraph 1 opening, Paragraph 2 asking: 'Could you please specify your **infant\\'s age**? This helps us find the correct flight options and fares.'\n" +
+                        "- Do NOT ask for dates, destination, or other fields until child/infant ages are provided."
+                        : "\nSTRICT PRIORITY RULE & WHY (FLIGHT):\n" +
                         "- Structure into two paragraphs separated by \\n\\n:\n" +
                         "- If child age is missing: Paragraph 1 opening, Paragraph 2 asking: '**Çocuklarınızın yaşlarını** paylaşabilir misiniz? Bazı havayolları yaş grubuna göre farklı ücret uyguluyor.'\n" +
                         "- If infant age is missing: Paragraph 1 opening, Paragraph 2 asking: '**Bebeğinizin yaşını** belirtebilir misiniz? Bu bilgi doğru uçuş ve ücret seçeneklerini bulmamıza yardımcı olur.'\n" +
                         "- Do NOT ask for dates, destination, or other fields until child/infant ages are provided.";
             } else {
-                ageInstruction = "\nSTRICT PRIORITY RULE & WHY (HOTEL):\n" +
+                ageInstruction = isEnglish ? "\nSTRICT PRIORITY RULE & WHY (HOTEL):\n" +
+                        "- Structure into two paragraphs separated by \\n\\n:\n" +
+                        "- If child age is missing: Paragraph 1 opening, Paragraph 2 asking: 'Could you also share your **children\\'s ages**? Hotels usually calculate pricing based on age.'\n" +
+                        "- If infant age is missing: Paragraph 1 opening, Paragraph 2 asking: 'Could you please specify your **infant\\'s age** (months/years)? This information helps us find the right room and price options.'\n" +
+                        "- Do NOT ask for dates, destination, or other fields until child/infant ages are provided."
+                        : "\nSTRICT PRIORITY RULE & WHY (HOTEL):\n" +
                         "- Structure into two paragraphs separated by \\n\\n:\n" +
                         "- If child age is missing: Paragraph 1 opening, Paragraph 2 asking: '**Çocuklarınızın yaşlarını** da paylaşabilir misiniz? Oteller fiyatlandırmayı genelde yaşa göre hesaplıyor.'\n" +
                         "- If infant age is missing: Paragraph 1 opening, Paragraph 2 asking: '**Bebeğinizin yaşını** (ay/yaş) belirtebilir misiniz? Bu bilgi doğru oda ve fiyat seçeneklerini bulmamıza yardımcı olur.'\n" +
@@ -389,20 +450,31 @@ public class ResponseAgent {
                 : "Active Search Category: HOTEL_SEARCH.";
 
         String fieldsCsv = String.join(", ", missingFields);
+
+        String paragraph1Example = isEnglish
+                ? "'I am so excited to help you plan a wonderful trip to [City/Region] 🏖️' or 'I am so excited to help you plan a wonderful trip 😊'"
+                : "'[Şehir/Bölge]\\'de harika bir tatil planlamak için sabırsızlanıyorum 🏖️' or 'Harika bir seyahat planlamak için sabırsızlanıyorum 😊'";
+
+        String boldExamples = isEnglish
+                ? "(e.g., **check-in date**, **check-out date**, **guest count**, **children\\'s ages**, **departure date**, **return date**, **passenger count**, **one-way / round-trip**)"
+                : "(e.g., **giriş tarihinizi**, **çıkış tarihinizi**, **misafir sayısını**, **çocuklarınızın yaşlarını**, **gidiş tarihinizi**, **dönüş tarihinizi**, **yolcu sayısını**, **tek yön / gidiş-dönüş**)";
+
+        String bulletSummaryExample = isEnglish ? "'Here is what we have so far: ...'" : "'Şu ana kadar elimizde: ...'";
+
         String prompt = String.format(
                 "You are an expert, hospitable, and warm travel consultant.\n" +
                 "The user is planning a trip (%s). The following search criteria are missing: [%s].\n\n" +
                 "CRITICAL FORMATTING & MARKDOWN RULES FOR ASKING MISSING INFO:\n" +
                 "1. Always split your response into TWO separate paragraphs separated by a blank line (\\n\\n):\n" +
-                "   - Paragraph 1: A warm, enthusiastic opening sentence acknowledging their location/trip (e.g. '[Şehir/Bölge]\\'de harika bir tatil planlamak için sabırsızlanıyorum 🏖️' or 'Harika bir seyahat planlamak için sabırsızlanıyorum 😊').\n" +
+                "   - Paragraph 1: A warm, enthusiastic opening sentence acknowledging their location/trip (e.g. %s).\n" +
                 "   - Paragraph 2: The main polite question asking for the missing criteria.\n" +
-                "2. Always format the missing critical keywords in **BOLD** markdown (e.g., **giriş tarihinizi**, **çıkış tarihinizi**, **misafir sayısını**, **çocuklarınızın yaşlarını**, **gidiş tarihinizi**, **dönüş tarihinizi**, **yolcu sayısını**).\n" +
-                "3. Speak naturally like a human travel advisor. DO NOT create technical bulleted summary lists (no 'Şu ana kadar elimizde: ...').\n" +
+                "2. Always format the missing critical keywords in **BOLD** markdown in target language %s.\n" +
+                "3. Speak naturally like a human travel advisor. DO NOT create technical bulleted summary lists (no %s).\n" +
                 "4. STRICT FIELD LIMIT: Ask ONLY for missing destination/city, dates, adult/passenger count, child count/ages, or infant age. NEVER ask for budget, accommodation type, star preference, seat class, etc.\n" +
                 "5. Keep emojis to maximum 2-3 per message.\n\n" +
                 "Write the question in %s — matching the user's language.%s%s%s%s%s%s\n" +
                 "Return ONLY the formatted response text itself, no extra notes.",
-                searchTypeContext, fieldsCsv, targetLanguage, userMessageClause(userMessage), poiInstruction, knownDetailsInstruction, ageInstruction, dateStateInstruction, CATEGORY_TERMINOLOGY_CONSTRAINTS
+                searchTypeContext, fieldsCsv, paragraph1Example, boldExamples, bulletSummaryExample, targetLanguage, userMessageClause(userMessage), poiInstruction, knownDetailsInstruction, ageInstruction, dateStateInstruction, CATEGORY_TERMINOLOGY_CONSTRAINTS
         );
 
         try {
