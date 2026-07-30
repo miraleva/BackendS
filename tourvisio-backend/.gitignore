@@ -39,3 +39,5 @@ build/
 
 start-local.ps1
 src/main/resources/application.properties
+src/test/resources/application.properties
+

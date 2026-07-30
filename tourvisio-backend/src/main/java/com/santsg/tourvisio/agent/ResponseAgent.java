@@ -294,7 +294,12 @@ public class ResponseAgent {
                 "Ask the user for ALL of this information together in a single, friendly, and natural question. " +
                 "Do NOT use bare technical terms (e.g., say 'How many people will be traveling?' instead of 'adult count'). " +
                 "Write the question in %s — the same language the user is writing in.%s%s%s%s%s%s " +
-                "Return ONLY the question itself, no extra notes.",
+                "Return ONLY the question itself, no extra notes. " +
+                "While asking questions use a professional tone like these examples: " +
+                "'Great! I'm planning a trip for you. In which city would you like to stay/travel and how many adults and children?', " +
+                "'Size yardımcı olabilmem için çocuk/çocukların yaşlarını veya bebeğin yaşını belirtir misiniz?', " +
+                "'Eğer seyahat için belirlediğiniz bir konum yoksa, hangi şehir veya bölge için rezervasyon planlamak istediğinizi belirtebilir misiniz? Böylelikle size en iyi sonuçları yansıtabilirim.', " +
+                "'For finding the best results for you could you please share kids ages?'",
                 searchTypeContext, fieldsCsv, targetLanguage, userMessageClause(userMessage), poiInstruction, knownDetailsInstruction, ageInstruction, dateStateInstruction, CATEGORY_TERMINOLOGY_CONSTRAINTS
         );
 
@@ -354,11 +359,17 @@ public class ResponseAgent {
         }
 
         String prompt = String.format(
+                "You are an expert, hospitable, and professional travel assistant (tourism advisor).\n" +
                 "The user's travel search has been completed successfully. Here are the search results in JSON format:\n" +
                 "Search Type: %s\n" +
                 "Results:\n%s\n\n" +
-                "Write a warm, polite, and engaging assistant response summarizing these results. " +
-                "Do NOT use terse lists like 'En iyi teklif: X'. Instead, write 1-2 natural sentences per top recommendation. " +
+                "Write a warm, polite, professional, and hospitable assistant response introducing these options smoothly.\n" +
+                "Adopt a delightful travel consultant tone. Express enthusiasm for helping them plan their trip.\n\n" +
+                "EXAMPLE STYLE & TONE GUIDELINES:\n" +
+                "- TR Example 1: 'Aradığınız {bölge} bölgesinde seyahatinize değer katacak harika seçenekler buldum! Bu bölgede değerlendirebileceğiniz öne çıkan en iyi teklifimiz: {Otel/Uçak Adı}...'\n" +
+                "- TR Example 2: 'Harika bir tatil/seyahat seçimi! {bölge} için listelediğim fırsatlar arasından özellikle {Otel/Uçak Adı} konforu ve uygun fiyatıyla öne çıkıyor.'\n" +
+                "- EN Example 1: 'Great news! I have found fantastic options for your travel to {destination}. The top recommendation I would highlight for your stay is {Hotel/Flight Name}...'\n" +
+                "- EN Example 2: 'Your trip to {destination} is shaping up nicely! Here are the best handpicked choices for you, with {Hotel/Flight Name} being an exceptional deal.'\n\n" +
                 "Include the following context naturally in your response:\n%s%s\n\n" +
                 "IMPORTANT RULES:\n" +
                 "1. Write the response in %s — the same language the user is writing in.%s\n" +

@@ -1,5 +1,7 @@
 package com.santsg.tourvisio.config;
 
+import com.santsg.tourvisio.repository.UserRepository;
+import com.santsg.tourvisio.entity.User;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpHeaders;
@@ -16,14 +18,16 @@ public class UserAuthInterceptor implements HandlerInterceptor {
     private final ActiveTokenRegistry tokenRegistry;
     private final TourVisioConfig tourVisioConfig;
     private final JwtProvider jwtProvider;
+    private final UserRepository userRepository;
 
     @org.springframework.beans.factory.annotation.Value("${tourvisio.api.test-mode:false}")
     private boolean testMode;
 
-    public UserAuthInterceptor(ActiveTokenRegistry tokenRegistry, TourVisioConfig tourVisioConfig, JwtProvider jwtProvider) {
+    public UserAuthInterceptor(ActiveTokenRegistry tokenRegistry, TourVisioConfig tourVisioConfig, JwtProvider jwtProvider, UserRepository userRepository) {
         this.tokenRegistry = tokenRegistry;
         this.tourVisioConfig = tourVisioConfig;
         this.jwtProvider = jwtProvider;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -61,6 +65,17 @@ public class UserAuthInterceptor implements HandlerInterceptor {
                 com.auth0.jwt.interfaces.DecodedJWT jwt = jwtProvider.validateToken(token);
                 Long userId = jwtProvider.getUserId(jwt);
                 String email = jwtProvider.getEmail(jwt);
+
+                if (userId != null && userId != -999L) {
+                    java.util.Optional<User> uOpt = userRepository.findById(userId);
+                    if (uOpt.isPresent() && Boolean.FALSE.equals(uOpt.get().getIsActive())) {
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.setContentType("application/json;charset=UTF-8");
+                        response.getWriter().write("{\"error\":\"Forbidden\",\"code\":\"ACCOUNT_RESTRICTED\",\"message\":\"Hesabınız yönetici tarafından kısıtlanmıştır.\"}");
+                        return false;
+                    }
+                }
+
                 request.setAttribute("userId", userId);
                 request.setAttribute("email", email);
                 return true;

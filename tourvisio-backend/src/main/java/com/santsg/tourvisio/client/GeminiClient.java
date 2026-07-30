@@ -73,9 +73,14 @@ public class GeminiClient implements AIProviderClient {
                     GeminiGenerateContentResponse.class).getBody();
 
             return extractText(response);
+        } catch (org.springframework.web.client.RestClientResponseException ex) {
+            String shortMsg = ex.getStatusCode() + " " + ex.getStatusText();
+            log.error("[GeminiClient] Gemini API request failed: {}", shortMsg);
+            return "[MOCK] Gemini API request failed: " + shortMsg;
         } catch (RestClientException ex) {
-            log.error("[GeminiClient] Gemini API request failed: {}", ex.getMessage());
-            return "[MOCK] Gemini API request failed: " + ex.getMessage();
+            String cleanMsg = ex.getMessage() != null ? ex.getMessage().replaceAll("[\\r\\n]+", " ") : "Unknown error";
+            log.error("[GeminiClient] Gemini API request failed: {}", cleanMsg);
+            return "[MOCK] Gemini API request failed: " + cleanMsg;
         }
     }
 

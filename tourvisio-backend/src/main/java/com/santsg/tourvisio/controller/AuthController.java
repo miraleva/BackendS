@@ -157,6 +157,16 @@ public class AuthController {
             ));
         }
 
+        // Verify active status
+        if (Boolean.FALSE.equals(user.getIsActive())) {
+            log.warn("[AuthController] Login blocked: User account is inactive/restricted");
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "error", "Forbidden",
+                    "code", "ACCOUNT_RESTRICTED",
+                    "message", "Hesabınız yönetici tarafından kısıtlanmıştır."
+            ));
+        }
+
         // Generate JWT token
         String token = jwtProvider.generateToken(user.getId(), user.getEmail());
         log.info("[AuthController] Login successful for userId={}, generated JWT", user.getId());
@@ -225,6 +235,15 @@ public class AuthController {
                     userInfo.get("lastName"),
                     provider
             );
+
+            if (Boolean.FALSE.equals(user.getIsActive())) {
+                log.warn("[AuthController] OAuth login blocked: User account is inactive/restricted");
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                        "error", "Forbidden",
+                        "code", "ACCOUNT_RESTRICTED",
+                        "message", "Hesabınız yönetici tarafından kısıtlanmıştır."
+                ));
+            }
 
             // Generate JWT token
             String token = jwtProvider.generateToken(user.getId(), user.getEmail());
