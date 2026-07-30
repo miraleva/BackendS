@@ -66,6 +66,14 @@ public class User {
     @Builder.Default
     private Boolean isActive = true;
 
+    @Column(name = "is_email_verified")
+    @Builder.Default
+    private Boolean isEmailVerified = false;
+
+    @Column(name = "is_phone_verified")
+    @Builder.Default
+    private Boolean isPhoneVerified = false;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<ChatSession> chatSessions = new ArrayList<>();

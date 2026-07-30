@@ -52,11 +52,16 @@ public class GlobalExceptionHandler {
                                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                                 .collect(Collectors.toList());
 
+                String firstErrorMessage = ex.getBindingResult().getAllErrors().stream()
+                                .map(org.springframework.context.support.DefaultMessageSourceResolvable::getDefaultMessage)
+                                .findFirst()
+                                .orElse("Validation failed for input parameters");
+
                 ErrorResponse response = ErrorResponse.builder()
                                 .timestamp(LocalDateTime.now())
                                 .status(HttpStatus.BAD_REQUEST.value())
                                 .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
-                                .message("Validation failed for input parameters")
+                                .message(firstErrorMessage)
                                 .details(details)
                                 .build();
                 return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);

@@ -108,6 +108,8 @@ class TourvisioBackendApplicationTests {
 				"TRY",
 				null,
 				List.of(passenger),
+				null,
+				null,
 				null);
 
 		// 1. Create Reservation
@@ -176,6 +178,8 @@ class TourvisioBackendApplicationTests {
 				"TRY",
 				null,
 				List.of(primary, secondary),
+				null,
+				null,
 				null);
 
 		// 1. Create reservation
@@ -204,6 +208,8 @@ class TourvisioBackendApplicationTests {
 				"TRY",
 				null,
 				List.of(primary, secondary),
+				null,
+				null,
 				null);
 
 		mockMvc.perform(put("/api/reservations/" + createdId)

@@ -64,7 +64,7 @@ class ReservationServiceTest {
         assertTrue(result.getIsGuest());
         assertNull(result.getUserId());
         assertNotNull(result.getReservationNumber());
-        verify(emailService, times(1)).sendReservationConfirmationEmail(any(), eq("ahmet@example.com"), eq("Ahmet Yılmaz"));
+        verify(emailService, times(1)).sendReservationConfirmationEmail(any(), eq("ahmet@example.com"), eq("Ahmet Yılmaz"), any());
     }
 
     @Test
@@ -76,7 +76,7 @@ class ReservationServiceTest {
         assertNotNull(result);
         assertFalse(result.getIsGuest());
         assertEquals(42L, result.getUserId());
-        verify(emailService, times(1)).sendReservationConfirmationEmail(any(), eq("ahmet@example.com"), eq("Ahmet Yılmaz"));
+        verify(emailService, times(1)).sendReservationConfirmationEmail(any(), eq("ahmet@example.com"), eq("Ahmet Yılmaz"), any());
     }
 
     @Test

@@ -15,11 +15,11 @@ import java.time.LocalDate;
 public class ProfileUpdateRequest {
 
     @Size(max = 40, message = "First name cannot exceed 40 characters")
-    @Pattern(regexp = "^[a-zA-Z\\s]*$", message = "First name can only contain letters and spaces")
+    @Pattern(regexp = "^[a-zA-ZğĞıİöÖşŞüÜçÇ\\s]*$", message = "First name can only contain letters and spaces")
     private String firstName;
 
     @Size(max = 40, message = "Last name cannot exceed 40 characters")
-    @Pattern(regexp = "^[a-zA-Z\\s]*$", message = "Last name can only contain letters and spaces")
+    @Pattern(regexp = "^[a-zA-ZğĞıİöÖşŞüÜçÇ\\s]*$", message = "Last name can only contain letters and spaces")
     private String lastName;
 
     @Size(max = 16, message = "Phone number cannot exceed 16 characters")

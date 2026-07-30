@@ -181,6 +181,8 @@ public class ProfileController {
                 .gender(user.getGender())
                 .dateOfBirth(user.getDateOfBirth())
                 .createdAt(user.getCreatedAt())
+                .isEmailVerified(Boolean.TRUE.equals(user.getIsEmailVerified()))
+                .isPhoneVerified(Boolean.TRUE.equals(user.getIsPhoneVerified()))
                 .build();
     }
 }

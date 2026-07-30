@@ -20,4 +20,6 @@ public class UserResponse {
     private String gender;
     private LocalDate dateOfBirth;
     private Instant createdAt;
+    private Boolean isEmailVerified;
+    private Boolean isPhoneVerified;
 }

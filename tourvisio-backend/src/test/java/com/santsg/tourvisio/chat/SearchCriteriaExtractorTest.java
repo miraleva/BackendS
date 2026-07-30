@@ -120,4 +120,12 @@ class SearchCriteriaExtractorTest {
         String validCity = extractor.parseLocation("Antalya", false);
         assertThat(validCity).isEqualTo("Antalya");
     }
+
+    @Test
+    void testSingleDateSlottingPriority_DefaultsToCheckInDate() {
+        // When no dates are set yet, a single date input like "09.09.26" without explicit labels must default to checkInDate
+        SearchCriteria criteria = extractor.extract("09.09.26", "HOTEL_SEARCH", null);
+        assertThat(criteria.getCheckInDate()).isEqualTo(LocalDate.of(2026, 9, 9));
+        assertThat(criteria.getCheckOutDate()).isNull();
+    }
 }

@@ -17,12 +17,12 @@ public class SignupRequest {
 
     @NotBlank(message = "First name is required")
     @Size(max = 40, message = "First name cannot exceed 40 characters")
-    @Pattern(regexp = "^[a-zA-Z\\s]+$", message = "First name can only contain letters and spaces")
+    @Pattern(regexp = "^[a-zA-ZğĞıİöÖşŞüÜçÇ\\s]+$", message = "First name can only contain letters and spaces")
     private String name;
 
     @NotBlank(message = "Last name is required")
     @Size(max = 40, message = "Last name cannot exceed 40 characters")
-    @Pattern(regexp = "^[a-zA-Z\\s]+$", message = "Last name can only contain letters and spaces")
+    @Pattern(regexp = "^[a-zA-ZğĞıİöÖşŞüÜçÇ\\s]+$", message = "First name can only contain letters and spaces")
     private String lastname;
 
     @NotBlank(message = "Email is required")

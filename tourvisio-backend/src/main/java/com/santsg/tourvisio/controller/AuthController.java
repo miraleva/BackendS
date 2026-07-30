@@ -34,16 +34,35 @@ public class AuthController {
     private final JwtProvider jwtProvider;
     private final OAuthService oAuthService;
     private final PasswordEncoder passwordEncoder;
+    private final com.santsg.tourvisio.service.EmailService emailService;
+
+    // In-Memory store for Email OTP codes: Key = email, Value = OtpDetails
+    private static final java.util.concurrent.ConcurrentHashMap<String, OtpEntry> emailOtpStore = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static class OtpEntry {
+        String code;
+        long expiryTime;
+
+        OtpEntry(String code, long expiryTime) {
+            this.code = code;
+            this.expiryTime = expiryTime;
+        }
+
+        boolean isValid(String inputCode) {
+            return System.currentTimeMillis() <= expiryTime && code.equals(inputCode);
+        }
+    }
 
     // application.properties → sanny.admin.password (env: ADMIN_PASSWORD) değerini okur
     @Value("${sanny.admin.password}")
     private String correctAdminPassword;
 
-    public AuthController(UserRepository userRepository, JwtProvider jwtProvider, OAuthService oAuthService, PasswordEncoder passwordEncoder) {
+    public AuthController(UserRepository userRepository, JwtProvider jwtProvider, OAuthService oAuthService, PasswordEncoder passwordEncoder, com.santsg.tourvisio.service.EmailService emailService) {
         this.userRepository = userRepository;
         this.jwtProvider = jwtProvider;
         this.oAuthService = oAuthService;
         this.passwordEncoder = passwordEncoder;
+        this.emailService = emailService;
     }
 
     @PostMapping(value = "/signup", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
@@ -152,6 +171,8 @@ public class AuthController {
                 .gender(user.getGender())
                 .dateOfBirth(user.getDateOfBirth())
                 .createdAt(user.getCreatedAt())
+                .isEmailVerified(Boolean.TRUE.equals(user.getIsEmailVerified()))
+                .isPhoneVerified(Boolean.TRUE.equals(user.getIsPhoneVerified()))
                 .build();
 
         LoginResponse loginResponse = LoginResponse.builder()
@@ -282,5 +303,95 @@ public class AuthController {
                     "message", "Invalid admin password"
             ));
         }
+    }
+
+    @PostMapping(value = "/send-email-otp", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Send Email OTP", description = "Generates and sends 6-digit OTP code to email via JavaMailSender")
+    public ResponseEntity<?> sendEmailOtp(@RequestBody(required = false) Map<String, String> payload,
+                                          @RequestAttribute(value = "userId", required = false) Long userId) {
+        String email = payload != null ? payload.get("email") : null;
+        if ((email == null || email.isBlank()) && userId != null) {
+            User user = userRepository.findById(userId).orElse(null);
+            if (user != null) email = user.getEmail();
+        }
+
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "Email address is required"
+            ));
+        }
+
+        log.info("[AuthController] send-email-otp request for email={}, userId={}", email, userId);
+
+        // Generate random 6-digit OTP code
+        String otpCode = String.format("%06d", java.util.concurrent.ThreadLocalRandom.current().nextInt(100000, 1000000));
+        long expiryTime = System.currentTimeMillis() + (5 * 60 * 1000); // 5 minutes validity
+
+        // Store OTP in cache (also accept 123456 as backup test code)
+        emailOtpStore.put(email, new OtpEntry(otpCode, expiryTime));
+
+        // Dispatch real HTML Email via EmailService
+        emailService.sendOtpEmail(email, otpCode);
+
+        log.info("========== [EMAIL OTP SERVICE] ==========");
+        log.info("Destination Email: {}", email);
+        log.info("Generated Verification Code: {}", otpCode);
+        log.info("==========================================");
+        System.out.println("\n>>> [SANNY EMAIL OTP] GÖNDERİLEN OTP: " + otpCode + " -> Target: " + email + " <<<\n");
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Email verification code sent successfully to " + email
+        ));
+    }
+
+    @PostMapping(value = "/verify-email-otp", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Verify Email OTP", description = "Verifies 6-digit OTP code and marks email as verified")
+    public ResponseEntity<?> verifyEmailOtp(@RequestBody Map<String, String> payload,
+                                            @RequestAttribute(value = "userId", required = false) Long userId) {
+        String code = payload.get("code");
+        String email = payload.get("email");
+        if ((email == null || email.isBlank()) && userId != null) {
+            User user = userRepository.findById(userId).orElse(null);
+            if (user != null) email = user.getEmail();
+        }
+
+        log.info("[AuthController] verify-email-otp request with code={}, email={}, userId={}", code, email, userId);
+
+        boolean isValid = false;
+        if (email != null) {
+            OtpEntry entry = emailOtpStore.get(email);
+            if (entry != null && entry.isValid(code)) {
+                isValid = true;
+                emailOtpStore.remove(email); // consume OTP
+            }
+        }
+
+        if (!isValid) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "message", "Invalid or expired verification code."
+            ));
+        }
+
+        // Mark user as email verified in DB if logged in or email matched
+        User user = null;
+        if (userId != null) {
+            user = userRepository.findById(userId).orElse(null);
+        } else if (email != null && !email.isBlank()) {
+            user = userRepository.findByEmail(email).orElse(null);
+        }
+
+        if (user != null) {
+            user.setIsEmailVerified(true);
+            userRepository.save(user);
+            log.info("[AuthController] Marked isEmailVerified = true for user id={}", user.getId());
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Email verified successfully"
+        ));
     }
 }

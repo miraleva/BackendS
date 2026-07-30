@@ -60,4 +60,6 @@ public class ReservationRequest {
     }
 
     private String imageUrl;
+
+    private String lang;
 }

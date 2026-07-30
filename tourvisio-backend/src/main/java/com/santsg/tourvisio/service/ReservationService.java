@@ -23,7 +23,8 @@ public class ReservationService {
     private final EmailService emailService;
     private final UserRepository userRepository;
 
-    public ReservationService(ReservationRepository reservationRepository, EmailService emailService, UserRepository userRepository) {
+    public ReservationService(ReservationRepository reservationRepository, EmailService emailService,
+            UserRepository userRepository) {
         this.reservationRepository = reservationRepository;
         this.emailService = emailService;
         this.userRepository = userRepository;
@@ -154,7 +155,8 @@ public class ReservationService {
         PassengerRequest primary = request.getPassengers().get(0);
         String fullName = (primary.getFirstName() != null ? primary.getFirstName() : "") + " "
                 + (primary.getLastName() != null ? primary.getLastName() : "");
-        emailService.sendReservationConfirmationEmail(savedReservation, primary.getEmail(), fullName.trim());
+        emailService.sendReservationConfirmationEmail(savedReservation, primary.getEmail(), fullName.trim(),
+                request.getLang());
 
         return savedReservation;
     }

@@ -26,6 +26,16 @@ public class ResponseAgent {
         this.messageSource = messageSource;
     }
 
+    private static final String CATEGORY_TERMINOLOGY_CONSTRAINTS =
+            "\nCATEGORY & TERMINOLOGY STRICT CONSTRAINTS:\n" +
+            "- You MUST follow strict travel category terminology based on the active search type:\n" +
+            "  * FOR HOTEL SEARCH (HOTEL_SEARCH / Category = HOTEL):\n" +
+            "    - NEVER use flight/trip terms such as 'Gidiş', 'Dönüş', 'Yola çıkmak', 'Yola çıkmayı planlıyorsunuz', 'Uçuş', 'Uçak', 'Bilet', 'Yolcu', 'Flight', 'Departure', 'Return'.\n" +
+            "    - ONLY use hotel terms: 'Giriş Tarihi (Check-in)', 'Çıkış Tarihi (Check-out)', 'Konaklama', 'Misafir Sayısı', 'Otel', 'Oda'.\n" +
+            "  * FOR FLIGHT SEARCH (FLIGHT_SEARCH / Category = FLIGHT):\n" +
+            "    - NEVER use hotel terms such as 'Giriş tarihi', 'Çıkış tarihi', 'Otel', 'Konaklama', 'Misafir', 'Oda'.\n" +
+            "    - ONLY use flight terms: 'Gidiş Tarihi', 'Dönüş Tarihi', 'Yolcu Sayısı', 'Uçuş', 'Havalimanı', 'Kalkış', 'Varış'.\n";
+
     // ─────────────────────────────────────────────────────────────────────────
     // Public Scenarios
     // ─────────────────────────────────────────────────────────────────────────
@@ -194,16 +204,70 @@ public class ResponseAgent {
         }
 
         String knownDetailsInstruction = "";
+        String dateStateInstruction = "";
+
         if (criteria != null) {
+            boolean isFlight = "FLIGHT_SEARCH".equals(criteria.getSearchType());
+            java.time.LocalDate startDate = isFlight ? criteria.getDepartureDate() : criteria.getCheckInDate();
+            java.time.LocalDate endDate = isFlight ? criteria.getReturnDate() : criteria.getCheckOutDate();
+
+            if (startDate != null && endDate == null) {
+                if (isFlight) {
+                    dateStateInstruction = String.format(
+                        "\nSTRICT DATE ACKNOWLEDGMENT RULE (FLIGHT):\n" +
+                        "- Departure Date (Gidiş Tarihi) is ALREADY KNOWN: '%s'.\n" +
+                        "- Return Date (Dönüş Tarihi) is MISSING.\n" +
+                        "- You MUST explicitly acknowledge the Departure Date ('Gidiş tarihinizi (%s) not aldım.').\n" +
+                        "- Then ask ONLY for the Return Date ('Hangi tarihte dönüş yapmayı planlıyorsunuz?').\n" +
+                        "- NEVER call '%s' a return date or ask for departure date again!",
+                        formatDisplayDate(startDate), formatDisplayDate(startDate), formatDisplayDate(startDate)
+                    );
+                } else {
+                    dateStateInstruction = String.format(
+                        "\nSTRICT DATE ACKNOWLEDGMENT RULE (HOTEL):\n" +
+                        "- Check-in Date (Giriş Tarihi) is ALREADY KNOWN: '%s'.\n" +
+                        "- Check-out Date (Çıkış Tarihi) is MISSING.\n" +
+                        "- You MUST explicitly acknowledge the Check-in Date ('Giriş tarihinizi (%s) not aldım.').\n" +
+                        "- Then ask ONLY for the Check-out Date ('Hangi tarihte otelden çıkış yapmayı planlıyorsunuz / kaç gece konaklayacaksınız?').\n" +
+                        "- NEVER call '%s' 'dönüş tarihi' or ask for 'yola çıkış tarihi'!",
+                        formatDisplayDate(startDate), formatDisplayDate(startDate), formatDisplayDate(startDate)
+                    );
+                }
+            } else if (startDate == null && endDate != null) {
+                if (isFlight) {
+                    dateStateInstruction = String.format(
+                        "\nSTRICT DATE ACKNOWLEDGMENT RULE (FLIGHT):\n" +
+                        "- Return Date (Dönüş Tarihi) is ALREADY KNOWN: '%s'.\n" +
+                        "- Departure Date (Gidiş Tarihi) is MISSING.\n" +
+                        "- You MUST explicitly acknowledge the Return Date ('Dönüş tarihinizi (%s) not aldım.').\n" +
+                        "- Then ask ONLY for the Departure Date ('Hangi tarihte gidiş / yola çıkmayı planlıyorsunuz?').",
+                        formatDisplayDate(endDate), formatDisplayDate(endDate)
+                    );
+                } else {
+                    dateStateInstruction = String.format(
+                        "\nSTRICT DATE ACKNOWLEDGMENT RULE (HOTEL):\n" +
+                        "- Check-out Date (Çıkış Tarihi) is ALREADY KNOWN: '%s'.\n" +
+                        "- Check-in Date (Giriş Tarihi) is MISSING.\n" +
+                        "- You MUST explicitly acknowledge the Check-out Date ('Çıkış tarihinizi (%s) not aldım.').\n" +
+                        "- Then ask ONLY for the Check-in Date ('Hangi tarihte otele giriş yapmayı planlıyorsunuz?').",
+                        formatDisplayDate(endDate), formatDisplayDate(endDate)
+                    );
+                }
+            } else if (startDate != null && endDate != null) {
+                dateStateInstruction = String.format(
+                    "\nSTRICT DATE ACKNOWLEDGMENT RULE:\n" +
+                    "- Both dates are already known: %s to %s.\n" +
+                    "- Acknowledge the stay/flight period ('%s - %s tarihleri arasındaki konaklamanız/uçuşunuz için...').",
+                    formatDisplayDate(startDate), formatDisplayDate(endDate),
+                    formatDisplayDate(startDate), formatDisplayDate(endDate)
+                );
+            }
+
             boolean hasLocation = (criteria.getLocationOrHotelName() != null && !criteria.getLocationOrHotelName().isBlank())
                     || (criteria.getArrivalLocation() != null && !criteria.getArrivalLocation().isBlank());
-            if (!hasLocation && (criteria.getCheckInDate() != null || criteria.getDepartureDate() != null || criteria.getAdultCount() != null || criteria.getPassengerCount() != null)) {
-                String datesStr = "";
-                if (criteria.getCheckInDate() != null && criteria.getCheckOutDate() != null) {
-                    datesStr = criteria.getCheckInDate() + " - " + criteria.getCheckOutDate();
-                } else if (criteria.getCheckInDate() != null) {
-                    datesStr = criteria.getCheckInDate().toString();
-                }
+            if (!hasLocation && (startDate != null || criteria.getAdultCount() != null || criteria.getPassengerCount() != null)) {
+                String datesStr = (startDate != null && endDate != null) ? (startDate + " - " + endDate)
+                        : (startDate != null ? startDate.toString() : "");
                 String guestsStr = criteria.getAdultCount() != null ? (criteria.getAdultCount() + " kişi") : "";
 
                 knownDetailsInstruction = String.format(
@@ -220,14 +284,18 @@ public class ResponseAgent {
             ageInstruction = "\nSTRICT PRIORITY RULE: The child/infant age is missing. Your ONLY priority question MUST be asking for the age(s) of the child/children (e.g. 'Çocuğunuzun/Çocuklarınızın yaşı kaçtır?'). Do NOT ask for dates, destination, or other fields until child ages are provided.";
         }
 
+        String searchTypeContext = (criteria != null && criteria.getSearchType() != null)
+                ? String.format("Active Search Category: %s.", criteria.getSearchType())
+                : "Active Search Category: HOTEL_SEARCH.";
+
         String fieldsCsv = String.join(", ", missingFields);
         String prompt = String.format(
-                "The user is planning a trip, but the following mandatory search criteria are missing: [%s]. " +
+                "The user is planning a trip (%s). The following mandatory search criteria are missing: [%s]. " +
                 "Ask the user for ALL of this information together in a single, friendly, and natural question. " +
                 "Do NOT use bare technical terms (e.g., say 'How many people will be traveling?' instead of 'adult count'). " +
-                "Write the question in %s — the same language the user is writing in.%s%s%s%s " +
+                "Write the question in %s — the same language the user is writing in.%s%s%s%s%s%s " +
                 "Return ONLY the question itself, no extra notes.",
-                fieldsCsv, targetLanguage, userMessageClause(userMessage), poiInstruction, knownDetailsInstruction, ageInstruction
+                searchTypeContext, fieldsCsv, targetLanguage, userMessageClause(userMessage), poiInstruction, knownDetailsInstruction, ageInstruction, dateStateInstruction, CATEGORY_TERMINOLOGY_CONSTRAINTS
         );
 
         try {
@@ -237,15 +305,6 @@ public class ResponseAgent {
             }
         } catch (Exception e) {
             log.warn("[ResponseAgent] AskMissing AI generation failed, using fallback localization: {}", e.getMessage());
-        }
-
-        // Fallback localization pathway
-        if ("FLIGHT_SEARCH".equals(criteria.getSearchType()) && 
-            (criteria.getDepartureLocation() == null || criteria.getDepartureLocation().isBlank() ||
-             criteria.getArrivalLocation() == null || criteria.getArrivalLocation().isBlank())) {
-            if ("tr".equals(locale.getLanguage())) {
-                return "Harika bir seyahat planı yapalım! Size en uygun uçak biletini bulabilmem için öncelikle nereden nereye uçacağınızı, hangi tarihte seyahat etmek istediğinizi, biletin tek yön mü yoksa gidiş-dönüş mü olacağını ve kaç yolcu olacağını öğrenebilir miyim?";
-            }
         }
 
         List<String> translatedFields = missingFields.stream()
@@ -259,6 +318,18 @@ public class ResponseAgent {
                 .collect(Collectors.toList());
 
         if (translatedFields.size() == 1) {
+            if (criteria != null) {
+                if ("HOTEL_SEARCH".equals(criteria.getSearchType()) && criteria.getCheckInDate() != null && criteria.getCheckOutDate() == null) {
+                    if ("tr".equals(locale.getLanguage())) {
+                        return String.format("Giriş tarihinizi (%s) not aldım. Hangi tarihte çıkış yapmayı planlıyorsunuz?", formatDisplayDate(criteria.getCheckInDate()));
+                    }
+                }
+                if ("FLIGHT_SEARCH".equals(criteria.getSearchType()) && criteria.getDepartureDate() != null && criteria.getReturnDate() == null) {
+                    if ("tr".equals(locale.getLanguage())) {
+                        return String.format("Gidiş tarihinizi (%s) not aldım. Hangi tarihte dönüş yapmayı planlıyorsunuz?", formatDisplayDate(criteria.getDepartureDate()));
+                    }
+                }
+            }
             return messageSource.getMessage("ask.missing.single", new Object[]{translatedFields.get(0)}, locale);
         } else {
             String joinedFields = String.join(", ", translatedFields);

@@ -74,8 +74,12 @@ public class SearchCriteriaExtractor {
     private static final Pattern CURRENCY_PATTERN = Pattern.compile(
             "\\b(tl|try|türk lirası|turk lirasi|lira|eur|euro|usd|dolar|gbp|sterlin)\\b");
 
-    private static final Pattern NUMERIC_DATE_PATTERN = Pattern.compile(
-            "\\b(?:(\\d{4})[-/.](0[1-9]|1[0-2])[-/.](0[1-9]|[12]\\d|3[01])|(0[1-9]|[12]\\d|3[01])[-/.](0[1-9]|1[0-2])[-/.](\\d{4}))\\b");
+    public static final Pattern NUMERIC_DATE_PATTERN = Pattern.compile(
+            "\\b(?:"
+          + "(\\d{4})[-/.](0?[1-9]|1[0-2])[-/.](0?[1-9]|[12]\\d|3[01])"
+          + "|"
+          + "(0?[1-9]|[12]\\d|3[01])[-/.](0?[1-9]|1[0-2])[-/.](?:\\d{4}|\\d{2})"
+          + ")\\b");
 
     // ── Sayı + kişi ifadeleri ─────────────────────────────────────────────────
     // Eksi işareti de yakalanır (ör. "-3 yetişkin") ki SearchCriteriaValidator
@@ -542,6 +546,7 @@ public class SearchCriteriaExtractor {
 
     private List<LocalDate> extractNumericDates(String text) {
         List<LocalDate> dates = new java.util.ArrayList<>();
+        if (text == null || text.isBlank()) return dates;
         Matcher m = NUMERIC_DATE_PATTERN.matcher(text);
         while (m.find()) {
             try {
@@ -553,7 +558,12 @@ public class SearchCriteriaExtractor {
                 } else if (m.group(4) != null) {
                     int day = Integer.parseInt(m.group(4));
                     int month = Integer.parseInt(m.group(5));
-                    int year = Integer.parseInt(m.group(6));
+                    String matchedStr = m.group();
+                    int lastSepIndex = Math.max(matchedStr.lastIndexOf('.'), Math.max(matchedStr.lastIndexOf('/'), matchedStr.lastIndexOf('-')));
+                    int year = Integer.parseInt(matchedStr.substring(lastSepIndex + 1));
+                    if (year < 100) {
+                        year += 2000;
+                    }
                     dates.add(LocalDate.of(year, month, day));
                 }
             } catch (Exception e) {
