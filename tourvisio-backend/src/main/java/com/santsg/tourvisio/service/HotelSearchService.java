@@ -114,20 +114,7 @@ public class HotelSearchService {
                 return buildNoResultsResponse(criteria, locale);
             }
 
-            String location = criteria.getLocationOrHotelName();
-            String currency = criteria.getCurrency() != null ? criteria.getCurrency() : "EUR";
-
-            // En iyi teklifi öne çıkar
-            HotelSearchResponseItem best = results.get(0);
-            String bestInfo = String.format("%s (%d★) — %s — %.2f %s",
-                    best.getName(),
-                    best.getStars() != null ? best.getStars() : 0,
-                    best.getBoardType() != null ? best.getBoardType() : best.getPensionType(),
-                    best.getPrice() != null ? best.getPrice() : 0.0,
-                    currency);
-
-            String reply = messageSource.getMessage("hotel.search.success",
-                    new Object[]{results.size(), location, bestInfo}, locale);
+            String reply = buildHotelListFallbackText(results, criteria, locale);
 
             return ChatSearchResponse.builder()
                     .reply(reply)
@@ -244,6 +231,55 @@ public class HotelSearchService {
         c.setNationality(src.getNationality());
         c.setRoomCount(src.getRoomCount());
         return c;
+    }
+
+    private String buildHotelListFallbackText(List<HotelSearchResponseItem> results, SearchCriteria criteria, Locale locale) {
+        int count = Math.min(5, results.size());
+        StringBuilder sb = new StringBuilder();
+        boolean isTurkish = "tr".equals(locale.getLanguage());
+
+        String intro = isTurkish
+                ? String.format("İşte %s bölgesinde sizin için bulduğum ilk %d seçenek:",
+                        criteria.getLocationOrHotelName() != null ? criteria.getLocationOrHotelName() : "aradığınız", count)
+                : String.format("Here are the top %d options found for %s:", count,
+                        criteria.getLocationOrHotelName() != null ? criteria.getLocationOrHotelName() : "your search");
+        sb.append(intro).append("\n\n");
+
+        long nights = 1;
+        if (criteria.getCheckInDate() != null && criteria.getCheckOutDate() != null) {
+            nights = ChronoUnit.DAYS.between(criteria.getCheckInDate(), criteria.getCheckOutDate());
+            if (nights <= 0) nights = 1;
+        }
+
+        for (int i = 0; i < count; i++) {
+            HotelSearchResponseItem item = results.get(i);
+            if (i > 0) {
+                sb.append("\n────────────\n\n");
+            }
+            sb.append("🏨 ").append(item.getName()).append("\n");
+
+            Integer stars = item.getStars();
+            if (stars != null && stars > 0) {
+                sb.append("⭐".repeat(Math.min(stars, 5))).append("\n");
+            }
+
+            String region = item.getRegion() != null && !item.getRegion().isBlank() ? item.getRegion() : criteria.getLocationOrHotelName();
+            if (region != null && !region.isBlank()) {
+                sb.append("📍 ").append(region).append("\n");
+            }
+
+            double price = item.getPrice() != null ? item.getPrice() : 0.0;
+            String currency = item.getCurrency() != null ? item.getCurrency() : (criteria.getCurrency() != null ? criteria.getCurrency() : "EUR");
+
+            if (isTurkish) {
+                sb.append(String.format(Locale.forLanguageTag("tr-TR"), "💰 %,.2f %s (%d gece toplam)\n", price, currency, nights));
+            } else {
+                sb.append(String.format(Locale.US, "💰 %,.2f %s (%d nights total)\n", price, currency, nights));
+            }
+        }
+
+        sb.append("\nYandaki panelden otellerin detaylarını ve görsellerini inceleyebilirsiniz 😊 İsterseniz bu seçenekleri filtreleyebilirim de.");
+        return sb.toString();
     }
 
     public com.santsg.tourvisio.dto.tourvisio.GetCheckInDatesResponse getCheckInDates(com.santsg.tourvisio.dto.tourvisio.GetCheckInDatesRequest request) {

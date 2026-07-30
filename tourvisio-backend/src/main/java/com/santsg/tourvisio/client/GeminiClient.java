@@ -14,6 +14,8 @@ import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import jakarta.annotation.PostConstruct;
+
 @Component
 public class GeminiClient implements AIProviderClient {
 
@@ -34,6 +36,17 @@ public class GeminiClient implements AIProviderClient {
 
     GeminiClient(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
+    }
+
+    @PostConstruct
+    public void init() {
+        if (apiKey == null || apiKey.isBlank()) {
+            log.warn("[GeminiClient] Initialized: API Key is NULL or EMPTY");
+        } else {
+            String prefix = apiKey.length() >= 8 ? apiKey.substring(0, 8) : apiKey;
+            log.info("[GeminiClient] Initialized: API Key Length={}, Prefix={}...", apiKey.length(), prefix);
+        }
+        log.info("[GeminiClient] Initialized: API URL={}", apiUrl);
     }
 
     @Override

@@ -22,6 +22,8 @@ import org.springframework.web.client.RestTemplate;
  * Key kaynağı: {@code GEMINI_LITE_API_KEY} environment variable veya
  * {@code application.properties} içindeki {@code gemini.lite.api-key} property'si.</p>
  */
+import jakarta.annotation.PostConstruct;
+
 @Component
 public class GeminiExtractionClient implements AIProviderClient {
 
@@ -42,6 +44,17 @@ public class GeminiExtractionClient implements AIProviderClient {
 
     GeminiExtractionClient(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
+    }
+
+    @PostConstruct
+    public void init() {
+        if (apiKey == null || apiKey.isBlank()) {
+            log.warn("[GeminiExtractionClient] Initialized: API Key is NULL or EMPTY");
+        } else {
+            String prefix = apiKey.length() >= 8 ? apiKey.substring(0, 8) : apiKey;
+            log.info("[GeminiExtractionClient] Initialized: API Key Length={}, Prefix={}...", apiKey.length(), prefix);
+        }
+        log.info("[GeminiExtractionClient] Initialized: API URL={}", apiUrl);
     }
 
     @Override

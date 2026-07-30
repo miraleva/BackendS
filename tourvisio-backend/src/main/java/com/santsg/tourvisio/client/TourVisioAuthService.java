@@ -120,10 +120,11 @@ public class TourVisioAuthService {
         return baseUrl + path;
     }
 
+    private static final int MAX_LOGIN_RETRIES = 3;
+    private static final long RETRY_DELAY_MS = 1000L;
+
     private String login() {
         String url = buildUrl(LOGIN_PATH);
-
-        log.info("[TourVisioAuth] TourVisio login isteği gönderiliyor: POST {}", url);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -136,46 +137,76 @@ public class TourVisioAuthService {
 
         HttpEntity<TourVisioLoginRequest> entity = new HttpEntity<>(loginRequest, headers);
 
-        try {
-            ResponseEntity<TourVisioLoginResponse> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.POST,
-                    entity,
-                    TourVisioLoginResponse.class
-            );
+        log.info("[TourVisioAuth] Login Diagnostics -> Target URL: {}", url);
+        log.info("[TourVisioAuth] Login Request Headers: {}", headers);
+        log.info("[TourVisioAuth] Login Payload JSON Structure: {\"Agency\":\"{}\", \"User\":\"{}\", \"Password\":\"***\"}",
+                config.getAgency(), config.getUsername());
 
-            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-                throw new TourVisioAuthException(
-                        "TourVisio login başarısız — HTTP status: " + response.getStatusCode());
+        Exception lastException = null;
+
+        for (int attempt = 1; attempt <= MAX_LOGIN_RETRIES; attempt++) {
+            try {
+                log.info("[TourVisioAuth] TourVisio login isteği gönderiliyor (Deneme {}/{}): POST {}", attempt, MAX_LOGIN_RETRIES, url);
+
+                ResponseEntity<TourVisioLoginResponse> response = restTemplate.exchange(
+                        url,
+                        HttpMethod.POST,
+                        entity,
+                        TourVisioLoginResponse.class
+                );
+
+                if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                    throw new TourVisioAuthException(
+                            "TourVisio login başarısız — HTTP status: " + response.getStatusCode());
+                }
+
+                String token = response.getBody().extractToken();
+                if (token == null) {
+                    throw new TourVisioAuthException(
+                            "TourVisio login yanıtı body.token içermiyor. Response body: " + response.getBody());
+                }
+
+                cachedToken = token;
+                tokenObtainedAt = Instant.now().getEpochSecond();
+                log.info("[TourVisioAuth] Login başarılı — token cache'lendi (TTL={}s).", TOKEN_TTL_SECONDS);
+
+                return cachedToken;
+
+            } catch (HttpClientErrorException e) {
+                lastException = new TourVisioAuthException(
+                        "TourVisio login 4xx hatası (status=" + e.getStatusCode() +
+                        "): " + e.getResponseBodyAsString(), e);
+                log.warn("[TourVisioAuth] Login 4xx hatası (Deneme {}/{}): {}", attempt, MAX_LOGIN_RETRIES, e.getMessage());
+                // Non-retryable authentication failure
+                break;
+            } catch (HttpServerErrorException e) {
+                lastException = new TourVisioAuthException(
+                        "TourVisio login 5xx hatası (status=" + e.getStatusCode() +
+                        "): " + e.getResponseBodyAsString(), e);
+                log.warn("[TourVisioAuth] Login 5xx hatası (Deneme {}/{}): {}", attempt, MAX_LOGIN_RETRIES, e.getMessage());
+            } catch (TourVisioAuthException e) {
+                lastException = e;
+                log.warn("[TourVisioAuth] Login denemesi {}/{} başarısız: {}", attempt, MAX_LOGIN_RETRIES, e.getMessage());
+            } catch (Exception e) {
+                lastException = new TourVisioAuthException(
+                        "TourVisio login sırasında beklenmedik hata: " + e.getMessage(), e);
+                log.warn("[TourVisioAuth] Login isteğinde ağ/bağlantı hatası (Deneme {}/{}): {}", attempt, MAX_LOGIN_RETRIES, e.getMessage());
             }
 
-            String token = response.getBody().extractToken();
-            if (token == null) {
-                throw new TourVisioAuthException(
-                        "TourVisio login yanıtı body.token içermiyor. " +
-                        "Response body: " + response.getBody());
+            if (attempt < MAX_LOGIN_RETRIES) {
+                try {
+                    Thread.sleep(RETRY_DELAY_MS * attempt);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
-
-            cachedToken = token;
-            tokenObtainedAt = Instant.now().getEpochSecond();
-            log.info("[TourVisioAuth] Login başarılı — token cache'lendi (TTL={}s).", TOKEN_TTL_SECONDS);
-
-            return cachedToken;
-
-        } catch (TourVisioAuthException e) {
-            throw e;
-        } catch (HttpClientErrorException e) {
-            throw new TourVisioAuthException(
-                    "TourVisio login 4xx hatası (status=" + e.getStatusCode() +
-                    "): " + e.getResponseBodyAsString(), e);
-        } catch (HttpServerErrorException e) {
-            throw new TourVisioAuthException(
-                    "TourVisio login 5xx hatası (status=" + e.getStatusCode() +
-                    "): " + e.getResponseBodyAsString(), e);
-        } catch (Exception e) {
-            throw new TourVisioAuthException(
-                    "TourVisio login sırasında beklenmedik hata: " + e.getMessage(), e);
         }
+
+        if (lastException instanceof TourVisioAuthException) {
+            throw (TourVisioAuthException) lastException;
+        }
+        throw new TourVisioAuthException("TourVisio login retries exhausted", lastException);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

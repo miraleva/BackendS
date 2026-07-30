@@ -49,10 +49,11 @@ public class ResponseAgent {
         String targetLanguage = resolveLanguageName(criteria);
 
         String prompt = String.format(
-                "Write a polite travel assistant response declining the user's out-of-scope travel query. " +
-                "Explain politely that we can only assist with hotel search, flight search, and booking/reservations. " +
-                "Write the response in %s — the same language the user is writing in.%s " +
-                "Context status: %s. " +
+                "You are a warm, polite, and professional travel assistant (tourism advisor).\n" +
+                "Write a hospitable response declining the user's out-of-scope travel query.\n" +
+                "Explain politely that we can only assist with hotel search, flight search, and travel booking.\n" +
+                "Write the response in %s — matching the user's language.%s\n" +
+                "Keep a helpful tone, max 1 emoji. Context status: %s.\n" +
                 "Return ONLY the response itself, no extra notes or introductions.",
                 targetLanguage, userMessageClause(userMessage), isTerminated ? "TERMINATED" : "ACTIVE"
         );
@@ -108,11 +109,14 @@ public class ResponseAgent {
                 : "English";
         String prompt = String.format(
                 "The user just started a chat and sent their first message: \"%s\".\n" +
-                "Write a warm, welcoming onboarding message as a travel assistant. " +
-                "Briefly explain that you need their destination, dates, and guest count to find the best hotel or flight options. " +
+                "You are an enthusiastic, warm, and professional travel consultant.\n" +
+                "Write a warm, welcoming onboarding message as a travel consultant.\n" +
+                "Start with a natural, pleasant greeting (e.g. 'Harika bir seyahat planlamaya hazır mısınız? 😊' / 'Ready to plan a wonderful trip? 😊').\n" +
+                "Briefly explain that you need their destination, dates, and guest count to find the best hotel or flight options.\n" +
                 "Write the response in the same language as the user's message above. If the message has no " +
                 "identifiable language (e.g. only emoji, random characters, numbers, or gibberish), default to %s — " +
                 "do NOT guess an unrelated language.\n" +
+                "Tone & style: Hospitable, professional consultant tone. Max 2-3 emojis. Avoid robotic phrases like 'Bilgileriniz alınmıştır' or 'Arama gerçekleştiriliyor'.\n" +
                 "Return ONLY the response itself, no extra notes or greetings.",
                 userMessage != null ? userMessage.replace("\"", "\\\"") : "",
                 targetLanguage
@@ -139,9 +143,11 @@ public class ResponseAgent {
         String targetLanguage = resolveLanguageName(criteria);
 
         String prompt = String.format(
-                "Write a polite travel assistant question asking the user whether they would like to search for a hotel or a flight ticket. " +
-                "Write the response in %s — the same language the user is writing in.%s " +
-                "Return ONLY the question itself, no extra notes.",
+                "You are a warm and professional travel consultant.\n" +
+                "Ask the user in a friendly conversation whether they would like to search for a hotel or a flight ticket.\n" +
+                "Vary your opening naturally (e.g. 'Harika! Size yardımcı olmaktan memnuniyet duyarım 😊' / 'Great! I would love to help with your trip 😊').\n" +
+                "Write the response in %s — matching the language the user is writing in.%s\n" +
+                "Max 1-2 emojis. Return ONLY the question itself, no extra notes.",
                 targetLanguage, userMessageClause(userMessage)
         );
 
@@ -216,9 +222,9 @@ public class ResponseAgent {
                     dateStateInstruction = String.format(
                         "\nSTRICT DATE ACKNOWLEDGMENT RULE (FLIGHT):\n" +
                         "- Departure Date (Gidiş Tarihi) is ALREADY KNOWN: '%s'.\n" +
-                        "- Return Date (Dönüş Tarihi) is MISSING.\n" +
-                        "- You MUST explicitly acknowledge the Departure Date ('Gidiş tarihinizi (%s) not aldım.').\n" +
-                        "- Then ask ONLY for the Return Date ('Hangi tarihte dönüş yapmayı planlıyorsunuz?').\n" +
+                        "- Return Date (Dönüş Tarihi) is MISSING / UNCLEAR.\n" +
+                        "- You MUST explicitly acknowledge the Departure Date ('Gidiş tarihinizi (%s) not aldım ✈️').\n" +
+                        "- Then ask ONLY whether they want a return flight or a one-way ticket (e.g. 'Sadece gidiş mi planlıyorsunuz, yoksa dönüş uçuşuna da bakayım mı?' / 'Is this a one-way trip, or should I look for a return flight too?').\n" +
                         "- NEVER call '%s' a return date or ask for departure date again!",
                         formatDisplayDate(startDate), formatDisplayDate(startDate), formatDisplayDate(startDate)
                     );
@@ -239,7 +245,7 @@ public class ResponseAgent {
                         "\nSTRICT DATE ACKNOWLEDGMENT RULE (FLIGHT):\n" +
                         "- Return Date (Dönüş Tarihi) is ALREADY KNOWN: '%s'.\n" +
                         "- Departure Date (Gidiş Tarihi) is MISSING.\n" +
-                        "- You MUST explicitly acknowledge the Return Date ('Dönüş tarihinizi (%s) not aldım.').\n" +
+                        "- You MUST explicitly acknowledge the Return Date ('Dönüş tarihinizi (%s) not aldım ✈️').\n" +
                         "- Then ask ONLY for the Departure Date ('Hangi tarihte gidiş / yola çıkmayı planlıyorsunuz?').",
                         formatDisplayDate(endDate), formatDisplayDate(endDate)
                     );
@@ -257,31 +263,62 @@ public class ResponseAgent {
                 dateStateInstruction = String.format(
                     "\nSTRICT DATE ACKNOWLEDGMENT RULE:\n" +
                     "- Both dates are already known: %s to %s.\n" +
-                    "- Acknowledge the stay/flight period ('%s - %s tarihleri arasındaki konaklamanız/uçuşunuz için...').",
+                    "- Acknowledge the stay/flight period naturally ('%s - %s tarihleri arasındaki konaklamanız/uçuşunuz için...').",
                     formatDisplayDate(startDate), formatDisplayDate(endDate),
                     formatDisplayDate(startDate), formatDisplayDate(endDate)
                 );
             }
 
-            boolean hasLocation = (criteria.getLocationOrHotelName() != null && !criteria.getLocationOrHotelName().isBlank())
-                    || (criteria.getArrivalLocation() != null && !criteria.getArrivalLocation().isBlank());
+            boolean hasLocation = isFlight
+                    ? (criteria.getDepartureLocation() != null && !criteria.getDepartureLocation().isBlank() && criteria.getArrivalLocation() != null && !criteria.getArrivalLocation().isBlank())
+                    : (criteria.getLocationOrHotelName() != null && !criteria.getLocationOrHotelName().isBlank());
             if (!hasLocation && (startDate != null || criteria.getAdultCount() != null || criteria.getPassengerCount() != null)) {
                 String datesStr = (startDate != null && endDate != null) ? (startDate + " - " + endDate)
                         : (startDate != null ? startDate.toString() : "");
-                String guestsStr = criteria.getAdultCount() != null ? (criteria.getAdultCount() + " kişi") : "";
+                String guestsStr = criteria.getAdultCount() != null ? (criteria.getAdultCount() + " kişi")
+                        : (criteria.getPassengerCount() != null ? (criteria.getPassengerCount() + " yolcu") : "");
 
-                knownDetailsInstruction = String.format(
-                    "\nSPECIAL RULE: We already know some details (Dates: '%s', Guests: '%s'), but the destination/city is still missing. " +
-                    "Acknowledge the known details naturally and politely ask which city/destination they would like to stay or travel to. " +
-                    "Example response format: 'Harika, %s %s için rezervasyon planlıyoruz. Peki hangi şehirde/bölgede konaklamak istersiniz?'",
-                    datesStr, guestsStr, datesStr, guestsStr
-                );
+                if (isFlight) {
+                    String origin = criteria.getDepartureLocation();
+                    String dest = criteria.getArrivalLocation();
+                    String routeStr = (origin != null ? origin : "?") + " → " + (dest != null ? dest : "?");
+                    knownDetailsInstruction = String.format(
+                        "\nKNOWN DETAILS ACKNOWLEDGMENT (FLIGHT):\n" +
+                        "- Route: '%s', Dates: '%s', Passengers: '%s'.\n" +
+                        "- Structure into two paragraphs separated by \\n\\n:\n" +
+                        "  Paragraph 1: '%s rotasında harika bir uçuş planlamak için sabırsızlanıyorum ✈️'\n" +
+                        "  Paragraph 2: 'Uçuşunuzu en iyi şekilde organize edebilmem için seyahatinizi **tek yön mü yoksa gidiş-dönüş mü** planladığınızı, **gidiş tarihinizi** ve **yolcu sayısını** belirtebilir misiniz?'",
+                        routeStr, datesStr, guestsStr, routeStr
+                    );
+                } else {
+                    knownDetailsInstruction = String.format(
+                        "\nKNOWN DETAILS ACKNOWLEDGMENT (HOTEL):\n" +
+                        "- Dates: '%s', Guests: '%s', but destination/city is missing.\n" +
+                        "- Structure into two paragraphs separated by \\n\\n:\n" +
+                        "  Paragraph 1: 'Harika bir tatil planlamak için sabırsızlanıyorum 🏖️'\n" +
+                        "  Paragraph 2: 'Konaklamanızı en iyi şekilde organize edebilmem için otele **giriş tarihinizi**, **çıkış tarihinizi** ve kaç **misafir** olarak katılacağınızı öğrenebilir miyim?'",
+                        datesStr, guestsStr
+                    );
+                }
             }
         }
 
         String ageInstruction = "";
         if (missingFields.contains("çocuk yaşları") || missingFields.contains("bebek yaşları")) {
-            ageInstruction = "\nSTRICT PRIORITY RULE: The child/infant age is missing. Your ONLY priority question MUST be asking for the age(s) of the child/children (e.g. 'Çocuğunuzun/Çocuklarınızın yaşı kaçtır?'). Do NOT ask for dates, destination, or other fields until child ages are provided.";
+            boolean isFlightSearch = criteria != null && "FLIGHT_SEARCH".equals(criteria.getSearchType());
+            if (isFlightSearch) {
+                ageInstruction = "\nSTRICT PRIORITY RULE & WHY (FLIGHT):\n" +
+                        "- Structure into two paragraphs separated by \\n\\n:\n" +
+                        "- If child age is missing: Paragraph 1 opening, Paragraph 2 asking: '**Çocuklarınızın yaşlarını** paylaşabilir misiniz? Bazı havayolları yaş grubuna göre farklı ücret uyguluyor.'\n" +
+                        "- If infant age is missing: Paragraph 1 opening, Paragraph 2 asking: '**Bebeğinizin yaşını** belirtebilir misiniz? Bu bilgi doğru uçuş ve ücret seçeneklerini bulmamıza yardımcı olur.'\n" +
+                        "- Do NOT ask for dates, destination, or other fields until child/infant ages are provided.";
+            } else {
+                ageInstruction = "\nSTRICT PRIORITY RULE & WHY (HOTEL):\n" +
+                        "- Structure into two paragraphs separated by \\n\\n:\n" +
+                        "- If child age is missing: Paragraph 1 opening, Paragraph 2 asking: '**Çocuklarınızın yaşlarını** da paylaşabilir misiniz? Oteller fiyatlandırmayı genelde yaşa göre hesaplıyor.'\n" +
+                        "- If infant age is missing: Paragraph 1 opening, Paragraph 2 asking: '**Bebeğinizin yaşını** (ay/yaş) belirtebilir misiniz? Bu bilgi doğru oda ve fiyat seçeneklerini bulmamıza yardımcı olur.'\n" +
+                        "- Do NOT ask for dates, destination, or other fields until child/infant ages are provided.";
+            }
         }
 
         String searchTypeContext = (criteria != null && criteria.getSearchType() != null)
@@ -290,16 +327,18 @@ public class ResponseAgent {
 
         String fieldsCsv = String.join(", ", missingFields);
         String prompt = String.format(
-                "The user is planning a trip (%s). The following mandatory search criteria are missing: [%s]. " +
-                "Ask the user for ALL of this information together in a single, friendly, and natural question. " +
-                "Do NOT use bare technical terms (e.g., say 'How many people will be traveling?' instead of 'adult count'). " +
-                "Write the question in %s — the same language the user is writing in.%s%s%s%s%s%s " +
-                "Return ONLY the question itself, no extra notes. " +
-                "While asking questions use a professional tone like these examples: " +
-                "'Great! I'm planning a trip for you. In which city would you like to stay/travel and how many adults and children?', " +
-                "'Size yardımcı olabilmem için çocuk/çocukların yaşlarını veya bebeğin yaşını belirtir misiniz?', " +
-                "'Eğer seyahat için belirlediğiniz bir konum yoksa, hangi şehir veya bölge için rezervasyon planlamak istediğinizi belirtebilir misiniz? Böylelikle size en iyi sonuçları yansıtabilirim.', " +
-                "'For finding the best results for you could you please share kids ages?'",
+                "You are an expert, hospitable, and warm travel consultant.\n" +
+                "The user is planning a trip (%s). The following search criteria are missing: [%s].\n\n" +
+                "CRITICAL FORMATTING & MARKDOWN RULES FOR ASKING MISSING INFO:\n" +
+                "1. Always split your response into TWO separate paragraphs separated by a blank line (\\n\\n):\n" +
+                "   - Paragraph 1: A warm, enthusiastic opening sentence acknowledging their location/trip (e.g. '[Şehir/Bölge]\\'de harika bir tatil planlamak için sabırsızlanıyorum 🏖️' or 'Harika bir seyahat planlamak için sabırsızlanıyorum 😊').\n" +
+                "   - Paragraph 2: The main polite question asking for the missing criteria.\n" +
+                "2. Always format the missing critical keywords in **BOLD** markdown (e.g., **giriş tarihinizi**, **çıkış tarihinizi**, **misafir sayısını**, **çocuklarınızın yaşlarını**, **gidiş tarihinizi**, **dönüş tarihinizi**, **yolcu sayısını**).\n" +
+                "3. Speak naturally like a human travel advisor. DO NOT create technical bulleted summary lists (no 'Şu ana kadar elimizde: ...').\n" +
+                "4. STRICT FIELD LIMIT: Ask ONLY for missing destination/city, dates, adult/passenger count, child count/ages, or infant age. NEVER ask for budget, accommodation type, star preference, seat class, etc.\n" +
+                "5. Keep emojis to maximum 2-3 per message.\n\n" +
+                "Write the question in %s — matching the user's language.%s%s%s%s%s%s\n" +
+                "Return ONLY the formatted response text itself, no extra notes.",
                 searchTypeContext, fieldsCsv, targetLanguage, userMessageClause(userMessage), poiInstruction, knownDetailsInstruction, ageInstruction, dateStateInstruction, CATEGORY_TERMINOLOGY_CONSTRAINTS
         );
 
@@ -326,18 +365,20 @@ public class ResponseAgent {
             if (criteria != null) {
                 if ("HOTEL_SEARCH".equals(criteria.getSearchType()) && criteria.getCheckInDate() != null && criteria.getCheckOutDate() == null) {
                     if ("tr".equals(locale.getLanguage())) {
-                        return String.format("Giriş tarihinizi (%s) not aldım. Hangi tarihte çıkış yapmayı planlıyorsunuz?", formatDisplayDate(criteria.getCheckInDate()));
+                        return String.format("Giriş tarihinizi (%s) not aldım 😊\n\nKonaklamanızı en iyi şekilde organize edebilmem için otele **çıkış tarihinizi** öğrenebilir miyim?", formatDisplayDate(criteria.getCheckInDate()));
                     }
                 }
                 if ("FLIGHT_SEARCH".equals(criteria.getSearchType()) && criteria.getDepartureDate() != null && criteria.getReturnDate() == null) {
                     if ("tr".equals(locale.getLanguage())) {
-                        return String.format("Gidiş tarihinizi (%s) not aldım. Hangi tarihte dönüş yapmayı planlıyorsunuz?", formatDisplayDate(criteria.getDepartureDate()));
+                        return String.format("Gidiş tarihinizi (%s) not aldım ✈️\n\nBu keyifli uçuşu planlayabilmem için seyahatinizi **tek yön mü yoksa gidiş-dönüş mü** olarak planlıyoruz?", formatDisplayDate(criteria.getDepartureDate()));
                     }
                 }
             }
-            return messageSource.getMessage("ask.missing.single", new Object[]{translatedFields.get(0)}, locale);
+            return messageSource.getMessage("ask.missing.single", new Object[]{"**" + translatedFields.get(0) + "**"}, locale);
         } else {
-            String joinedFields = String.join(", ", translatedFields);
+            String joinedFields = translatedFields.stream()
+                    .map(f -> "**" + f + "**")
+                    .collect(Collectors.joining(", "));
             return messageSource.getMessage("ask.missing.multiple", new Object[]{joinedFields}, locale);
         }
     }
@@ -348,7 +389,7 @@ public class ResponseAgent {
 
         String childNote = "";
         if (criteria != null && criteria.getChildCount() != null && criteria.getChildCount() > 0) {
-            childNote = "\nNote: Some hotels may have varying age limits for child discounts (often up to 12). We can verify the exact policy for your chosen hotel.";
+            childNote = "\nNote: Some hotels or airlines may have varying age limits for discounts. We can verify the exact policy for your chosen option.";
         }
 
         String countNote = "";
@@ -359,23 +400,38 @@ public class ResponseAgent {
         }
 
         String prompt = String.format(
-                "You are an expert, hospitable, and professional travel assistant (tourism advisor).\n" +
+                "You are an expert, hospitable, and professional travel consultant.\n" +
                 "The user's travel search has been completed successfully. Here are the search results in JSON format:\n" +
                 "Search Type: %s\n" +
                 "Results:\n%s\n\n" +
-                "Write a warm, polite, professional, and hospitable assistant response introducing these options smoothly.\n" +
+                "Write a warm, polite, professional assistant response introducing these options smoothly.\n" +
                 "Adopt a delightful travel consultant tone. Express enthusiasm for helping them plan their trip.\n\n" +
-                "EXAMPLE STYLE & TONE GUIDELINES:\n" +
-                "- TR Example 1: 'Aradığınız {bölge} bölgesinde seyahatinize değer katacak harika seçenekler buldum! Bu bölgede değerlendirebileceğiniz öne çıkan en iyi teklifimiz: {Otel/Uçak Adı}...'\n" +
-                "- TR Example 2: 'Harika bir tatil/seyahat seçimi! {bölge} için listelediğim fırsatlar arasından özellikle {Otel/Uçak Adı} konforu ve uygun fiyatıyla öne çıkıyor.'\n" +
-                "- EN Example 1: 'Great news! I have found fantastic options for your travel to {destination}. The top recommendation I would highlight for your stay is {Hotel/Flight Name}...'\n" +
-                "- EN Example 2: 'Your trip to {destination} is shaping up nicely! Here are the best handpicked choices for you, with {Hotel/Flight Name} being an exceptional deal.'\n\n" +
+                "CRITICAL PRESENTATION & FORMATTING RULES:\n" +
+                "- For Hotel Search (HOTEL_SEARCH):\n" +
+                "  Present up to top 5 hotels in the list using short, visually separated blocks:\n" +
+                "  🏨 [Hotel Name]\n" +
+                "  ⭐⭐⭐⭐ (Repeat the ⭐ emoji exactly N times matching the hotel's stars count on its OWN line. NEVER write '(4★)' or put stars in parentheses! If stars is 0 or missing, omit this line.)\n" +
+                "  📍 [Location/Region] (Put location on its OWN line with 📍 emoji)\n" +
+                "  💰 [Price] [Currency] (total stay price) (Put price on its OWN line with 💰 emoji)\n\n" +
+                "  Separate each hotel block with a divider line (────────────).\n\n" +
+                "  At the end of the hotel list, ALWAYS include a natural closing sentence directing the user to the side panel:\n" +
+                "  TR for Hotel: 'Yandaki panelden otellerin detaylarını ve görsellerini inceleyebilirsiniz 😊 İsterseniz bu seçenekleri filtreleyebilirim de.'\n" +
+                "  EN for Hotel: 'You can check hotel details and photos in the side panel 😊 Let me know if you\\'d like to filter these options as well.'\n\n" +
+                "- For Flight Search (FLIGHT_SEARCH):\n" +
+                "  ✈️ [Airline Name] — [Flight Number/Code if available]\n" +
+                "  🛫 [Departure Location] → [Arrival Location]\n" +
+                "  🕐 Kalkış: [Departure Time] — Varış: [Arrival Time]\n" +
+                "  💰 [Price] [Currency] (Put price on its OWN line with 💰 emoji)\n\n" +
+                "  Separate each flight block with a divider line (────────────).\n\n" +
+                "  At the end of the flight list, include a natural closing sentence:\n" +
+                "  TR for Flight: 'İsterseniz bunları en erken saatli veya en uygun fiyatlı uçuşlar olarak da sıralayabilirim ✈️'\n" +
+                "  EN for Flight: 'If you\\'d like, I can also sort these by earliest departure or best price ✈️'\n\n" +
                 "Include the following context naturally in your response:\n%s%s\n\n" +
-                "IMPORTANT RULES:\n" +
-                "1. Write the response in %s — the same language the user is writing in.%s\n" +
-                "2. Only mention facts from the provided JSON results.\n" +
-                "3. Never invent nicer names for raw system/sandbox data (e.g. if the room name is 'low level yerel dil' or 'BUILD131', present it exactly as is without fabricating a nicer name).\n" +
-                "4. Return ONLY the assistant's summary response, with no notes or extra text.",
+                "IMPORTANT CONSTRAINTS:\n" +
+                "1. Write the response in %s — matching the user's language.%s\n" +
+                "2. ONLY mention facts present in the JSON results (hotel name, stars, location, price). If an attribute is missing/null, omit it without fabricating data.\n" +
+                "3. Never invent nicer names for raw system/sandbox data.\n" +
+                "4. Return ONLY the assistant response itself, no extra notes.",
                 intent, resultsJson, countNote, childNote, targetLanguage, userMessageClause(userMessage)
         );
 
@@ -410,10 +466,12 @@ public class ResponseAgent {
         }
 
         String prompt = String.format(
-            "You are a helpful travel assistant. The user has selected '%s' from the search results. " +
-            "Please ask them politely if they would like to proceed with booking this option. " +
-            "Ensure the response is natural and written in %s — the same language the user is writing in.%s",
-            itemName, targetLanguage, userMessageClause(userMessage));
+            "You are a warm and helpful travel consultant.\n" +
+            "The user has selected '%s' from the search results.\n" +
+            "Express enthusiasm for their choice (e.g. '%s harika bir tercih! 🌟') and ask politely if they would like to proceed with booking this option.\n" +
+            "Ensure the response is natural and written in %s — the same language the user is writing in.%s\n" +
+            "Max 1-2 emojis. Return ONLY the response text.",
+            itemName, itemName, targetLanguage, userMessageClause(userMessage));
             
         try {
             String aiResponse = geminiClient.generate(prompt);

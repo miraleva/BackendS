@@ -892,7 +892,9 @@ public class ChatOrchestrationService {
                 && !searchResponse.getResults().isEmpty()) {
 
             List<?> fullResults = searchResponse.getResults();
-            List<?> slicedResults = fullResults;
+            int totalSize = fullResults.size();
+            int shownCount = Math.min(5, totalSize);
+            List<?> slicedResults = fullResults.subList(0, shownCount);
 
             if (sessionState != null) {
                 // Set AWAITING_CONFIRM mode
@@ -900,21 +902,23 @@ public class ChatOrchestrationService {
                 sessionState.setAllSearchResults(fullResults);
                 sessionState.setResultOffset(0);
                 sessionState.setLastSearchHadNoResults(false);
-
-                int totalSize = fullResults.size();
-                slicedResults = fullResults.subList(0, Math.min(10, totalSize));
                 sessionState.setLastShownResults(slicedResults);
-            } else {
-                int totalSize = fullResults.size();
-                slicedResults = fullResults.subList(0, Math.min(10, totalSize));
             }
 
             // Set sliced results onto the response
             searchResponse.setResults((List) slicedResults);
 
-            // Sonuçlar zaten kart olarak gösteriliyor — ayrıca metin özeti yazdırmıyoruz
-            // (AI çağrısı da atlanmış oluyor: daha hızlı yanıt, daha az kota kullanımı).
-            finalReply = "";
+            try {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                mapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+                String resultsJson = mapper.writeValueAsString(slicedResults);
+                String defaultReply = searchResponse.getReply();
+                finalReply = responseAgent.summarize(intent, resultsJson, defaultReply, criteria, userMessage,
+                        totalSize, shownCount);
+            } catch (Exception e) {
+                log.warn("[Orchestration] AI summarize failed, using default reply: {}", e.getMessage());
+                finalReply = searchResponse.getReply();
+            }
         } else {
             if (sessionState != null) {
                 sessionState.setLastSearchHadNoResults(true);
@@ -1052,24 +1056,31 @@ public class ChatOrchestrationService {
     /**
      * Sanitizes a location field value extracted by the AI model.
      * <p>
-     * The model occasionally violates the "leave blank if no city/province is given"
-     * instruction and writes a full sentence (e.g. "Anıtkabir yakınlarında olabilir")
-     * into a location field.  Such values never match anything in TourVisio and always
+     * The model occasionally violates the "leave blank if no city/province is
+     * given"
+     * instruction and writes a full sentence (e.g. "Anıtkabir yakınlarında
+     * olabilir")
+     * into a location field. Such values never match anything in TourVisio and
+     * always
      * result in "no results found".
      * <p>
-     * Real location names are short (≤ 4 words) and do not contain filler words like
-     * "yakın", "civar", or "olabilir".  Anything that looks like a sentence is rejected
+     * Real location names are short (≤ 4 words) and do not contain filler words
+     * like
+     * "yakın", "civar", or "olabilir". Anything that looks like a sentence is
+     * rejected
      * and returned as {@code null} so the user will be prompted again.
      *
      * @param value the raw location string extracted by the AI model
-     * @return the original value if it looks like a genuine location name, or {@code null}
+     * @return the original value if it looks like a genuine location name, or
+     *         {@code null}
      */
     private String sanitizeLocationField(String value) {
         if (value == null || value.isBlank()) {
             return null;
         }
         String trimmed = value.trim();
-        // Reject sentence-like filler phrases (Turkish keywords that indicate vague descriptions)
+        // Reject sentence-like filler phrases (Turkish keywords that indicate vague
+        // descriptions)
         String lower = trimmed.toLowerCase(java.util.Locale.forLanguageTag("tr"));
         if (lower.contains("yakın") || lower.contains("civar") || lower.contains("olabilir")
                 || lower.contains("gibi") || lower.contains("bölge") || lower.contains("çevres")
