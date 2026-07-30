@@ -187,8 +187,8 @@ public class ExtractionAgent {
                 - Eğer kullanıcı "2 yetişkin 1 çocuk" veya benzeri bir ifade yazarsa, 'adultCount': 2 ve 'childCount': 1 (veya belirtilen sayılar) olarak EKSİKSİZ çıkar. 'hasChildren' değerini true yap.
                 - 'childCount' 0'dan büyükse ve mesajda henüz çocuk yaşı söylenmediyse, 'childAges' dizisini boş [] bırak. Sistem yaş öğrenilmeden aramaya geçmeyecektir.
 
-                LANGUAGE AND CHARACTER PRESERVATION HINT:
-                The user message is in Turkish. It is critical to preserve Turkish characters ('ş', 'ğ', 'ı', 'ö', 'ü', 'ç', 'Ş', 'Ğ', 'İ', 'I', 'Ö', 'Ü', 'Ç') with high precision in all extracted place names, hotel names, cities, or any criteria fields (e.g., "Eskişehir", "Muğla", "Beşiktaş", "Şişli", "Göcek"). Do not remove, simplify, normalize, or distort these characters in the JSON output.
+                CHARACTER PRESERVATION HINT:
+                It is critical to preserve special and regional characters ('ş', 'ğ', 'ı', 'ö', 'ü', 'ç', 'Ş', 'Ğ', 'İ', 'I', 'Ö', 'Ü', 'Ç', 'ä', 'ö', 'ü', 'ß') with high precision in all extracted place names, hotel names, cities, or any criteria fields (e.g., "Eskişehir", "Muğla", "Zürich", "Düsseldorf"). Do not remove, simplify, normalize, or distort these characters in the JSON output.
 
                 IMPORTANT: Only extract a date field (checkInDate, checkOutDate, departureDate, returnDate) if the
                 user's message actually contains a date, weekday, or relative time expression. Vague requests like

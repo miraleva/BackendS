@@ -138,7 +138,7 @@ public class ResponseAgent {
         if (message == null || message.trim().isEmpty()) {
             return Locale.ENGLISH;
         }
-        String lower = message.trim().toLowerCase(Locale.forLanguageTag("tr-TR"));
+        String lower = message.trim().toLowerCase(Locale.ROOT);
         
         // Turkish
         if (lower.contains("merhaba") || lower.contains("selam") || lower.contains("nasılsın")

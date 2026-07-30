@@ -348,4 +348,109 @@ class ChatOrchestrationServiceTest {
                 assertThat(r3.getChatStatus()).isEqualTo("TERMINATED");
                 assertThat(r3.getReply()).isEqualTo("Warning Level 3 Terminated");
         }
+
+        @Test
+        void orchestrate_shouldDetectEnglishOnFirstMessageStartingWithCapitalI() {
+                ChatSessionManager chatSessionManager = new ChatSessionManager();
+                ChatSessionStore sessionStore = new ChatSessionStore();
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor();
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService();
+
+                ChatOrchestrationService service = new ChatOrchestrationService(
+                                intentDetectionService,
+                                chatSessionManager,
+                                sessionStore,
+                                extractor,
+                                missingFieldsService, criteriaValidator,
+                                extractionAgent,
+                                responseAgent,
+                                hotelSearchService,
+                                flightSearchService);
+
+                SearchCriteria criteria1 = new SearchCriteria();
+                criteria1.setLocationOrHotelName("Antalya");
+                when(extractionAgent.extract(any(), any(), any(), any(), anyBoolean()))
+                                .thenReturn(new ExtractionResult("HOTEL_SEARCH", criteria1));
+
+                lenient().when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder().reply("Found hotels").success(true).build());
+                lenient().when(responseAgent.askMissing(any(), any(), any())).thenReturn("Could you please share check-in date?");
+
+                service.orchestrate(ChatRequest.builder()
+                                .message("I want a hotel in Antalya")
+                                .country("Turkey")
+                                .build());
+
+                SearchCriteria savedCriteria1 = sessionStore.getOrCreate(sessionStore.getStoreMap().keySet().iterator().next());
+                assertThat(savedCriteria1.getPreferredLanguage()).isEqualTo("English");
+        }
+
+        @Test
+        void orchestrate_shouldDetectEnglishOnFirstMessageStartingWithIs() {
+                ChatSessionManager chatSessionManager = new ChatSessionManager();
+                ChatSessionStore sessionStore = new ChatSessionStore();
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor();
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService();
+
+                ChatOrchestrationService service = new ChatOrchestrationService(
+                                intentDetectionService,
+                                chatSessionManager,
+                                sessionStore,
+                                extractor,
+                                missingFieldsService, criteriaValidator,
+                                extractionAgent,
+                                responseAgent,
+                                hotelSearchService,
+                                flightSearchService);
+
+                SearchCriteria criteria2 = new SearchCriteria();
+                when(extractionAgent.extract(any(), any(), any(), any(), anyBoolean()))
+                                .thenReturn(new ExtractionResult("HOTEL_SEARCH", criteria2));
+
+                lenient().when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder().reply("Found hotels").success(true).build());
+                lenient().when(responseAgent.askMissing(any(), any(), any())).thenReturn("Where would you like to stay?");
+
+                service.orchestrate(ChatRequest.builder()
+                                .message("Is there a hotel available?")
+                                .country("Turkey")
+                                .build());
+
+                SearchCriteria savedCriteria2 = sessionStore.getOrCreate(sessionStore.getStoreMap().keySet().iterator().next());
+                assertThat(savedCriteria2.getPreferredLanguage()).isEqualTo("English");
+        }
+
+        @Test
+        void orchestrate_shouldFallbackToCountryOnNeutralFirstMessage() {
+                ChatSessionManager chatSessionManager = new ChatSessionManager();
+                ChatSessionStore sessionStore = new ChatSessionStore();
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor();
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService();
+
+                ChatOrchestrationService service = new ChatOrchestrationService(
+                                intentDetectionService,
+                                chatSessionManager,
+                                sessionStore,
+                                extractor,
+                                missingFieldsService, criteriaValidator,
+                                extractionAgent,
+                                responseAgent,
+                                hotelSearchService,
+                                flightSearchService);
+
+                SearchCriteria criteria3 = new SearchCriteria();
+                criteria3.setCheckInDate(java.time.LocalDate.of(2026, 8, 3));
+                when(extractionAgent.extract(any(), any(), any(), any(), anyBoolean()))
+                                .thenReturn(new ExtractionResult("HOTEL_SEARCH", criteria3));
+
+                lenient().when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder().reply("Found hotels").success(true).build());
+                lenient().when(responseAgent.askMissing(any(), any(), any())).thenReturn("Hangi şehirde kalmak istersiniz?");
+
+                service.orchestrate(ChatRequest.builder()
+                                .message("03/08/2026")
+                                .country("Turkey")
+                                .build());
+
+                SearchCriteria savedCriteria3 = sessionStore.getOrCreate(sessionStore.getStoreMap().keySet().iterator().next());
+                assertThat(savedCriteria3.getPreferredLanguage()).isEqualTo("Turkey");
+                assertThat(com.santsg.tourvisio.util.LocaleResolver.resolveLanguageName(savedCriteria3)).isEqualTo("Turkish");
+        }
 }
