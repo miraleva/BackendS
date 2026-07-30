@@ -103,7 +103,7 @@ public class ExtractionAgent {
 
         String schemaDescription = """
                 {
-                  "intent": "Determine the user's intent. Must be one of: HOTEL_SEARCH, FLIGHT_SEARCH, UNKNOWN, OUT_OF_SCOPE",
+                  "intent": "Determine the user's intent. Must be one of: HOTEL_SEARCH, FLIGHT_SEARCH, UNKNOWN, OUT_OF_SCOPE, PROFANITY, IRRELEVANT",
                   "criteria": {
                     // For HOTEL_SEARCH:
                     "locationOrHotelName": "city or hotel name (e.g. Antalya). CRITICAL: If the user did not specify a specific city/province/district/country name (e.g. Antalya, Belek, Paris, Istanbul), DO NOT fill this field; leave it null or return an empty string. General POI/amenity names (such as lunapark, plaj, havalimanı, otogar, müze, merkez, beach, theme park, airport, etc.) are NOT city or location names and must NOT be put into this field.",
@@ -143,11 +143,6 @@ public class ExtractionAgent {
                     multipleFieldsAwaited ? "THESE fields together" : "THIS field");
         }
 
-        // Eksik alanlar tek cümlede birlikte sorulabiliyor (örn. "yetişkin sayısı, çocuk
-        // yaşları" veya "çocuk yaşları, bebek yaşları"), ama oturum bunu TEK bir düz string
-        // olarak tutuyor — modelin hangi sayının hangi alana ait olduğunu akıl yürüterek
-        // (zaten bilinen sayılar, alan tipi, verilen değer adedi gibi ipuçlarıyla) kendi
-        // kendine ayırması gerekiyor; sabit kelime/kombinasyon listesi tutmuyoruz.
         String ageFieldInstruction = """
                 IMPORTANT — splitting a reply across multiple awaited fields: when the field(s) named above
                 include more than one item (comma-separated), a short reply like "5 6" must be split sensibly
@@ -182,6 +177,7 @@ public class ExtractionAgent {
                 Return the output strictly as a single JSON object matching the schema. Do not add any markdown blocks (like ```json), notes, or extra text.
                 If some criteria fields are not found in the message, omit them or set them to null.
 
+                %s%s%s%s
                 CRITICAL LOKASYON / DESTİNASYON KURALI (LOCATION EXTRACTION RULE):
                 - Eğer kullanıcı spesifik bir şehir/il/ilçe/ülke adı (örn: Antalya, Belek, Paris, İstanbul) belirtmediyse, 'locationOrHotelName', 'departureLocation' veya 'arrivalLocation' alanlarını KESİNLİKLE doldurma (null bırak veya boş string dön).
                 - Konaklama süresi / gece sayısı ifadeleri (örn: "5 gece", "3 gün", "5 gece kalacağım", "1 hafta", "night", "stay", vb.) KESİNLİKLE şehir/lokasyon adı DEĞİLDİR. Bu tür süre ifadeleri kesinlikle 'locationOrHotelName', 'departureLocation' veya 'arrivalLocation' alanlarına YAZILMAMALIDIR.
@@ -219,7 +215,12 @@ public class ExtractionAgent {
                 %s
 
                 Response (JSON only):"""
-                .formatted(ageFieldInstruction, currentCountsContext, todayStr, activeIntentContext, awaitingFieldContext, message, schemaDescription);
+                .formatted(
+                    PromptConstants.PROFANITY_GUARDRAIL_RULES,
+                    PromptConstants.IRRELEVANT_MESSAGE_GUARDRAIL_RULES,
+                    PromptConstants.SERVICE_SCOPE_GUARDRAIL_RULES,
+                    PromptConstants.UNKNOWN_MESSAGE_RULES,
+                    ageFieldInstruction, currentCountsContext, todayStr, activeIntentContext, awaitingFieldContext, message, schemaDescription);
 
         String response = geminiExtractionClient.complete(prompt);
 

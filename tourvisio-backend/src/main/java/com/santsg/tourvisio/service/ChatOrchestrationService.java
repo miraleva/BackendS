@@ -167,6 +167,19 @@ public class ChatOrchestrationService {
                     .build();
         }
 
+        // 2.2 Profanity Pre-Check (Immediate termination, 0% downstream search
+        // execution)
+        if (com.santsg.tourvisio.guardrail.ProfanityGuardrail.isProfanity(userMessage)) {
+            sessionState.setChatStatus("TERMINATED");
+            return ChatResponse.builder()
+                    .reply(responseAgent.profanityTerminated(existingCriteria, userMessage))
+                    .sessionId(sessionId)
+                    .searchType("PROFANITY")
+                    .missingFields(List.of())
+                    .chatStatus("TERMINATED")
+                    .build();
+        }
+
         // 2.5 AWAITING_CONFIRM mode check
         if ("AWAITING_CONFIRM".equals(sessionState.getMode()) && sessionState.getLastShownResults() != null) {
             Object matchedItem = matchSelectedItem(userMessage, sessionState.getLastShownResults());
@@ -229,14 +242,21 @@ public class ChatOrchestrationService {
 
         if (extractionResult != null) {
             // Happy path: AI extracted intent and criteria
-            intent = hasActiveSearch ? existingCriteria.getSearchType() : extractionResult.getIntent();
+            String aiIntent = extractionResult.getIntent();
+            if ("PROFANITY".equals(aiIntent) || "IRRELEVANT".equals(aiIntent) || "OUT_OF_SCOPE".equals(aiIntent)) {
+                intent = aiIntent;
+            } else {
+                intent = hasActiveSearch ? existingCriteria.getSearchType() : aiIntent;
+            }
             incoming = extractionResult.getCriteria();
         } else {
             // Fallback path: Orchestrator-managed local rule-based pipeline
-            if (hasActiveSearch) {
-                intent = existingCriteria.getSearchType();
+            String fallbackIntent = intentDetectionService.detectIntent(userMessage);
+            if ("PROFANITY".equals(fallbackIntent) || "IRRELEVANT".equals(fallbackIntent)
+                    || "OUT_OF_SCOPE".equals(fallbackIntent)) {
+                intent = fallbackIntent;
             } else {
-                intent = intentDetectionService.detectIntent(userMessage);
+                intent = hasActiveSearch ? existingCriteria.getSearchType() : fallbackIntent;
             }
             incoming = extractor.extract(userMessage, intent, sessionState.getLastRequestedField());
         }
@@ -277,39 +297,71 @@ public class ChatOrchestrationService {
             incoming.setArrivalLocation(sanitizeLocationField(incoming.getArrivalLocation()));
         }
 
-        // Handle OUT_OF_SCOPE and UNKNOWN immediately if this is a new search session
-        if (!hasActiveSearch) {
-            if ("OUT_OF_SCOPE".equals(intent)) {
-                String chatStatus = sessionState.getChatStatus();
-                return ChatResponse.builder()
-                        .reply(responseAgent.decline(existingCriteria, "TERMINATED".equals(chatStatus), userMessage))
-                        .sessionId(sessionId)
-                        .searchType("OUT_OF_SCOPE")
-                        .missingFields(List.of())
-                        .chatStatus(chatStatus)
-                        .build();
-            }
+        // Handle PROFANITY immediately (Category B)
+        if ("PROFANITY".equals(intent)) {
+            sessionState.setChatStatus("TERMINATED");
+            return ChatResponse.builder()
+                    .reply(responseAgent.profanityTerminated(existingCriteria, userMessage))
+                    .sessionId(sessionId)
+                    .searchType("PROFANITY")
+                    .missingFields(List.of())
+                    .chatStatus("TERMINATED")
+                    .build();
+        }
 
-            if ("UNKNOWN".equals(intent)) {
-                log.info("[Orchestration] UNKNOWN intent. sessionId: {}, messagesSize: {}", sessionId,
-                        (sessionState != null ? sessionState.getMessages().size() : "null"));
-                if (sessionState != null && sessionState.getMessages().size() <= 1) {
-                    return ChatResponse.builder()
-                            .reply(responseAgent.welcome(userMessage))
-                            .sessionId(sessionId)
-                            .searchType("UNKNOWN")
-                            .missingFields(List.of())
-                            .chatStatus("ACTIVE")
-                            .build();
-                }
+        // Handle IRRELEVANT (Category C - Progressive 3-level warnings)
+        if ("IRRELEVANT".equals(intent)) {
+            int warningLevel = sessionState.incrementIrrelevantCount();
+            String chatStatus = sessionState.getChatStatus();
+            String reply = responseAgent.irrelevantWarning(warningLevel, existingCriteria, userMessage);
+            return ChatResponse.builder()
+                    .reply(reply)
+                    .sessionId(sessionId)
+                    .searchType("IRRELEVANT")
+                    .missingFields(List.of())
+                    .chatStatus(chatStatus)
+                    .build();
+        }
+
+        // Handle OUT_OF_SCOPE (Category D - Generic scope reply, ACTIVE session, NO
+        // counter increment)
+        if ("OUT_OF_SCOPE".equals(intent)) {
+            return ChatResponse.builder()
+                    .reply(responseAgent.decline(existingCriteria, false, userMessage))
+                    .sessionId(sessionId)
+                    .searchType("OUT_OF_SCOPE")
+                    .missingFields(List.of())
+                    .chatStatus(sessionState.getChatStatus())
+                    .build();
+        }
+
+        // Handle UNKNOWN / GREETINGS (Category E - Welcome/Clarify reply, ACTIVE
+        // session, NO counter increment)
+        if ("UNKNOWN".equals(intent)) {
+            log.info("[Orchestration] UNKNOWN intent. sessionId: {}, messagesSize: {}", sessionId,
+                    (sessionState != null ? sessionState.getMessages().size() : "null"));
+            if (sessionState != null && sessionState.getMessages().size() <= 1) {
                 return ChatResponse.builder()
-                        .reply(responseAgent.clarify(existingCriteria, userMessage))
+                        .reply(responseAgent.welcome(userMessage))
                         .sessionId(sessionId)
                         .searchType("UNKNOWN")
                         .missingFields(List.of())
                         .chatStatus("ACTIVE")
                         .build();
             }
+            return ChatResponse.builder()
+                    .reply(responseAgent.clarify(existingCriteria, userMessage))
+                    .sessionId(sessionId)
+                    .searchType("UNKNOWN")
+                    .missingFields(List.of())
+                    .chatStatus("ACTIVE")
+                    .build();
+        }
+
+        // Reset irrelevant counter whenever user provides valid HOTEL_SEARCH /
+        // FLIGHT_SEARCH input
+        if ("HOTEL_SEARCH".equals(intent) || "FLIGHT_SEARCH".equals(intent)) {
+            sessionState.resetIrrelevantCount();
         }
 
         // Conversational adjustment based on lastRequestedField

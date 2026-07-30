@@ -49,12 +49,13 @@ public class ResponseAgent {
         String targetLanguage = resolveLanguageName(criteria);
 
         String prompt = String.format(
-                "You are a warm, polite, and professional travel assistant (tourism advisor).\n" +
-                "Write a hospitable response declining the user's out-of-scope travel query.\n" +
-                "Explain politely that we can only assist with hotel search, flight search, and travel booking.\n" +
+                "You are a warm, polite, and professional travel assistant.\n" +
+                "The user made a request outside of your supported services (e.g., bus tickets, train tickets, weather, car rental, visa, etc.).\n" +
+                "Write a hospitable, natural response explaining that this assistant currently supports hotel reservations and flight bookings.\n" +
+                "Invite them to ask for help with hotel or flight searches if needed.\n" +
                 "Write the response in %s — matching the user's language.%s\n" +
-                "Keep a helpful tone, max 1 emoji. Context status: %s.\n" +
-                "Return ONLY the response itself, no extra notes or introductions.",
+                "Keep a helpful, friendly tone, max 1-2 emojis. Context status: %s.\n" +
+                "Return ONLY the response text itself, no extra notes.",
                 targetLanguage, userMessageClause(userMessage), isTerminated ? "TERMINATED" : "ACTIVE"
         );
 
@@ -68,6 +69,68 @@ public class ResponseAgent {
         }
 
         String key = isTerminated ? "out.of.scope.terminated" : "out.of.scope";
+        return messageSource.getMessage(key, null, locale);
+    }
+
+    public String profanityTerminated(SearchCriteria criteria, String userMessage) {
+        Locale locale = criteria != null ? resolveLocale(criteria) : detectFallbackLocale(userMessage);
+        String targetLanguage = criteria != null ? resolveLanguageName(criteria) : "Turkish";
+
+        String prompt = String.format(
+                "The user sent a message containing profanity, insults, or abusive language: \"%s\".\n" +
+                "Write a firm, polite, and professional message terminating the conversation due to inappropriate language.\n" +
+                "Inform the user that the conversation is ended, and that if they need assistance in the future, they can start a new conversation.\n" +
+                "Write the response in %s.\n" +
+                "Return ONLY the response text itself, no extra notes.",
+                userMessage != null ? userMessage.replace("\"", "\\\"") : "", targetLanguage
+        );
+
+        try {
+            String aiResponse = geminiClient.generate(prompt);
+            if (isValidResponse(aiResponse)) {
+                return aiResponse.trim();
+            }
+        } catch (Exception e) {
+            log.warn("[ResponseAgent] Profanity termination AI generation failed, using fallback: {}", e.getMessage());
+        }
+
+        return messageSource.getMessage("error.profanity.terminated", null, locale);
+    }
+
+    public String irrelevantWarning(int warningLevel, SearchCriteria criteria, String userMessage) {
+        Locale locale = criteria != null ? resolveLocale(criteria) : detectFallbackLocale(userMessage);
+        String targetLanguage = criteria != null ? resolveLanguageName(criteria) : "Turkish";
+
+        String levelInstruction;
+        if (warningLevel == 1) {
+            levelInstruction = "Level 1 warning: Politely indicate that the message could not be understood. Enthusiastically invite the user to share their hotel or flight travel plans (e.g. destination, travel dates, or guest count). Vary wording naturally.";
+        } else if (warningLevel == 2) {
+            levelInstruction = "Level 2 warning: Politely explain that you still cannot understand their request. Mention that the conversation will be ended soon if no booking-related request is provided.";
+        } else {
+            levelInstruction = "Level 3 final warning: Politely terminate the conversation because no valid request was received. Invite them to start a new chat if they need help in the future.";
+        }
+
+        String prompt = String.format(
+                "The user sent an unreadable, random, or gibberish message: \"%s\".\n" +
+                "%s\n" +
+                "Write the response in %s matching the user's language.\n" +
+                "Tone: Professional and helpful, max 1-2 emojis. Avoid repeating identical robotic sentences.\n" +
+                "Return ONLY the response text itself.",
+                userMessage != null ? userMessage.replace("\"", "\\\"") : "", levelInstruction, targetLanguage
+        );
+
+        try {
+            String aiResponse = geminiClient.generate(prompt);
+            if (isValidResponse(aiResponse)) {
+                return aiResponse.trim();
+            }
+        } catch (Exception e) {
+            log.warn("[ResponseAgent] Irrelevant warning Level {} AI generation failed, using fallback: {}", warningLevel, e.getMessage());
+        }
+
+        String key = (warningLevel == 1) ? "irrelevant.warning.1"
+                : (warningLevel == 2) ? "irrelevant.warning.2"
+                : "irrelevant.warning.3";
         return messageSource.getMessage(key, null, locale);
     }
 

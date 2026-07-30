@@ -206,6 +206,20 @@ public class ChatSessionManager {
             this.outOfScopeCount = outOfScopeCount;
         }
 
+        public int getIrrelevantCount() { return outOfScopeCount; }
+
+        public int incrementIrrelevantCount() {
+            this.outOfScopeCount++;
+            if (this.outOfScopeCount >= 3) {
+                this.chatStatus = "TERMINATED";
+            }
+            return this.outOfScopeCount;
+        }
+
+        public void resetIrrelevantCount() {
+            this.outOfScopeCount = 0;
+        }
+
         public void incrementOutOfScopeCount() {
             this.outOfScopeCount++;
             if (this.outOfScopeCount >= 3) {
