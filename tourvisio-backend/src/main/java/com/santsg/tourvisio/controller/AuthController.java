@@ -414,7 +414,6 @@ public class AuthController {
         log.info("Destination Email: {}", email);
         log.info("Generated Verification Code: {}", otpCode);
         log.info("==========================================");
-        System.out.println("\n>>> [SANNY EMAIL OTP] GÖNDERİLEN OTP: " + otpCode + " -> Target: " + email + " <<<\n");
 
         return ResponseEntity.ok(Map.of(
                 "success", true,

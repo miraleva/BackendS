@@ -69,6 +69,45 @@ public class Reservation {
     @Column(name = "image_url", length = 1000)
     private String imageUrl;
 
+    @Column(name = "flight_number")
+    private String flightNumber;
+
+    @Column(name = "departure_airport_code")
+    private String departureAirportCode;
+
+    @Column(name = "arrival_airport_code")
+    private String arrivalAirportCode;
+
+    @Column(name = "departure_city")
+    private String departureCity;
+
+    @Column(name = "arrival_city")
+    private String arrivalCity;
+
+    @Column(name = "departure_time")
+    private String departureTime;
+
+    @Column(name = "arrival_time")
+    private String arrivalTime;
+
+    @Column(name = "ticket_class")
+    private String ticketClass;
+
+    @Column(name = "baggage_allowance")
+    private String baggageAllowance;
+
+    @Column(name = "room_type")
+    private String roomType;
+
+    @Column(name = "board_type")
+    private String boardType;
+
+    @Column(name = "check_in_time")
+    private String checkInTime;
+
+    @Column(name = "check_out_time")
+    private String checkOutTime;
+
     @OneToMany(mappedBy = "reservation", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @Builder.Default
     private List<Passenger> passengers = new ArrayList<>();

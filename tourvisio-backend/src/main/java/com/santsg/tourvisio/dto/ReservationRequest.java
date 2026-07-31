@@ -62,4 +62,44 @@ public class ReservationRequest {
     private String imageUrl;
 
     private String lang;
+
+    private String flightNumber;
+
+    private String departureAirportCode;
+
+    private String arrivalAirportCode;
+
+    private String departureCity;
+
+    private String arrivalCity;
+
+    private String departureTime;
+
+    private String arrivalTime;
+
+    private String ticketClass;
+
+    private String baggageAllowance;
+
+    private String roomType;
+
+    private String boardType;
+
+    private String checkInTime;
+
+    private String checkOutTime;
+
+    public ReservationRequest(String type, String itemName, String destination, LocalDate startDate, LocalDate endDate, Double totalPrice, String currency, List<PassengerRequest> passengers, String chatSessionId, String imageUrl, String lang) {
+        this.type = type;
+        this.itemName = itemName;
+        this.destination = destination;
+        this.startDate = startDate;
+        this.endDate = endDate;
+        this.totalPrice = totalPrice;
+        this.currency = currency;
+        this.passengers = passengers;
+        this.chatSessionId = chatSessionId;
+        this.imageUrl = imageUrl;
+        this.lang = lang;
+    }
 }

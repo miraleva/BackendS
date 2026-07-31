@@ -264,11 +264,17 @@ public class ExtractionAgent {
                 }
 
                 result.getCriteria().setSearchType(result.getIntent());
+                SearchCriteria c = result.getCriteria();
                 log.info("[ExtractionAgent] Parsed message: \"{}\"", message);
-                log.info("[ExtractionAgent] -> checkInDate: {}", result.getCriteria().getCheckInDate());
-                log.info("[ExtractionAgent] -> checkOutDate: {}", result.getCriteria().getCheckOutDate());
-                log.info("[ExtractionAgent] -> passengerCount: {}", result.getCriteria().getPassengerCount());
-                log.info("[ExtractionAgent] -> childAges: {}", result.getCriteria().getChildAges());
+                log.info("[ExtractionAgent] Extraction Result | Intent: {}", result.getIntent());
+                log.info("[ExtractionAgent]   ├── Lokasyon/Yer : Hotel/Konum: {}, Kalkış: {}, Varış: {}",
+                        c.getLocationOrHotelName(), c.getDepartureLocation(), c.getArrivalLocation());
+                log.info("[ExtractionAgent]   ├── Tarihler     : Otel (Giriş: {}, Çıkış: {}) | Uçak (Gidiş: {}, Dönüş: {})",
+                        c.getCheckInDate(), c.getCheckOutDate(), c.getDepartureDate(), c.getReturnDate());
+                log.info("[ExtractionAgent]   ├── Kişi Sayıları: Yetişkin: {}, Çocuk: {} (Yaşlar: {}), Bebek: {} (Yaşlar: {}), Toplam Yolcu: {}, Oda: {}",
+                        c.getAdultCount(), c.getChildCount(), c.getChildAges(), c.getInfantCount(), c.getInfantAges(), c.getPassengerCount(), c.getRoomCount());
+                log.info("[ExtractionAgent]   └── Detaylar     : Min Fiyat: {}, Max Fiyat: {}, Min Yıldız: {}, Para Birimi: {}",
+                        c.getMinPrice(), c.getMaxPrice(), c.getMinStars(), c.getCurrency());
             }
             log.debug("[ExtractionAgent] Extraction successful: {}", result);
             return result;

@@ -307,7 +307,47 @@ public class TourVisioFlightApiClient {
         leg.arrivalTime = item.getArrival() != null ? item.getArrival().getDate() : null;
 
         int legCount = item.getSegments() != null ? item.getSegments().size() : 1;
-        leg.transfers = legCount <= 1 ? "Direkt Uçuş" : (legCount - 1) + " Aktarmalı";
+        if (legCount <= 1) {
+            leg.transfers = "Direkt Uçuş";
+        } else {
+            String layoverCity = null;
+            try {
+                TourVisioFlightSearchResponse.Segment seg0 = item.getSegments().get(0);
+                if (seg0.getArrival() != null) {
+                    if (seg0.getArrival().getCity() != null && seg0.getArrival().getCity().getName() != null) {
+                        layoverCity = seg0.getArrival().getCity().getName();
+                    } else if (seg0.getArrival().getAirport() != null && seg0.getArrival().getAirport().getName() != null) {
+                        layoverCity = seg0.getArrival().getAirport().getName();
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            String layoverDuration = null;
+            try {
+                String seg0Arr = item.getSegments().get(0).getArrival().getDate();
+                String seg1Dep = item.getSegments().get(1).getDeparture().getDate();
+                if (seg0Arr != null && seg1Dep != null) {
+                    java.time.LocalDateTime t0 = java.time.LocalDateTime.parse(seg0Arr);
+                    java.time.LocalDateTime t1 = java.time.LocalDateTime.parse(seg1Dep);
+                    long minutes = java.time.temporal.ChronoUnit.MINUTES.between(t0, t1);
+                    if (minutes > 0) {
+                        long h = minutes / 60;
+                        long m = minutes % 60;
+                        layoverDuration = h > 0 ? (h + "s " + m + "dk") : (m + "dk");
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            StringBuilder sb = new StringBuilder((legCount - 1) + " Aktarmalı");
+            if (layoverCity != null || layoverDuration != null) {
+                sb.append(" (");
+                if (layoverCity != null) sb.append(layoverCity);
+                if (layoverCity != null && layoverDuration != null) sb.append(" - ");
+                if (layoverDuration != null) sb.append(layoverDuration);
+                sb.append(")");
+            }
+            leg.transfers = sb.toString();
+        }
 
         leg.baggage = "Bilgi yok";
         if (item.getSegments() != null && !item.getSegments().isEmpty()

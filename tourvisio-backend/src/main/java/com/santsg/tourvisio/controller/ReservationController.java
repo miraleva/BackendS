@@ -79,4 +79,11 @@ public class ReservationController {
         reservationService.cancelReservation(id);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/{id}/email")
+    @Operation(summary = "Send confirmation email for reservation", description = "Dispatches reservation summary details to the customer's email address.")
+    public ResponseEntity<Void> sendReservationEmail(@PathVariable Long id, @RequestParam(required = false) String email) {
+        reservationService.sendEmailForReservation(id, email);
+        return ResponseEntity.ok().build();
+    }
 }

@@ -130,6 +130,19 @@ public class ReservationService {
                 .currency(request.getCurrency())
                 .chatSessionId(request.getChatSessionId())
                 .imageUrl(request.getImageUrl())
+                .flightNumber(request.getFlightNumber())
+                .departureAirportCode(request.getDepartureAirportCode())
+                .arrivalAirportCode(request.getArrivalAirportCode())
+                .departureCity(request.getDepartureCity())
+                .arrivalCity(request.getArrivalCity())
+                .departureTime(request.getDepartureTime())
+                .arrivalTime(request.getArrivalTime())
+                .ticketClass(request.getTicketClass())
+                .baggageAllowance(request.getBaggageAllowance())
+                .roomType(request.getRoomType())
+                .boardType(request.getBoardType())
+                .checkInTime(request.getCheckInTime())
+                .checkOutTime(request.getCheckOutTime())
                 .build();
 
         List<Passenger> passengers = new ArrayList<>();
@@ -177,6 +190,19 @@ public class ReservationService {
         reservation.setCurrency(request.getCurrency());
         reservation.setChatSessionId(request.getChatSessionId());
         reservation.setImageUrl(request.getImageUrl());
+        reservation.setFlightNumber(request.getFlightNumber());
+        reservation.setDepartureAirportCode(request.getDepartureAirportCode());
+        reservation.setArrivalAirportCode(request.getArrivalAirportCode());
+        reservation.setDepartureCity(request.getDepartureCity());
+        reservation.setArrivalCity(request.getArrivalCity());
+        reservation.setDepartureTime(request.getDepartureTime());
+        reservation.setArrivalTime(request.getArrivalTime());
+        reservation.setTicketClass(request.getTicketClass());
+        reservation.setBaggageAllowance(request.getBaggageAllowance());
+        reservation.setRoomType(request.getRoomType());
+        reservation.setBoardType(request.getBoardType());
+        reservation.setCheckInTime(request.getCheckInTime());
+        reservation.setCheckOutTime(request.getCheckOutTime());
 
         // Cascade ALL + orphanRemoval: clear and re-add
         reservation.getPassengers().clear();
@@ -196,6 +222,27 @@ public class ReservationService {
         }
 
         return reservationRepository.save(reservation);
+    }
+
+    public void sendEmailForReservation(Long reservationId, String overrideEmail) {
+        Reservation reservation = getReservationById(reservationId);
+        String recipientEmail = overrideEmail;
+
+        if ((recipientEmail == null || recipientEmail.isBlank()) && reservation.getPassengers() != null && !reservation.getPassengers().isEmpty()) {
+            Passenger primary = reservation.getPassengers().get(0);
+            recipientEmail = primary.getEmail();
+        }
+
+        if (recipientEmail == null || recipientEmail.isBlank()) {
+            recipientEmail = "destek@sanny.com";
+        }
+
+        String customerName = reservation.getPrimaryGuestName();
+        if (customerName == null || customerName.isBlank()) {
+            customerName = "Değerli Misafirimiz";
+        }
+
+        emailService.sendReservationConfirmationEmail(reservation, recipientEmail, customerName, "tr");
     }
 
     public List<Reservation> getAllReservations() {
