@@ -40,6 +40,7 @@ public class ChatCriteriaSummary {
     private Integer passengerCount;
     private String tripType;
 
+    private String searchType;
     private String currency;
 
     private Double maxPrice;
@@ -51,6 +52,7 @@ public class ChatCriteriaSummary {
             return null;
         }
         return ChatCriteriaSummary.builder()
+                .searchType(criteria.getSearchType())
                 .locationOrHotelName(criteria.getLocationOrHotelName())
                 .checkInDate(criteria.getCheckInDate())
                 .checkOutDate(criteria.getCheckOutDate())

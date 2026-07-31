@@ -191,14 +191,45 @@ public class SearchCriteria {
             this.passengerCount = incoming.getPassengerCount();
         if (incoming.getTripType() != null)
             this.tripType = incoming.getTripType();
-        if (incoming.getMaxPrice() != null)
-            this.maxPrice = incoming.getMaxPrice();
-        if (incoming.getMinPrice() != null)
-            this.minPrice = incoming.getMinPrice();
         if (incoming.getMinStars() != null)
             this.minStars = incoming.getMinStars();
 
+        // Combined search auto-synchronization between hotel & flight parameters
+        if ("COMBINED_SEARCH".equals(this.searchType)) {
+            syncCombinedFields();
+        }
+
         reconcileAgeBuckets();
+    }
+
+    public void syncCombinedFields() {
+        if (this.arrivalLocation == null && this.locationOrHotelName != null) {
+            this.arrivalLocation = this.locationOrHotelName;
+        } else if (this.locationOrHotelName == null && this.arrivalLocation != null) {
+            this.locationOrHotelName = this.arrivalLocation;
+        }
+
+        if (this.departureDate == null && this.checkInDate != null) {
+            this.departureDate = this.checkInDate;
+        } else if (this.checkInDate == null && this.departureDate != null) {
+            this.checkInDate = this.departureDate;
+        }
+
+        if (this.returnDate == null && this.checkOutDate != null) {
+            this.returnDate = this.checkOutDate;
+        } else if (this.checkOutDate == null && this.returnDate != null) {
+            this.checkOutDate = this.returnDate;
+        }
+
+        if (this.passengerCount == null && this.adultCount != null) {
+            this.passengerCount = this.adultCount;
+        } else if (this.adultCount == null && this.passengerCount != null) {
+            this.adultCount = this.passengerCount;
+        }
+
+        if (this.returnDate != null && this.tripType == null) {
+            this.tripType = "ROUND_TRIP";
+        }
     }
 
     /**
@@ -269,18 +300,23 @@ public class SearchCriteria {
      * {@code null}.
      */
     public HotelSearchRequest toHotelSearchRequest() {
-        if (locationOrHotelName == null || checkInDate == null
-                || checkOutDate == null || adultCount == null || currency == null
+        String effLocation = locationOrHotelName != null ? locationOrHotelName : arrivalLocation;
+        LocalDate effCheckIn = checkInDate != null ? checkInDate : departureDate;
+        LocalDate effCheckOut = checkOutDate != null ? checkOutDate : returnDate;
+        Integer effAdults = adultCount != null ? adultCount : passengerCount;
+
+        if (effLocation == null || effCheckIn == null
+                || effCheckOut == null || effAdults == null || currency == null
                 || roomCount == null
                 || (childCount != null && childCount > 0 && (childAges == null || childAges.isEmpty() || childAges.size() != childCount))
                 || (infantCount != null && infantCount > 0 && (infantAges == null || infantAges.isEmpty() || infantAges.size() != infantCount))) {
             return null;
         }
         HotelSearchRequest req = new HotelSearchRequest();
-        req.setLocationOrHotelName(locationOrHotelName);
-        req.setCheckInDate(checkInDate);
-        req.setCheckOutDate(checkOutDate);
-        req.setAdultCount(adultCount);
+        req.setLocationOrHotelName(effLocation);
+        req.setCheckInDate(effCheckIn);
+        req.setCheckOutDate(effCheckOut);
+        req.setAdultCount(effAdults);
         req.setChildCount(childCount);
         req.setCurrency(currency);
         req.setChildAges(childAges);
@@ -290,31 +326,39 @@ public class SearchCriteria {
         return req;
     }
 
-
-
     /**
      * Tüm uçak alanları doluysa {@link FlightSearchRequest} döner; aksi hâlde
      * {@code null}.
      */
     public FlightSearchRequest toFlightSearchRequest() {
-        if (departureLocation == null || arrivalLocation == null
-                || departureDate == null || passengerCount == null
-                || tripType == null || currency == null) {
+        String effectiveTripType = tripType;
+        if (effectiveTripType == null) {
+            if ("COMBINED_SEARCH".equals(searchType)) {
+                effectiveTripType = "ONE_WAY";
+            } else {
+                return null;
+            }
+        }
+
+        String effArrival = arrivalLocation != null ? arrivalLocation : locationOrHotelName;
+        LocalDate effDepartureDate = departureDate != null ? departureDate : checkInDate;
+        Integer effPassengers = passengerCount != null ? passengerCount : (adultCount != null && adultCount > 0 ? adultCount : 1);
+
+        if (departureLocation == null || effArrival == null
+                || effDepartureDate == null || effPassengers == null
+                || currency == null) {
             return null;
         }
         FlightSearchRequest req = new FlightSearchRequest();
         req.setDepartureLocation(departureLocation);
-        req.setArrivalLocation(arrivalLocation);
-        req.setDepartureDate(departureDate);
-        // passengerCount tarihsel olarak "yetişkin sayısı" gibi kullanılıyor; çocuk/bebek
-        // ayrı yolcu tipleriyle (2=Child, 3=Infant) gönderilir. adultCount doluysa onu
-        // tercih ediyoruz ki "2 yetişkin 1 çocuk" derken çocuk yetişkin koltuğu sayılmasın.
-        req.setPassengerCount(adultCount != null && adultCount > 0 ? adultCount : passengerCount);
-        req.setTripType(tripType);
+        req.setArrivalLocation(effArrival);
+        req.setDepartureDate(effDepartureDate);
+        req.setPassengerCount(effPassengers);
+        req.setTripType(effectiveTripType);
         req.setCurrency(currency);
         // Set new fields
         req.setDepartureAirport(departureLocation);
-        req.setArrivalAirport(arrivalLocation);
+        req.setArrivalAirport(effArrival);
         req.setReturnDate(returnDate);
         req.setChildCount(childCount);
         req.setChildAges(childAges);

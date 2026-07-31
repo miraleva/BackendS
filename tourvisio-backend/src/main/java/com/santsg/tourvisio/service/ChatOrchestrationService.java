@@ -245,6 +245,11 @@ public class ChatOrchestrationService {
             String aiIntent = extractionResult.getIntent();
             if ("PROFANITY".equals(aiIntent) || "IRRELEVANT".equals(aiIntent) || "OUT_OF_SCOPE".equals(aiIntent)) {
                 intent = aiIntent;
+            } else if ("COMBINED_SEARCH".equals(aiIntent)) {
+                // "Otel ve uçak da istiyorum" is an explicit expansion of the
+                // current search. Do not silently keep the old single-search
+                // intent just because the session already has one.
+                intent = aiIntent;
             } else {
                 intent = hasActiveSearch ? existingCriteria.getSearchType() : aiIntent;
             }
@@ -254,6 +259,8 @@ public class ChatOrchestrationService {
             String fallbackIntent = intentDetectionService.detectIntent(userMessage);
             if ("PROFANITY".equals(fallbackIntent) || "IRRELEVANT".equals(fallbackIntent)
                     || "OUT_OF_SCOPE".equals(fallbackIntent)) {
+                intent = fallbackIntent;
+            } else if ("COMBINED_SEARCH".equals(fallbackIntent)) {
                 intent = fallbackIntent;
             } else {
                 intent = hasActiveSearch ? existingCriteria.getSearchType() : fallbackIntent;
@@ -358,9 +365,8 @@ public class ChatOrchestrationService {
                     .build();
         }
 
-        // Reset irrelevant counter whenever user provides valid HOTEL_SEARCH /
-        // FLIGHT_SEARCH input
-        if ("HOTEL_SEARCH".equals(intent) || "FLIGHT_SEARCH".equals(intent)) {
+        // Reset irrelevant counter whenever user provides valid HOTEL_SEARCH / FLIGHT_SEARCH / COMBINED_SEARCH input
+        if ("HOTEL_SEARCH".equals(intent) || "FLIGHT_SEARCH".equals(intent) || "COMBINED_SEARCH".equals(intent)) {
             sessionState.resetIrrelevantCount();
         }
 
@@ -399,8 +405,15 @@ public class ChatOrchestrationService {
             incoming.setPassengerCount(incoming.getAdultCount());
         }
 
+        if ("COMBINED_SEARCH".equals(intent)) {
+            existingCriteria.setSearchType("COMBINED_SEARCH");
+        }
+
         // 6. Yeni kriterler önceki session kriterleri üzerine birleştir
         existingCriteria.mergeWith(incoming);
+        if ("COMBINED_SEARCH".equals(intent)) {
+            existingCriteria.syncCombinedFields();
+        }
         // Bebek/çocuk/yetişkin yaş yeniden-sınıflandırma notu varsa bir kez tüketilir
         // (aşağıdaki cevaplardan hangisi dönerse ona eklenir), tekrar gösterilmemesi
         // için criteria üzerinden temizlenir.
@@ -928,6 +941,35 @@ public class ChatOrchestrationService {
             searchResponse = hotelSearchService.searchFromCriteria(criteria);
         } else if ("FLIGHT_SEARCH".equals(intent)) {
             searchResponse = flightSearchService.searchFromCriteria(criteria);
+        } else if ("COMBINED_SEARCH".equals(intent)) {
+            // Each provider receives its own criteria object. This prevents a
+            // provider-specific normalization/retry from leaking into the other
+            // search and makes a failed provider an isolated failure rather than
+            // a failed chat request.
+            ChatSearchResponse hotelRes = searchHotelForCombined(criteria.copy());
+            ChatSearchResponse flightRes = searchFlightForCombined(criteria.copy());
+
+            java.util.List<Object> combinedList = new java.util.ArrayList<>();
+            if (hotelRes.isSuccess() && hotelRes.getResults() != null) {
+                combinedList.addAll(hotelRes.getResults());
+            }
+            if (flightRes.isSuccess() && flightRes.getResults() != null) {
+                combinedList.addAll(flightRes.getResults());
+            }
+
+            boolean isSuccess = (hotelRes.isSuccess() && hotelRes.getResults() != null && !hotelRes.getResults().isEmpty())
+                    || (flightRes.isSuccess() && flightRes.getResults() != null && !flightRes.getResults().isEmpty());
+
+            String combinedReply = isSuccess
+                    ? "Aradığınız tarihler için uygun otel ve uçuş seçeneklerini listeliyorum:"
+                    : "Belirtilen kriterlere uygun otel veya uçuş bulunamadı.";
+
+            searchResponse = ChatSearchResponse.builder()
+                    .reply(combinedReply)
+                    .searchType("COMBINED_SEARCH")
+                    .success(isSuccess)
+                    .results(combinedList)
+                    .build();
         } else {
             searchResponse = ChatSearchResponse.builder()
                     .reply("Arama türü tanımlanamadı.")
@@ -990,6 +1032,34 @@ public class ChatOrchestrationService {
                 .success(searchResponse.isSuccess())
                 .results(searchResponse.getResults())
                 .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(criteria))
+                .build();
+    }
+
+    private ChatSearchResponse searchHotelForCombined(SearchCriteria criteria) {
+        try {
+            ChatSearchResponse response = hotelSearchService.searchFromCriteria(criteria);
+            return response != null ? response : failedCombinedSearchResponse("HOTEL_SEARCH");
+        } catch (Exception e) {
+            log.error("[Orchestration] Combined hotel search failed", e);
+            return failedCombinedSearchResponse("HOTEL_SEARCH");
+        }
+    }
+
+    private ChatSearchResponse searchFlightForCombined(SearchCriteria criteria) {
+        try {
+            ChatSearchResponse response = flightSearchService.searchFromCriteria(criteria);
+            return response != null ? response : failedCombinedSearchResponse("FLIGHT_SEARCH");
+        } catch (Exception e) {
+            log.error("[Orchestration] Combined flight search failed", e);
+            return failedCombinedSearchResponse("FLIGHT_SEARCH");
+        }
+    }
+
+    private ChatSearchResponse failedCombinedSearchResponse(String searchType) {
+        return ChatSearchResponse.builder()
+                .searchType(searchType)
+                .success(false)
+                .results(List.of())
                 .build();
     }
 

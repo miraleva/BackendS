@@ -109,6 +109,65 @@ class ChatOrchestrationServiceTest {
         }
 
         @Test
+        void orchestrate_shouldKeepHotelResultsWhenCombinedFlightSearchFails() {
+                ChatSessionManager chatSessionManager = new ChatSessionManager();
+                ChatSessionStore sessionStore = new ChatSessionStore();
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor();
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService();
+
+                ChatOrchestrationService service = new ChatOrchestrationService(
+                                intentDetectionService,
+                                chatSessionManager,
+                                sessionStore,
+                                extractor,
+                                missingFieldsService, criteriaValidator,
+                                extractionAgent,
+                                responseAgent,
+                                hotelSearchService,
+                                flightSearchService);
+
+                SearchCriteria criteria = new SearchCriteria();
+                criteria.setLocationOrHotelName("Antalya");
+                criteria.setDepartureLocation("Istanbul");
+                criteria.setArrivalLocation("Antalya");
+                criteria.setCheckInDate(java.time.LocalDate.of(2026, 8, 15));
+                criteria.setCheckOutDate(java.time.LocalDate.of(2026, 8, 20));
+                criteria.setDepartureDate(java.time.LocalDate.of(2026, 8, 15));
+                criteria.setReturnDate(java.time.LocalDate.of(2026, 8, 20));
+                criteria.setAdultCount(2);
+                criteria.setPassengerCount(2);
+                criteria.setChildCount(0);
+                criteria.setRoomCount(1);
+                criteria.setCurrency("EUR");
+                criteria.setTripType("ROUND_TRIP");
+
+                when(extractionAgent.extract(any(), any(), any(), any()))
+                                .thenReturn(new ExtractionResult("COMBINED_SEARCH", criteria));
+                when(hotelSearchService.searchFromCriteria(any())).thenReturn(ChatSearchResponse.builder()
+                                .reply("Hotels found")
+                                .searchType("HOTEL_SEARCH")
+                                .success(true)
+                                .results(List.of("Hotel sample"))
+                                .build());
+                when(flightSearchService.searchFromCriteria(any()))
+                                .thenThrow(new RuntimeException("flight provider unavailable"));
+                when(responseAgent.summarize(any(), any(), any(), any(), any(), anyInt(), anyInt()))
+                                .thenReturn("Hotel result is still available");
+
+                ChatResponse response = service.orchestrate(ChatRequest.builder()
+                                .message("Antalya için otel ve uçak istiyorum")
+                                .sessionId("combined-session-test")
+                                .build());
+
+                assertThat(response.getSearchType()).isEqualTo("COMBINED_SEARCH");
+                assertThat(response.getSuccess()).isTrue();
+                assertThat(response.getResults()).hasSize(1);
+                assertThat(response.getResults().getFirst()).isEqualTo("Hotel sample");
+                verify(hotelSearchService).searchFromCriteria(any());
+                verify(flightSearchService).searchFromCriteria(any());
+        }
+
+        @Test
         void orchestrate_shouldThrowForbiddenWhenSessionBelongsToAnotherUser() {
                 ChatSessionManager chatSessionManager = new ChatSessionManager();
                 ChatSessionStore sessionStore = new ChatSessionStore();

@@ -58,6 +58,33 @@ public class CriteriaMissingFieldsService {
                 missing.add("dönüş tarihi");
             }
             if (isBlank(criteria.getCurrency()))          missing.add("para birimi");
+        } else if ("COMBINED_SEARCH".equals(searchType)) {
+            boolean childAgesPending = criteria.getChildCount() != null
+                    && criteria.getChildCount() > 0
+                    && (criteria.getChildAges() == null || criteria.getChildAges().isEmpty() || criteria.getChildAges().size() != criteria.getChildCount());
+            boolean infantAgesPending = criteria.getInfantCount() != null
+                    && criteria.getInfantCount() > 0
+                    && (criteria.getInfantAges() == null || criteria.getInfantAges().isEmpty() || criteria.getInfantAges().size() != criteria.getInfantCount());
+
+            if (childAgesPending) missing.add("çocuk yaşları");
+            if (infantAgesPending) missing.add("bebek yaşları");
+
+            if (isBlank(criteria.getDepartureLocation())) missing.add("kalkış noktası (nereden uçacaksınız)");
+            if (isBlank(criteria.getLocationOrHotelName()) && isBlank(criteria.getArrivalLocation())) {
+                missing.add("varış noktası / otel konumu");
+            }
+            if (criteria.getCheckInDate() == null && criteria.getDepartureDate() == null) {
+                missing.add("giriş/gidiş tarihi");
+            }
+            if (criteria.getCheckOutDate() == null && criteria.getReturnDate() == null) {
+                missing.add("çıkış/dönüş tarihi");
+            }
+            if (criteria.getRoomCount() == null) missing.add("oda sayısı");
+            if (criteria.getChildCount() == null) missing.add("çocuk sayısı");
+            if (!childAgesPending && !infantAgesPending && criteria.getAdultCount() == null && criteria.getPassengerCount() == null) {
+                missing.add("yetişkin / yolcu sayısı");
+            }
+            if (isBlank(criteria.getCurrency())) missing.add("para birimi");
         }
 
         return missing;

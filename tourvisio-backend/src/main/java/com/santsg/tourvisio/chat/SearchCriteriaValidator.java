@@ -69,33 +69,28 @@ public class SearchCriteriaValidator {
         }
 
         // Adults
-        if ("HOTEL_SEARCH".equals(criteria.getSearchType()) && criteria.getAdultCount() != null && criteria.getAdultCount() == 0) {
+        boolean isCombined = "COMBINED_SEARCH".equals(criteria.getSearchType());
+        if (("HOTEL_SEARCH".equals(criteria.getSearchType()) || isCombined) && criteria.getAdultCount() != null && criteria.getAdultCount() == 0) {
             return new ValidationResult(false, "NO_ADULTS");
         }
 
-        // Uçakta 0 yolcu ile arama yapılması (hotel'deki NO_ADULTS'un uçak karşılığı) —
-        // aksi hâlde 0 yolcu ile TourVisio'ya boş/anlamsız bir arama gidiyordu.
-        if ("FLIGHT_SEARCH".equals(criteria.getSearchType()) && criteria.getPassengerCount() != null && criteria.getPassengerCount() == 0) {
+        if (("FLIGHT_SEARCH".equals(criteria.getSearchType()) || isCombined) && criteria.getPassengerCount() != null && criteria.getPassengerCount() == 0) {
             return new ValidationResult(false, "NO_ADULTS");
         }
 
         // Üst sınırlar: otel için toplam misafir (yetişkin+çocuk+bebek) en fazla 8,
         // uçak için yolcu sayısı en fazla 9 kabul edilir.
-        if ("HOTEL_SEARCH".equals(criteria.getSearchType())) {
+        if ("HOTEL_SEARCH".equals(criteria.getSearchType()) || isCombined) {
             int totalGuests = nz(criteria.getAdultCount()) + nz(criteria.getChildCount()) + nz(criteria.getInfantCount());
             if (totalGuests > MAX_HOTEL_GUESTS) {
                 return new ValidationResult(false, "TOO_MANY_GUESTS");
             }
-            // Oda sayısı kişi sayısını (veya makul bir üst sınırı) aşamaz — aksi hâlde
-            // her oda TourVisio'ya TAM yetişkin sayısıyla gönderiliyor (bkz.
-            // TourVisioRequestMapper), yani "2 kişi, 50 oda" aslında 100 kişilik yer
-            // aramaya dönüşüyordu.
             if (criteria.getRoomCount() != null && totalGuests > 0
                     && (criteria.getRoomCount() > totalGuests || criteria.getRoomCount() > MAX_ROOM_COUNT)) {
                 return new ValidationResult(false, "TOO_MANY_ROOMS");
             }
         }
-        if ("FLIGHT_SEARCH".equals(criteria.getSearchType()) && nz(criteria.getPassengerCount()) > MAX_FLIGHT_PASSENGERS) {
+        if (("FLIGHT_SEARCH".equals(criteria.getSearchType()) || isCombined) && nz(criteria.getPassengerCount()) > MAX_FLIGHT_PASSENGERS) {
             return new ValidationResult(false, "TOO_MANY_PASSENGERS");
         }
 

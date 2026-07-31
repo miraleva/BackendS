@@ -925,6 +925,7 @@
         ];
 
         let sessionId = null;
+        let isSendingMessage = false;
         let token = localStorage.getItem("token") || null;
 
         // Populate country dropdown on load
@@ -1057,12 +1058,13 @@
         async function sendMessage() {
             const input = document.getElementById("messageInput");
             const message = input.value.trim();
-            if (!message) return;
+            if (!message || isSendingMessage) return;
 
             input.value = "";
             addMessage(message, "user");
 
             showTypingIndicator();
+            isSendingMessage = true;
 
             const dropdown = document.getElementById("countryDropdown");
             const selectedRegion = countriesList[dropdown.value];
@@ -1109,6 +1111,8 @@
                 console.error("Message send failed:", err);
                 hideTypingIndicator();
                 addMessage("I'm sorry, I'm having trouble connecting to the service. Please try again later.", "assistant");
+            } finally {
+                isSendingMessage = false;
             }
         }
 
@@ -1145,8 +1149,9 @@
 
             let html = `<div class="results-container">`;
 
-            if (searchType === "HOTEL_SEARCH") {
+            if (searchType === "HOTEL_SEARCH" || searchType === "COMBINED_SEARCH") {
                 results.forEach((hotel, idx) => {
+                    if (!hotel.name) return;
                     const stars = hotel.stars || 4;
                     const starsHtml = '<i class="fa-solid fa-star"></i>'.repeat(stars) + '<i class="fa-regular fa-star"></i>'.repeat(5 - stars);
                     const photo = hotel.thumbnail || `https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=80`;
@@ -1171,8 +1176,10 @@
                         </div>
                     `;
                 });
-            } else if (searchType === "FLIGHT_SEARCH") {
+            }
+            if (searchType === "FLIGHT_SEARCH" || searchType === "COMBINED_SEARCH") {
                 results.forEach((flight, idx) => {
+                    if (!flight.airline) return;
                     const airline = flight.airline || "TourVisio Air";
                     const duration = flight.duration || "2h 15m";
                     const type = flight.tripType === "ROUND_TRIP" ? "Round Trip" : "One Way";

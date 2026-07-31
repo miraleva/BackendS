@@ -52,9 +52,11 @@ public class IntentDetectionService {
                 lowerMsg.contains("airport") ||
                 lowerMsg.contains("havaliman");
 
-        if (hasHotelKeywords && !hasFlightKeywords) {
+        if (hasHotelKeywords && hasFlightKeywords) {
+            return "COMBINED_SEARCH";
+        } else if (hasHotelKeywords) {
             return "HOTEL_SEARCH";
-        } else if (hasFlightKeywords && !hasHotelKeywords) {
+        } else if (hasFlightKeywords) {
             return "FLIGHT_SEARCH";
         }
 

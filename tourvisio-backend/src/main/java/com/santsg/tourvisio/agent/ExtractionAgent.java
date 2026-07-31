@@ -103,9 +103,9 @@ public class ExtractionAgent {
 
         String schemaDescription = """
                 {
-                  "intent": "Determine the user's intent. Must be one of: HOTEL_SEARCH, FLIGHT_SEARCH, UNKNOWN, OUT_OF_SCOPE, PROFANITY, IRRELEVANT",
+                  "intent": "Determine the user's intent. Must be one of: HOTEL_SEARCH, FLIGHT_SEARCH, COMBINED_SEARCH, UNKNOWN, OUT_OF_SCOPE, PROFANITY, IRRELEVANT",
                   "criteria": {
-                    // For HOTEL_SEARCH:
+                    // For HOTEL_SEARCH, FLIGHT_SEARCH, or COMBINED_SEARCH (when user wants both hotel and flight):
                     "locationOrHotelName": "city or hotel name (e.g. Antalya). CRITICAL: If the user did not specify a specific city/province/district/country name (e.g. Antalya, Belek, Paris, Istanbul), DO NOT fill this field; leave it null or return an empty string. General POI/amenity names (such as lunapark, plaj, havalimanı, otogar, müze, merkez, beach, theme park, airport, etc.) are NOT city or location names and must NOT be put into this field.",
                     "checkInDate": "check-in date in YYYY-MM-DD format, ONLY if the user's message contains an actual date reference (a specific date, weekday, or relative expression like 'tomorrow'/'yarın'/'next week'). Today's date is %s, used only to resolve relative/partial dates. Handle multiple formats robustly (e.g. '13.6.26' -> '2026-06-13', '13/04/2027', '12-08-2026'). If only month/day (e.g. 15 July, haziran 13) is specified, resolve to the nearest future occurrence using today's date. NEVER output today's date as checkInDate just because no date was mentioned — leave it null/omitted instead.",
                     "checkOutDate": "check-out date in YYYY-MM-DD format. If night count is given, calculate check-out by adding it to check-in. Same 'only if explicitly mentioned' rule as checkInDate applies.",
@@ -122,7 +122,7 @@ public class ExtractionAgent {
                     "minPrice": "double. Extract the minimum price if specified (e.g. '5000 TL üzeri' -> 5000.0)",
                     "minStars": "integer. Extract the minimum star rating or specified stars (e.g. 'sadece 5 yıldızlılar' -> 5, '4 yıldız ve üzeri' -> 4)",
 
-                    // For FLIGHT_SEARCH:
+                    // Flight & Combined Search fields:
                     "departureLocation": "departure location (e.g. Istanbul). CRITICAL: Do NOT fill this with general POI/amenity names (such as havalimanı, otogar, etc.) if no specific city/airport is mentioned.",
                     "arrivalLocation": "arrival location (e.g. Antalya). CRITICAL: Do NOT fill this with general POI/amenity names (such as havalimanı, otogar, etc.) if no specific city/airport is mentioned.",
                     "departureDate": "departure date in YYYY-MM-DD format. Same 'only if explicitly mentioned' rule as checkInDate applies.",

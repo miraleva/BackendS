@@ -106,8 +106,8 @@ class TourvisioBackendApplicationTests {
 				LocalDate.now().plusDays(12),
 				9000.0,
 				"TRY",
-				null,
 				List.of(passenger),
+				null,
 				null,
 				null);
 
@@ -175,8 +175,8 @@ class TourvisioBackendApplicationTests {
 				LocalDate.now().plusDays(12),
 				9000.0,
 				"TRY",
-				null,
 				List.of(primary, secondary),
+				null,
 				null,
 				null);
 
@@ -204,8 +204,8 @@ class TourvisioBackendApplicationTests {
 				LocalDate.now().plusDays(12),
 				9000.0,
 				"TRY",
-				null,
 				List.of(primary, secondary),
+				null,
 				null,
 				null);
 
