@@ -135,6 +135,9 @@ public class AdminController {
         // Compatibility fields for frontend
         private String name;
         private String status;
+
+        private java.time.Instant lastLoginAt;
+        private java.time.Instant lastLogoutAt;
     }
 
     @Data
@@ -356,6 +359,8 @@ public class AdminController {
                     .reservationCount(resCount)
                     .name(fullName) // compatibility field
                     .status(active ? "active" : "inactive") // compatibility field
+                    .lastLoginAt(u.getLastLoginAt())
+                    .lastLogoutAt(u.getLastLogoutAt())
                     .build();
         }).collect(Collectors.toList());
 

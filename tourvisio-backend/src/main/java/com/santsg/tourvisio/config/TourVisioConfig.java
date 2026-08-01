@@ -102,7 +102,7 @@ public class TourVisioConfig {
         factory.setConnectTimeout(connectTimeout > 0 ? connectTimeout : 15_000);
         factory.setReadTimeout(readTimeout > 0 ? readTimeout : 45_000);
 
-        RestTemplate restTemplate = new RestTemplate(factory);
+        RestTemplate restTemplate = new RestTemplate(new org.springframework.http.client.BufferingClientHttpRequestFactory(factory));
         restTemplate.getInterceptors().add(new TourVisioAuthInterceptor(authService));
         return restTemplate;
     }

@@ -206,6 +206,8 @@ public class AuthController {
         }
 
         // Generate JWT token
+        user.setLastLoginAt(java.time.Instant.now());
+        userRepository.save(user);
         String token = jwtProvider.generateToken(user.getId(), user.getEmail());
         log.info("[AuthController] Login successful for userId={}, generated JWT", user.getId());
 
@@ -303,6 +305,8 @@ public class AuthController {
             }
 
             // Generate JWT token
+            user.setLastLoginAt(java.time.Instant.now());
+            userRepository.save(user);
             String token = jwtProvider.generateToken(user.getId(), user.getEmail());
             log.info("[AuthController] OAuth login successful for userId={}, provider={}", user.getId(), provider);
 
@@ -500,6 +504,8 @@ public class AuthController {
         }
 
         // Generate JWT token
+        user.setLastLoginAt(java.time.Instant.now());
+        userRepository.save(user);
         String token = jwtProvider.generateToken(user.getId(), user.getEmail());
 
         UserResponse userResponse = UserResponse.builder()
@@ -522,5 +528,18 @@ public class AuthController {
                 .build();
 
         return ResponseEntity.ok(loginResponse);
+    }
+
+    @PostMapping(value = "/logout", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "User Logout", description = "Record logout event and update lastLogoutAt timestamp")
+    public ResponseEntity<?> logout(@RequestAttribute(value = "userId", required = false) Long userId) {
+        log.info("[AuthController] Logout request received for userId={}", userId);
+        if (userId != null) {
+            userRepository.findById(userId).ifPresent(user -> {
+                user.setLastLogoutAt(java.time.Instant.now());
+                userRepository.save(user);
+            });
+        }
+        return ResponseEntity.ok(Map.of("success", true, "message", "Logged out successfully"));
     }
 }

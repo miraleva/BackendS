@@ -78,6 +78,12 @@ public class User {
     @Builder.Default
     private Boolean isTwoFactorEnabled = false;
 
+    @Column(name = "last_login_at")
+    private Instant lastLoginAt;
+
+    @Column(name = "last_logout_at")
+    private Instant lastLogoutAt;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<ChatSession> chatSessions = new ArrayList<>();

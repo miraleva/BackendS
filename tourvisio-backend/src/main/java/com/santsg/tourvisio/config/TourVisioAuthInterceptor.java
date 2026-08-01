@@ -29,13 +29,26 @@ public class TourVisioAuthInterceptor implements ClientHttpRequestInterceptor {
         int statusCode = 200;
         String statusText = "OK";
         boolean success = true;
+        String requestPayload = null;
+        String responsePayload = null;
 
         try {
+            if (body != null && body.length > 0) {
+                requestPayload = new String(body, java.nio.charset.StandardCharsets.UTF_8);
+            }
+
             // Skip modifying headers if it is the login endpoint
             if (request.getURI().getPath().contains("/authenticationservice/login")) {
                 response = execution.execute(request, body);
                 statusCode = response.getStatusCode().value();
                 statusText = response.getStatusText();
+                
+                try (java.io.InputStream is = response.getBody()) {
+                    responsePayload = org.springframework.util.StreamUtils.copyToString(is, java.nio.charset.StandardCharsets.UTF_8);
+                } catch (Exception e) {
+                    log.error("[TourVisioAuthInterceptor] Failed to read login response body: {}", e.getMessage());
+                }
+
                 if (response.getStatusCode().isError()) {
                     success = false;
                     errMsg = "HTTP " + statusCode + ": " + statusText;
@@ -83,6 +96,13 @@ public class TourVisioAuthInterceptor implements ClientHttpRequestInterceptor {
                 statusText = response.getStatusText();
             }
 
+            // Read the final response body
+            try (java.io.InputStream is = response.getBody()) {
+                responsePayload = org.springframework.util.StreamUtils.copyToString(is, java.nio.charset.StandardCharsets.UTF_8);
+            } catch (Exception e) {
+                log.error("[TourVisioAuthInterceptor] Failed to read response body: {}", e.getMessage());
+            }
+
             if (response.getStatusCode().isError()) {
                 success = false;
                 errMsg = "HTTP " + statusCode + ": " + statusText;
@@ -94,10 +114,10 @@ public class TourVisioAuthInterceptor implements ClientHttpRequestInterceptor {
             errMsg = e.getMessage();
             statusCode = 500;
             statusText = "Internal Connection Error";
-            if (e instanceof IOException) {
-                throw (IOException) e;
+            if (e instanceof java.io.IOException) {
+                throw (java.io.IOException) e;
             } else {
-                throw new IOException(e);
+                throw new java.io.IOException(e);
             }
         } finally {
             long latency = System.currentTimeMillis() - startTime;
@@ -108,7 +128,9 @@ public class TourVisioAuthInterceptor implements ClientHttpRequestInterceptor {
                 statusCode,
                 statusText,
                 errMsg,
-                success
+                success,
+                requestPayload,
+                responsePayload
             );
         }
     }

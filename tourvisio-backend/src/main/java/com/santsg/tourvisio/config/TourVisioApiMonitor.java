@@ -1,19 +1,20 @@
 package com.santsg.tourvisio.config;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import com.santsg.tourvisio.entity.ApiLog;
+import com.santsg.tourvisio.repository.ApiLogRepository;
+import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
+@Component
 public class TourVisioApiMonitor {
 
-    private static final int MAX_LOGS = 50;
-    private static final ConcurrentLinkedQueue<ApiLog> logs = new ConcurrentLinkedQueue<>();
-    
-    // Track average latencies per endpoint type
+    private static ApiLogRepository apiLogRepository;
+
+    public TourVisioApiMonitor(ApiLogRepository apiLogRepository) {
+        TourVisioApiMonitor.apiLogRepository = apiLogRepository;
+    }
+
     private static final Map<String, List<Long>> latencyTracks = new HashMap<>();
 
     static {
@@ -23,23 +24,7 @@ public class TourVisioApiMonitor {
         latencyTracks.put("Detail", Collections.synchronizedList(new ArrayList<>()));
     }
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class ApiLog {
-        private String timestamp;
-        private String method;
-        private String uri;
-        private String endpointType;
-        private long latencyMs;
-        private int statusCode;
-        private String statusText;
-        private String errorMessage;
-        private boolean success;
-    }
-
-    public static void logCall(String method, String uri, long latencyMs, int statusCode, String statusText, String errorMessage, boolean success) {
+    public static void logCall(String method, String uri, long latencyMs, int statusCode, String statusText, String errorMessage, boolean success, String requestPayload, String responsePayload) {
         String endpointType = getEndpointType(uri);
         
         // Track latency
@@ -51,7 +36,7 @@ public class TourVisioApiMonitor {
             }
         }
 
-        // Add to log queue
+        // Persist to DB
         ApiLog log = ApiLog.builder()
                 .timestamp(LocalDateTime.now().toString())
                 .method(method)
@@ -62,11 +47,16 @@ public class TourVisioApiMonitor {
                 .statusText(statusText)
                 .errorMessage(errorMessage)
                 .success(success)
+                .requestPayload(requestPayload)
+                .responsePayload(responsePayload)
                 .build();
 
-        logs.add(log);
-        while (logs.size() > MAX_LOGS) {
-            logs.poll();
+        if (apiLogRepository != null) {
+            try {
+                apiLogRepository.save(log);
+            } catch (Exception e) {
+                System.err.println("[TourVisioApiMonitor] Failed to persist log: " + e.getMessage());
+            }
         }
     }
 
@@ -79,9 +69,14 @@ public class TourVisioApiMonitor {
     }
 
     public static List<ApiLog> getLogs() {
-        List<ApiLog> list = new ArrayList<>(logs);
-        Collections.reverse(list);
-        return list;
+        if (apiLogRepository != null) {
+            try {
+                return apiLogRepository.findTop50ByOrderByTimestampDesc();
+            } catch (Exception e) {
+                System.err.println("[TourVisioApiMonitor] Failed to fetch logs: " + e.getMessage());
+            }
+        }
+        return Collections.emptyList();
     }
 
     public static Map<String, Long> getAverageLatencies() {
@@ -90,7 +85,6 @@ public class TourVisioApiMonitor {
             List<Long> list = entry.getValue();
             synchronized (list) {
                 if (list.isEmpty()) {
-                    // Provide realistic initial latency seed if no calls have run yet
                     if ("HotelSearch".equals(entry.getKey())) avgs.put(entry.getKey(), 460L);
                     else if ("FlightSearch".equals(entry.getKey())) avgs.put(entry.getKey(), 620L);
                     else if ("Auth".equals(entry.getKey())) avgs.put(entry.getKey(), 320L);

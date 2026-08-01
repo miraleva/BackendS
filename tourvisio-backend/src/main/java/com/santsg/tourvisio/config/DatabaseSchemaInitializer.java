@@ -24,11 +24,14 @@ public class DatabaseSchemaInitializer implements CommandLineRunner {
     public void run(String... args) {
         log.info("[DatabaseSchemaInitializer] Ensuring 'users' table columns allow NULL values for OAuth sign-up...");
         String[] alterStatements = {
+                "CREATE TABLE IF NOT EXISTS api_logs (id BIGSERIAL PRIMARY KEY, timestamp VARCHAR(255), method VARCHAR(10), uri VARCHAR(1024), endpoint_type VARCHAR(50), latency_ms BIGINT, status_code INTEGER, status_text VARCHAR(100), error_message VARCHAR(1024), success BOOLEAN, request_payload TEXT, response_payload TEXT)",
                 "ALTER TABLE users ALTER COLUMN password DROP NOT NULL",
                 "ALTER TABLE users ALTER COLUMN phone DROP NOT NULL",
                 "ALTER TABLE users ALTER COLUMN country DROP NOT NULL",
                 "ALTER TABLE users ALTER COLUMN date_of_birth DROP NOT NULL",
-                "ALTER TABLE users ALTER COLUMN gender DROP NOT NULL"
+                "ALTER TABLE users ALTER COLUMN gender DROP NOT NULL",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP WITH TIME ZONE",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_logout_at TIMESTAMP WITH TIME ZONE"
         };
 
         for (String sql : alterStatements) {

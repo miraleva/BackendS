@@ -2,42 +2,100 @@ package com.santsg.tourvisio.service;
 
 import com.santsg.tourvisio.entity.Passenger;
 import com.santsg.tourvisio.entity.Reservation;
-import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class EmailService {
 
-    private final JavaMailSender mailSender;
+    private final RestTemplate restTemplate = new RestTemplate();
+
+    @Value("${brevo.api.key:${OPENROUTER_API_KEY:}}") // Veya Render'a doğrudan BREVO_API_KEY ekleyebilirsiniz
+    private String brevoApiKey;
+
+    @Value("${app.mail.from-address:sannydestek@gmail.com}")
+    private String fromAddress;
+
+    @Value("${app.mail.from-name:SANNY Travel}")
+    private String fromName;
+
+    private static final String BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
+
+    private void sendViaBrevoApi(String toEmail, String subject, String content, boolean isHtml) {
+        if (brevoApiKey == null || brevoApiKey.isBlank()) {
+            log.error("[EmailService] Brevo API Key is missing! Cannot send email.");
+            return;
+        }
+
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("api-key", brevoApiKey);
+
+            Map<String, Object> body = new HashMap<>();
+
+            // Sender
+            Map<String, String> sender = new HashMap<>();
+            sender.put("name", fromName);
+            sender.put("email", fromAddress);
+            body.put("sender", sender);
+
+            // To
+            List<Map<String, String>> toList = new ArrayList<>();
+            Map<String, String> recipient = new HashMap<>();
+            recipient.put("email", toEmail);
+            toList.add(recipient);
+            body.put("to", toList);
+
+            // Subject & Content
+            body.put("subject", subject);
+            if (isHtml) {
+                body.put("htmlContent", content);
+            } else {
+                body.put("textContent", content);
+            }
+
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+            ResponseEntity<String> response = restTemplate.postForEntity(BREVO_API_URL, request, String.class);
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                log.info("[EmailService] Email successfully sent via Brevo API to {}", toEmail);
+            } else {
+                log.error("[EmailService] Failed to send email via Brevo API. Response status: {}, body: {}", 
+                        response.getStatusCode(), response.getBody());
+            }
+        } catch (Exception e) {
+            log.error("[EmailService] Exception while sending email via Brevo API to {}: {}", toEmail, e.getMessage(), e);
+        }
+    }
 
     public void sendPasswordResetEmail(String toEmail, String resetLink) {
-        try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom("sannydestek@gmail.com");
-            message.setTo(toEmail);
-            message.setSubject("Sanny - Password Reset Request");
-            message.setText("Hello,\n\n"
-                    + "We received a request to reset your password. "
-                    + "Please click the link below to set a new password:\n\n"
-                    + resetLink + "\n\n"
-                    + "This link will expire in 15 minutes.\n\n"
-                    + "If you did not request this, please ignore this email.\n\n"
-                    + "Best regards,\nSanny Team");
+        if (toEmail == null || toEmail.isBlank()) return;
 
-            mailSender.send(message);
-        } catch (Exception e) {
-            log.error("[EmailService] Failed to send password reset email: {}", e.getMessage());
-        }
+        String content = "Hello,\n\n"
+                + "We received a request to reset your password. "
+                + "Please click the link below to set a new password:\n\n"
+                + resetLink + "\n\n"
+                + "This link will expire in 15 minutes.\n\n"
+                + "If you did not request this, please ignore this email.\n\n"
+                + "Best regards,\nSanny Team";
+
+        sendViaBrevoApi(toEmail, "Sanny - Password Reset Request", content, false);
     }
 
     @Async
@@ -47,44 +105,31 @@ public class EmailService {
             return;
         }
 
-        try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+        String html = "<!DOCTYPE html>"
+                + "<html>"
+                + "<head><meta charset='UTF-8'></head>"
+                + "<body style='font-family: Arial, Helvetica, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #1e293b;'>"
+                + "  <div style='max-width: 500px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);'>"
+                + "    <div style='background-color: #2563eb; padding: 24px; text-align: center; color: #ffffff;'>"
+                + "      <h1 style='margin: 0; font-size: 24px; font-weight: bold;'>SANNY TRAVEL</h1>"
+                + "      <p style='margin: 4px 0 0 0; font-size: 13px; opacity: 0.9;'>E-posta Doğrulama Servisi</p>"
+                + "    </div>"
+                + "    <div style='padding: 32px; text-align: center;'>"
+                + "      <h2 style='font-size: 18px; color: #0f172a; margin-top: 0;'>Güvenlik Doğrulama Kodu</h2>"
+                + "      <p style='font-size: 14px; line-height: 1.6; color: #475569;'>SANNY hesabınız için doğrulama talebinde bulundunuz. Aşağıdaki 6 haneli kodu doğrulama ekranına giriniz:</p>"
+                + "      <div style='background-color: #eff6ff; border: 2px stroke #2563eb; border-radius: 12px; padding: 16px; margin: 24px 0;'>"
+                + "        <span style='font-size: 32px; font-weight: 800; color: #1d4ed8; letter-spacing: 6px;'>" + otpCode + "</span>"
+                + "      </div>"
+                + "      <p style='font-size: 12px; color: #64748b;'>Bu doğrulama kodu <strong>5 dakika</strong> boyunca geçerlidir. Kodunuzu kimseyle paylaşmayınız.</p>"
+                + "    </div>"
+                + "    <div style='background-color: #f1f5f9; padding: 16px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0;'>"
+                + "      <p style='margin: 0;'>SANNY Akıllı Seyahat & Rezervasyon Asistanı</p>"
+                + "    </div>"
+                + "  </div>"
+                + "</body>"
+                + "</html>";
 
-            helper.setFrom("sannydestek@gmail.com");
-            helper.setTo(toEmail);
-            helper.setSubject("SANNY - E-posta Doğrulama Kodu [" + otpCode + "]");
-
-            String html = "<!DOCTYPE html>"
-                    + "<html>"
-                    + "<head><meta charset='UTF-8'></head>"
-                    + "<body style='font-family: Arial, Helvetica, sans-serif; background-color: #f8fafc; margin: 0; padding: 20px; color: #1e293b;'>"
-                    + "  <div style='max-width: 500px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.05);'>"
-                    + "    <div style='background-color: #2563eb; padding: 24px; text-align: center; color: #ffffff;'>"
-                    + "      <h1 style='margin: 0; font-size: 24px; font-weight: bold;'>SANNY TRAVEL</h1>"
-                    + "      <p style='margin: 4px 0 0 0; font-size: 13px; opacity: 0.9;'>E-posta Doğrulama Servisi</p>"
-                    + "    </div>"
-                    + "    <div style='padding: 32px; text-align: center;'>"
-                    + "      <h2 style='font-size: 18px; color: #0f172a; margin-top: 0;'>Güvenlik Doğrulama Kodu</h2>"
-                    + "      <p style='font-size: 14px; line-height: 1.6; color: #475569;'>SANNY hesabınız için doğrulama talebinde bulundunuz. Aşağıdaki 6 haneli kodu doğrulama ekranına giriniz:</p>"
-                    + "      <div style='background-color: #eff6ff; border: 2px stroke #2563eb; border-radius: 12px; padding: 16px; margin: 24px 0;'>"
-                    + "        <span style='font-size: 32px; font-weight: 800; color: #1d4ed8; letter-spacing: 6px;'>" + otpCode + "</span>"
-                    + "      </div>"
-                    + "      <p style='font-size: 12px; color: #64748b;'>Bu doğrulama kodu <strong>5 dakika</strong> boyunca geçerlidir. Kodunuzu kimseyle paylaşmayınız.</p>"
-                    + "    </div>"
-                    + "    <div style='background-color: #f1f5f9; padding: 16px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0;'>"
-                    + "      <p style='margin: 0;'>SANNY Akıllı Seyahat & Rezervasyon Asistanı</p>"
-                    + "    </div>"
-                    + "  </div>"
-                    + "</body>"
-                    + "</html>";
-
-            helper.setText(html, true);
-            mailSender.send(mimeMessage);
-            log.info("[EmailService] OTP email sent successfully to {}", toEmail);
-        } catch (Exception e) {
-            log.error("[EmailService] Failed to send OTP email to {}: {}", toEmail, e.getMessage(), e);
-        }
+        sendViaBrevoApi(toEmail, "SANNY - E-posta Doğrulama Kodu [" + otpCode + "]", html, true);
     }
 
     @Async
@@ -100,25 +145,10 @@ public class EmailService {
         }
 
         String language = (lang != null && !lang.isBlank()) ? lang.toLowerCase() : "tr";
+        String subject = getSubjectText(reservation, language);
+        String html = buildReservationHtmlTemplate(reservation, customerName, language);
 
-        try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
-
-            helper.setFrom("sannydestek@gmail.com");
-            helper.setTo(recipientEmail);
-
-            String subject = getSubjectText(reservation, language);
-            helper.setSubject(subject);
-
-            String html = buildReservationHtmlTemplate(reservation, customerName, language);
-            helper.setText(html, true);
-
-            mailSender.send(mimeMessage);
-            log.info("[EmailService] Asynchronous confirmation email sent successfully for PNR {}", reservation.getReservationNumber());
-        } catch (Exception e) {
-            log.error("[EmailService] Failed to send confirmation email for PNR {}: {}", reservation.getReservationNumber(), e.getMessage());
-        }
+        sendViaBrevoApi(recipientEmail, subject, html, true);
     }
 
     private String getSubjectText(Reservation reservation, String lang) {
@@ -146,7 +176,6 @@ public class EmailService {
         String totalPrice = (reservation.getTotalPrice() != null ? String.format("%.2f", reservation.getTotalPrice()) : "0.00")
                 + " " + (reservation.getCurrency() != null ? reservation.getCurrency() : "TRY");
 
-        // Translations according to language
         String defaultName, subtitle, greeting, msgBody, pnrHeader, summaryHeader, passengerHeader;
         String typeLabel, serviceNameLabel, destLabel, startDateLabel, endDateLabel, totalAmountLabel;
         String nameCol, emailCol, phoneCol, noPassengers, footerLine1, footerLine2, paymentStatusLabel;
@@ -293,7 +322,7 @@ public class EmailService {
                 + "    </div>"
                 + "    <div style='background-color: #f1f5f9; padding: 16px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0;'>"
                 + "      <p style='margin: 0;'>" + footerLine1 + "</p>"
-                + "      <p style='margin: 4px 0 0 0;'>" + footerLine2 + " <a href='mailto:sannydestek@gmail.com' style='color: #2563eb;'>sannydestek@gmail.com</a></p>"
+                + "      <p style='margin: 4px 0 0 0;'>" + footerLine2 + " <a href='mailto:" + fromAddress + "' style='color: #2563eb;'>" + fromAddress + "</a></p>"
                 + "    </div>"
                 + "  </div>"
                 + "</body>"
