@@ -668,19 +668,6 @@ public class ChatOrchestrationService {
     private static final java.util.regex.Pattern LOCATION_SENTENCE_FILLER = java.util.regex.Pattern.compile(
             "(?i)yakın|civar|olabilir|istiyorum|istiyoruz|olsun|arıyorum|arıyoruz|lazım|gerek");
 
-    private String sanitizeLocationField(String location) {
-        if (location == null || location.isBlank()) {
-            return location;
-        }
-        String trimmed = location.trim();
-        int wordCount = trimmed.split("\\s+").length;
-        if (wordCount > 4 || LOCATION_SENTENCE_FILLER.matcher(trimmed).find()) {
-            log.warn("[Orchestration] Konum alanı cümle gibi görünüyor, reddediliyor: \"{}\"", trimmed);
-            return null;
-        }
-        return trimmed;
-    }
-
     /**
      * Otel ve uçuş arasında intent değişince ("ilk uçağı listele" / "ilk oteli
      * listele" gibi), aynı seyahatin ortak bilgilerini (tarih, yolcu sayısı)
