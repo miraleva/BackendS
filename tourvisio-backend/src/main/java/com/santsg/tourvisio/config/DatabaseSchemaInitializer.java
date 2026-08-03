@@ -31,7 +31,21 @@ public class DatabaseSchemaInitializer implements CommandLineRunner {
                 "ALTER TABLE users ALTER COLUMN date_of_birth DROP NOT NULL",
                 "ALTER TABLE users ALTER COLUMN gender DROP NOT NULL",
                 "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP WITH TIME ZONE",
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_logout_at TIMESTAMP WITH TIME ZONE"
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_logout_at TIMESTAMP WITH TIME ZONE",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_two_factor_enabled BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS flight_number VARCHAR(255)",
+                "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS departure_airport_code VARCHAR(255)",
+                "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS arrival_airport_code VARCHAR(255)",
+                "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS departure_city VARCHAR(255)",
+                "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS arrival_city VARCHAR(255)",
+                "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS departure_time VARCHAR(255)",
+                "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS arrival_time VARCHAR(255)",
+                "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS ticket_class VARCHAR(255)",
+                "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS baggage_allowance VARCHAR(255)",
+                "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS room_type VARCHAR(255)",
+                "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS board_type VARCHAR(255)",
+                "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS check_in_time VARCHAR(255)",
+                "ALTER TABLE reservations ADD COLUMN IF NOT EXISTS check_out_time VARCHAR(255)"
         };
 
         for (String sql : alterStatements) {

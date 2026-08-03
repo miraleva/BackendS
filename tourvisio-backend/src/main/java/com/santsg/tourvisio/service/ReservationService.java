@@ -101,10 +101,23 @@ public class ReservationService {
                 throw new IllegalArgumentException(pName + " için doğum tarihi geçmişte olmalıdır.");
             }
 
-            if (i == 0) {
-                LocalDate eighteenYearsAgo = LocalDate.now().minusYears(18);
-                if (pr.getBirthDate().isAfter(eighteenYearsAgo)) {
-                    throw new IllegalArgumentException("Rezervasyonu yapan kişi 18 yaşından büyük olmalıdır.");
+            int ageYears = java.time.Period.between(pr.getBirthDate(), LocalDate.now()).getYears();
+
+            if (i == 0 && ageYears < 18) {
+                throw new IllegalArgumentException("Rezervasyonu yapan kişi 18 yaşından büyük (veya en az 18 yaşında) olmalıdır.");
+            }
+
+            String genderOrType = pr.getGender();
+            if ("CHD".equalsIgnoreCase(genderOrType) || (genderOrType != null && genderOrType.toUpperCase().contains("CHILD"))) {
+                if (ageYears >= 18) {
+                    throw new IllegalArgumentException(pName + " (çocuk yolcu) için doğum tarihi 18 yaşından küçük olmalıdır.");
+                }
+                if (ageYears < 2) {
+                    throw new IllegalArgumentException(pName + " (çocuk yolcu) en az 2 yaşında olmalıdır.");
+                }
+            } else if ("INF".equalsIgnoreCase(genderOrType) || (genderOrType != null && genderOrType.toUpperCase().contains("INFANT"))) {
+                if (ageYears >= 2) {
+                    throw new IllegalArgumentException(pName + " (bebek yolcu) için doğum tarihi 2 yaşından küçük olmalıdır.");
                 }
             }
         }

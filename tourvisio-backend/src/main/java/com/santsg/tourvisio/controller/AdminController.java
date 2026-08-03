@@ -397,6 +397,8 @@ public class AdminController {
                 .reservationCount(reservationRepository.countByUserId(targetUser.getId()))
                 .name(fullName)
                 .status(active ? "active" : "inactive")
+                .lastLoginAt(targetUser.getLastLoginAt())
+                .lastLogoutAt(targetUser.getLastLogoutAt())
                 .build());
     }
 

@@ -155,11 +155,26 @@ public class ChatOrchestrationService {
         sessionStore.save(sessionId, existingCriteria);
 
         String userMessage = request.getMessage();
+        String conversationHistory = chatSessionManager.getRecentHistoryFormat(sessionState, 6);
 
         // 2. Oturum sonlandırılmışsa erken çık
         if ("TERMINATED".equals(sessionState.getChatStatus())) {
+            String lang = existingCriteria != null && existingCriteria.getPreferredLanguage() != null
+                    ? existingCriteria.getPreferredLanguage().toLowerCase()
+                    : "tr";
+            String reply;
+            if (lang.contains("en")) {
+                reply = "This chat has been closed. Please start a new chat.";
+            } else if (lang.contains("de")) {
+                reply = "Dieser Chat wurde geschlossen. Bitte starten Sie einen neuen Chat.";
+            } else if (lang.contains("ru")) {
+                reply = "Этот чат закрыт. Пожалуйста, начните новый чат.";
+            } else {
+                reply = "Bu sohbet sonlandırılmıştır. Lütfen yeni bir sohbet başlatın.";
+            }
+
             return ChatResponse.builder()
-                    .reply(responseAgent.decline(existingCriteria, true, userMessage))
+                    .reply(reply)
                     .sessionId(sessionId)
                     .searchType("OUT_OF_SCOPE")
                     .missingFields(List.of())
@@ -188,7 +203,8 @@ public class ChatOrchestrationService {
                 sessionState.setMode("BOOKING");
                 sessionState.setSelectedItem(matchedItem);
 
-                String confirmReply = responseAgent.confirmSelection(matchedItem, existingCriteria, userMessage);
+                String confirmReply = responseAgent.confirmSelection(matchedItem, existingCriteria, userMessage,
+                        conversationHistory);
                 return ChatResponse.builder()
                         .reply(confirmReply)
                         .sessionId(sessionId)
@@ -245,12 +261,19 @@ public class ChatOrchestrationService {
             String aiIntent = extractionResult.getIntent();
             if ("PROFANITY".equals(aiIntent) || "IRRELEVANT".equals(aiIntent) || "OUT_OF_SCOPE".equals(aiIntent)) {
                 intent = aiIntent;
-            } else if ("COMBINED_SEARCH".equals(aiIntent)) {
-                // "Otel ve uçak da istiyorum" is an explicit expansion of the
-                // current search. Do not silently keep the old single-search
-                // intent just because the session already has one.
+            } else if ("HOTEL_SEARCH".equals(aiIntent) || "FLIGHT_SEARCH".equals(aiIntent)) {
+                // ExtractionAgent'a mevcut intent zaten bağlam olarak veriliyor ve
+                // "kullanıcı açıkça geçiş yapmadıkça mevcut intent'i koru" talimatı
+                // içeriyor — yani model burada HOTEL_SEARCH/FLIGHT_SEARCH döndürdüyse
+                // ya zaten aynı intent'tir ya da kullanıcı bilinçli olarak diğerine
+                // geçmiştir ("ilk uçağı listele" gibi). Eskiden burada AI'ın kararı
+                // görmezden gelinip eski intent'e zorla geri dönülüyordu, bu da otel
+                // aramasından sonra uçuş isteyen kullanıcıların hiç uçuş sonucu
+                // görememesine yol açıyordu.
                 intent = aiIntent;
             } else {
+                // UNKNOWN veya tanınmayan bir değer — belirsiz mesajlarda mevcut
+                // bağlamı koru.
                 intent = hasActiveSearch ? existingCriteria.getSearchType() : aiIntent;
             }
             incoming = extractionResult.getCriteria();
@@ -316,29 +339,58 @@ public class ChatOrchestrationService {
                     .build();
         }
 
-        // Handle IRRELEVANT (Category C - Progressive 3-level warnings)
-        if ("IRRELEVANT".equals(intent)) {
+        // Handle IRRELEVANT or OUT_OF_SCOPE (Progressive 3-level warnings/decline)
+        if ("IRRELEVANT".equals(intent) || "OUT_OF_SCOPE".equals(intent)) {
             int warningLevel = sessionState.incrementIrrelevantCount();
             String chatStatus = sessionState.getChatStatus();
-            String reply = responseAgent.irrelevantWarning(warningLevel, existingCriteria, userMessage);
+
+            String reply;
+            String lang = existingCriteria != null && existingCriteria.getPreferredLanguage() != null
+                    ? existingCriteria.getPreferredLanguage().toLowerCase()
+                    : "tr";
+
+            if (chatStatus.equals("TERMINATED") || warningLevel >= 3) {
+                if (lang.contains("en")) {
+                    reply = "I apologize, but I can only assist with hotel and flight bookings. Due to too many off-topic messages, this conversation has been closed. Please start a new chat. 😊";
+                } else if (lang.contains("de")) {
+                    reply = "Es tut mir leid, aber ich kann Ihnen nur bei Hotel- und Flugbuchungen helfen. Aufgrund zu vieler unpassender Nachrichten wurde dieser Chat beendet. Bitte starten Sie einen neuen Chat. 😊";
+                } else if (lang.contains("ru")) {
+                    reply = "Извините, но я могу помочь только с бронированием отелей и авиабилетов. Этот чат был закрыт из-за слишком большого количества сообщений не по теме. Пожалуйста, начните новый чат. 😊";
+                } else {
+                    reply = "Üzgünüm, sadece otel ve uçak rezervasyonları hakkında yardımcı olabiliyorum. Alakasız talepleriniz nedeniyle bu sohbet sonlandırılmıştır. Lütfen yeni bir sohbet başlatın. 😊";
+                }
+            } else {
+                String baseReply;
+                if ("OUT_OF_SCOPE".equals(intent)) {
+                    baseReply = responseAgent.decline(existingCriteria, false, userMessage, conversationHistory);
+                } else {
+                    baseReply = responseAgent.irrelevantWarning(warningLevel, existingCriteria, userMessage);
+                }
+
+                int remaining = 3 - warningLevel;
+                String suffix;
+                if (lang.contains("en")) {
+                    suffix = "\n\n(Note: Please only ask questions related to hotel or flight bookings. If you continue with off-topic messages, this chat will be closed. Remaining warning rights: "
+                            + remaining + ")";
+                } else if (lang.contains("de")) {
+                    suffix = "\n\n(Hinweis: Bitte stellen Sie nur Fragen zu Hotel- oder Flugbuchungen. Wenn Sie mit unpassenden Nachrichten fortfahren, wird dieser Chat geschlossen. Verbleibende Versuche: "
+                            + remaining + ")";
+                } else if (lang.contains("ru")) {
+                    suffix = "\n\n(Примечание: Пожалуйста, задавайте вопросы только о бронировании отелей или авиабилетов. Если вы продолжите писать не по теме, чат будет закрыт. Осталось попыток: "
+                            + remaining + ")";
+                } else {
+                    suffix = "\n\n(Not: Lütfen sadece otel ve uçuş rezervasyonlarıyla ilgili sorular sorun. Alakasız sorulara devam ederseniz bu sohbet sonlandırılacaktır. Kalan hak: "
+                            + remaining + ")";
+                }
+                reply = baseReply + suffix;
+            }
+
             return ChatResponse.builder()
                     .reply(reply)
                     .sessionId(sessionId)
-                    .searchType("IRRELEVANT")
+                    .searchType(intent)
                     .missingFields(List.of())
                     .chatStatus(chatStatus)
-                    .build();
-        }
-
-        // Handle OUT_OF_SCOPE (Category D - Generic scope reply, ACTIVE session, NO
-        // counter increment)
-        if ("OUT_OF_SCOPE".equals(intent)) {
-            return ChatResponse.builder()
-                    .reply(responseAgent.decline(existingCriteria, false, userMessage))
-                    .sessionId(sessionId)
-                    .searchType("OUT_OF_SCOPE")
-                    .missingFields(List.of())
-                    .chatStatus(sessionState.getChatStatus())
                     .build();
         }
 
@@ -357,7 +409,7 @@ public class ChatOrchestrationService {
                         .build();
             }
             return ChatResponse.builder()
-                    .reply(responseAgent.clarify(existingCriteria, userMessage))
+                    .reply(responseAgent.clarify(existingCriteria, userMessage, conversationHistory))
                     .sessionId(sessionId)
                     .searchType("UNKNOWN")
                     .missingFields(List.of())
@@ -365,7 +417,8 @@ public class ChatOrchestrationService {
                     .build();
         }
 
-        // Reset irrelevant counter whenever user provides valid HOTEL_SEARCH / FLIGHT_SEARCH / COMBINED_SEARCH input
+        // Reset irrelevant counter whenever user provides valid HOTEL_SEARCH /
+        // FLIGHT_SEARCH / COMBINED_SEARCH input
         if ("HOTEL_SEARCH".equals(intent) || "FLIGHT_SEARCH".equals(intent) || "COMBINED_SEARCH".equals(intent)) {
             sessionState.resetIrrelevantCount();
         }
@@ -411,9 +464,9 @@ public class ChatOrchestrationService {
 
         // 6. Yeni kriterler önceki session kriterleri üzerine birleştir
         existingCriteria.mergeWith(incoming);
-        if ("COMBINED_SEARCH".equals(intent)) {
-            existingCriteria.syncCombinedFields();
-        }
+        carryOverCrossIntentFields(existingCriteria, intent);
+        applyChildInfantNegation(existingCriteria, userMessage);
+        applyExclusiveGuestCountOverride(existingCriteria, userMessage);
         // Bebek/çocuk/yetişkin yaş yeniden-sınıflandırma notu varsa bir kez tüketilir
         // (aşağıdaki cevaplardan hangisi dönerse ona eklenir), tekrar gösterilmemesi
         // için criteria üzerinden temizlenir.
@@ -471,7 +524,8 @@ public class ChatOrchestrationService {
 
         if (!missingFields.isEmpty()) {
             sessionState.setLastRequestedField(String.join(", ", missingFields));
-            String replyText = responseAgent.askMissing(missingFields, existingCriteria, userMessage);
+            String replyText = responseAgent.askMissing(missingFields, existingCriteria, userMessage,
+                    conversationHistory);
             replyText = prependNote(reclassificationNote, replyText);
             return ChatResponse.builder()
                     .reply(replyText)
@@ -509,7 +563,96 @@ public class ChatOrchestrationService {
         }
 
         // 9. Tüm bilgiler tamam → arama servisine yönlendir
-        return readyToSearchResponse(sessionId, intent, existingCriteria, userMessage, reclassificationNote);
+        return readyToSearchResponse(sessionId, intent, existingCriteria, userMessage, reclassificationNote,
+                conversationHistory);
+    }
+
+    // "sadece 2 yetişkin" / "vazgeçtim 2 yetişkin olsun" gibi münhasırlık/vazgeçme
+    // ifadeleri, önceki turda eklenmiş bir çocuk/bebek sayısının artık aramaya
+    // dahil
+    // olmadığını belirtir. Ancak yapay zeka çıkarımı bu tür mesajlarda childCount/
+    // infantCount alanlarını genelde hiç döndürmüyor (null) —
+    // SearchCriteria.mergeWith()
+    // da yanlışlıkla sıfırlamayı önlemek için sadece pozitif değerleri uyguluyor,
+    // bu
+    // yüzden bu niyet hiçbir zaman uygulanmıyordu. Burada ham mesajı regex ile
+    // kontrol ederek bu niyeti LLM'in tutarlılığına güvenmeden yakalıyoruz.
+    private static final java.util.regex.Pattern EXCLUSIVE_GUEST_PATTERN = java.util.regex.Pattern.compile(
+            "\\b(?:sadece|yalnızca|yalniz|only|just|vazgeçtim|vazgectim|boşver|bosver|neyse|iptal)\\b.{0,20}?\\b(\\d{1,2})\\s*(?:yetişkin|yetiskin|adult|adults|kişi|kisi|people|person)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+    private static final java.util.regex.Pattern MENTIONS_CHILD_OR_INFANT = java.util.regex.Pattern.compile(
+            "çocuk|cocuk|child|children|kid|bebek|infant|baby|babies", java.util.regex.Pattern.CASE_INSENSITIVE);
+    // "bebek ve çocuk yok", "yok ki çocuk", "çocuksuz" gibi olumsuzlama ifadeleri —
+    // bunlar çocuk/bebek kelimesi geçse bile aslında onları HARİÇ TUTMA niyetini
+    // gösterir, dahil etme değil.
+    private static final java.util.regex.Pattern NEGATED_CHILD_OR_INFANT_PATTERN = java.util.regex.Pattern.compile(
+            "(?:çocuk|cocuk|bebek)\\w*.{0,25}?\\byok\\w*\\b"
+                    + "|\\byok\\w*\\b.{0,25}?(?:çocuk|cocuk|bebek)\\w*"
+                    + "|(?:çocuk|cocuk|bebek)(?:suz|siz)\\w*"
+                    + "|\\bno\\s+(?:child|children|kid|infant|baby|babies)\\b"
+                    + "|\\bwithout\\s+(?:child|children|kid|infant|baby|babies)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL);
+
+    // "bebek yok artık", "çocuk yok" gibi bağımsız olumsuzlama ifadeleri — bunlar
+    // "sadece X yetişkin" kalıbına uymaz (yetişkin sayısı tekrar söylenmemiştir),
+    // o yüzden yukarıdaki EXCLUSIVE_GUEST_PATTERN hiç tetiklenmez ve infantCount/
+    // childCount eski değerinde takılı kalırdı. Burada bebek ve çocuk için AYRI
+    // AYRI, bağımsız bir olumsuzlama kontrolü yapılıyor — sadece bahsi geçen
+    // kategori sıfırlanıyor, diğerine dokunulmuyor.
+    private static final java.util.regex.Pattern INFANT_NEGATION_PATTERN = java.util.regex.Pattern.compile(
+            "\\bbebek\\w*.{0,25}?\\byok\\w*\\b"
+                    + "|\\byok\\w*\\b.{0,25}?\\bbebek\\w*"
+                    + "|\\bbebeksiz\\w*"
+                    + "|\\bno\\s+(?:infant|infants|baby|babies)\\b"
+                    + "|\\bwithout\\s+(?:infant|infants|baby|babies)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL);
+    private static final java.util.regex.Pattern CHILD_NEGATION_PATTERN = java.util.regex.Pattern.compile(
+            "\\b(?:çocuk|cocuk)\\w*.{0,25}?\\byok\\w*\\b"
+                    + "|\\byok\\w*\\b.{0,25}?\\b(?:çocuk|cocuk)\\w*"
+                    + "|\\b(?:çocuk|cocuk)suz\\w*"
+                    + "|\\bno\\s+(?:child|children|kid|kids)\\b"
+                    + "|\\bwithout\\s+(?:child|children|kid|kids)\\b",
+            java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL);
+
+    private void applyChildInfantNegation(SearchCriteria criteria, String userMessage) {
+        if (criteria == null || userMessage == null || userMessage.isBlank())
+            return;
+        if (!"HOTEL_SEARCH".equals(criteria.getSearchType()))
+            return;
+
+        if (INFANT_NEGATION_PATTERN.matcher(userMessage).find()) {
+            criteria.setInfantCount(0);
+            criteria.setInfantAges(new java.util.ArrayList<>());
+        }
+        if (CHILD_NEGATION_PATTERN.matcher(userMessage).find()) {
+            criteria.setChildCount(0);
+            criteria.setChildAges(new java.util.ArrayList<>());
+        }
+    }
+
+    private void applyExclusiveGuestCountOverride(SearchCriteria criteria, String userMessage) {
+        if (criteria == null || userMessage == null || userMessage.isBlank())
+            return;
+        if (!"HOTEL_SEARCH".equals(criteria.getSearchType()))
+            return;
+
+        java.util.regex.Matcher matcher = EXCLUSIVE_GUEST_PATTERN.matcher(userMessage);
+        if (!matcher.find())
+            return;
+        // "sadece 2 yetişkin ve 1 çocukla" gibi mesajlarda çocuk/bebek hâlâ isteniyor
+        // olabilir — o durumda dokunmuyoruz. Ama "bebek ve çocuk yok" gibi açıkça
+        // olumsuzlanmış bir mention varsa, bu zaten hariç tutma niyeti demektir,
+        // sıfırlamayı engellememeli.
+        if (MENTIONS_CHILD_OR_INFANT.matcher(userMessage).find()
+                && !NEGATED_CHILD_OR_INFANT_PATTERN.matcher(userMessage).find()) {
+            return;
+        }
+
+        criteria.setAdultCount(Integer.parseInt(matcher.group(1)));
+        criteria.setChildCount(0);
+        criteria.setChildAges(new java.util.ArrayList<>());
+        criteria.setInfantCount(0);
+        criteria.setInfantAges(new java.util.ArrayList<>());
     }
 
     /**
@@ -519,7 +662,61 @@ public class ChatOrchestrationService {
         if (note == null || note.isBlank()) {
             return reply;
         }
-        return note.trim() + "\n" + reply;
+        return (reply == null || reply.isBlank()) ? note : note + "\n\n" + reply;
+    }
+
+    private static final java.util.regex.Pattern LOCATION_SENTENCE_FILLER = java.util.regex.Pattern.compile(
+            "(?i)yakın|civar|olabilir|istiyorum|istiyoruz|olsun|arıyorum|arıyoruz|lazım|gerek");
+
+    private String sanitizeLocationField(String location) {
+        if (location == null || location.isBlank()) {
+            return location;
+        }
+        String trimmed = location.trim();
+        int wordCount = trimmed.split("\\s+").length;
+        if (wordCount > 4 || LOCATION_SENTENCE_FILLER.matcher(trimmed).find()) {
+            log.warn("[Orchestration] Konum alanı cümle gibi görünüyor, reddediliyor: \"{}\"", trimmed);
+            return null;
+        }
+        return trimmed;
+    }
+
+    /**
+     * Otel ve uçuş arasında intent değişince ("ilk uçağı listele" / "ilk oteli
+     * listele" gibi), aynı seyahatin ortak bilgilerini (tarih, yolcu sayısı)
+     * sıfırdan sormak yerine karşı taraftan devralır. Örn. kullanıcı önce
+     * "15 Ağustos gidiş 20 Ağustos dönüş 2 yetişkin" ile uçuş aramışsa, sonra
+     * "ilk oteli listele" dediğinde checkIn/checkOut/adultCount boşsa
+     * departureDate/returnDate/passengerCount'tan doldurulur (ve tersi).
+     */
+    private void carryOverCrossIntentFields(SearchCriteria criteria, String intent) {
+        if (criteria == null) {
+            return;
+        }
+        if ("HOTEL_SEARCH".equals(intent)) {
+            if (criteria.getCheckInDate() == null && criteria.getDepartureDate() != null) {
+                criteria.setCheckInDate(criteria.getDepartureDate());
+            }
+            if (criteria.getCheckOutDate() == null && criteria.getReturnDate() != null) {
+                criteria.setCheckOutDate(criteria.getReturnDate());
+            }
+            if (criteria.getAdultCount() == null && criteria.getPassengerCount() != null) {
+                criteria.setAdultCount(criteria.getPassengerCount());
+            }
+        } else if ("FLIGHT_SEARCH".equals(intent)) {
+            if (criteria.getDepartureDate() == null && criteria.getCheckInDate() != null) {
+                criteria.setDepartureDate(criteria.getCheckInDate());
+            }
+            if (criteria.getReturnDate() == null && criteria.getCheckOutDate() != null) {
+                criteria.setReturnDate(criteria.getCheckOutDate());
+                if (criteria.getTripType() == null || "ONE_WAY".equals(criteria.getTripType())) {
+                    criteria.setTripType("ROUND_TRIP");
+                }
+            }
+            if (criteria.getPassengerCount() == null && criteria.getAdultCount() != null) {
+                criteria.setPassengerCount(criteria.getAdultCount());
+            }
+        }
     }
 
     private void adjustIncomingCriteria(SearchCriteria incoming, String lastField, String message) {
@@ -905,8 +1102,10 @@ public class ChatOrchestrationService {
             String intent,
             SearchCriteria criteria,
             String userMessage,
-            String reclassificationNote) {
+            String reclassificationNote,
+            String conversationHistory) {
 
+        // ... (Guardrail check) ...
         // Guardrail Interceptor: Çocuk var ama yaşlar eksikse arama tetiklenemez
         if ("HOTEL_SEARCH".equals(intent) && criteria.getChildCount() != null && criteria.getChildCount() > 0
                 && (criteria.getChildAges() == null || criteria.getChildAges().isEmpty()
@@ -957,7 +1156,8 @@ public class ChatOrchestrationService {
                 combinedList.addAll(flightRes.getResults());
             }
 
-            boolean isSuccess = (hotelRes.isSuccess() && hotelRes.getResults() != null && !hotelRes.getResults().isEmpty())
+            boolean isSuccess = (hotelRes.isSuccess() && hotelRes.getResults() != null
+                    && !hotelRes.getResults().isEmpty())
                     || (flightRes.isSuccess() && flightRes.getResults() != null && !flightRes.getResults().isEmpty());
 
             String combinedReply = isSuccess
@@ -1009,7 +1209,7 @@ public class ChatOrchestrationService {
                 String resultsJson = mapper.writeValueAsString(slicedResults);
                 String defaultReply = searchResponse.getReply();
                 finalReply = responseAgent.summarize(intent, resultsJson, defaultReply, criteria, userMessage,
-                        totalSize, shownCount);
+                        totalSize, shownCount, conversationHistory);
             } catch (Exception e) {
                 log.warn("[Orchestration] AI summarize failed, using default reply: {}", e.getMessage());
                 finalReply = searchResponse.getReply();

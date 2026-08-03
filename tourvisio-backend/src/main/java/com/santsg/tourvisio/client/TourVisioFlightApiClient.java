@@ -92,29 +92,61 @@ public class TourVisioFlightApiClient {
                 .orElse(items.get(0));
     }
 
+    private static final java.util.Map<String, String> CITY_IATA_MAP = java.util.Map.ofEntries(
+            java.util.Map.entry("antalya", "AYT"),
+            java.util.Map.entry("istanbul", "IST"),
+            java.util.Map.entry("ankara", "ESB"),
+            java.util.Map.entry("izmir", "ADB"),
+            java.util.Map.entry("adana", "ADA"),
+            java.util.Map.entry("trabzon", "TZX"),
+            java.util.Map.entry("bodrum", "BJV"),
+            java.util.Map.entry("dalaman", "DLM"),
+            java.util.Map.entry("gaziantep", "GZT"),
+            java.util.Map.entry("kayseri", "ASR"),
+            java.util.Map.entry("samsun", "SZF"),
+            java.util.Map.entry("van", "VAN"),
+            java.util.Map.entry("konya", "KYA"),
+            java.util.Map.entry("amsterdam", "AMS"),
+            java.util.Map.entry("london", "LON"),
+            java.util.Map.entry("frankfurt", "FRA"),
+            java.util.Map.entry("munich", "MUC"),
+            java.util.Map.entry("paris", "PAR"),
+            java.util.Map.entry("berlin", "BER")
+    );
+
     private TourVisioFlightSearchRequest.LocationCriteria toLocationCriteria(
             TourVisioAutocompleteResponse.AutocompleteItem item, String locationName) {
-        String id;
-        int locationType;
-        if (item.getType() == CITY_AUTOCOMPLETE_TYPE && item.getCity() != null) {
-            id = item.getCity().getId();
-            locationType = CITY_LOCATION_TYPE;
-        } else if (item.getAirport() != null) {
-            id = item.getAirport().getId();
-            locationType = AIRPORT_LOCATION_TYPE;
-        } else if (item.getCity() != null) {
-            id = item.getCity().getId();
-            locationType = CITY_LOCATION_TYPE;
-        } else {
-            id = null;
-            locationType = AIRPORT_LOCATION_TYPE;
+        String id = null;
+
+        // 1. Direct 3-letter IATA code check
+        if (locationName != null && locationName.trim().matches("(?i)^[A-Z]{3}$")) {
+            id = locationName.trim().toUpperCase();
         }
+
+        // 2. Autocomplete item extraction
+        if (id == null && item != null) {
+            if (item.getCity() != null && item.getCity().getId() != null && !item.getCity().getId().isBlank()) {
+                id = item.getCity().getId();
+            } else if (item.getAirport() != null && item.getAirport().getId() != null) {
+                id = item.getAirport().getId();
+            }
+        }
+
+        // 3. Fallback for numeric IDs using CITY_IATA_MAP if applicable
+        if (locationName != null && (id == null || id.matches("\\d+"))) {
+            String norm = locationName.trim().toLowerCase(java.util.Locale.ENGLISH);
+            if (CITY_IATA_MAP.containsKey(norm)) {
+                id = CITY_IATA_MAP.get(norm);
+            }
+        }
+
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("Location not recognized: " + locationName);
         }
+
         return TourVisioFlightSearchRequest.LocationCriteria.builder()
                 .id(id)
-                .type(locationType)
+                .type(CITY_LOCATION_TYPE) // Always type 2 (City) for flight price search
                 .build();
     }
 
@@ -201,8 +233,8 @@ public class TourVisioFlightApiClient {
             boolean roundTrip = "ROUND_TRIP".equalsIgnoreCase(request.getTripType()) && request.getReturnDate() != null;
             int nights = roundTrip
                     ? (int) ChronoUnit.DAYS.between(request.getDepartureDate(), request.getReturnDate())
-                    : 1;
-            if (nights <= 0) {
+                    : 0;
+            if (roundTrip && nights <= 0) {
                 nights = 1;
             }
 

@@ -291,6 +291,32 @@ public class ChatSessionManager {
         return s;
     }
 
+    /**
+     * Formats recent chat history messages into a string for LLM prompt context.
+     *
+     * @param state The session state.
+     * @param maxMessages The maximum number of recent messages to include.
+     * @return Formatted conversation history string.
+     */
+    public String getRecentHistoryFormat(SessionState state, int maxMessages) {
+        if (state == null || state.getMessages() == null || state.getMessages().isEmpty()) {
+            return "";
+        }
+        java.util.List<MessageHistoryItem> messages = state.getMessages();
+        int total = messages.size();
+        int startIndex = Math.max(0, total - maxMessages);
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = startIndex; i < total; i++) {
+            MessageHistoryItem item = messages.get(i);
+            String role = "user".equalsIgnoreCase(item.getSender()) ? "User" : "Assistant";
+            if (item.getText() != null && !item.getText().isBlank()) {
+                sb.append("[").append(role).append("]: ").append(item.getText().trim()).append("\n");
+            }
+        }
+        return sb.toString().trim();
+    }
+
     @Transactional
     public void saveSession(SessionState state) {
         if (chatSessionRepository == null) {

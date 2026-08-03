@@ -96,7 +96,7 @@ public class UserAuthInterceptor implements HandlerInterceptor {
         String requestURI = request.getRequestURI();
         if (requestURI != null) {
             String uriLower = requestURI.toLowerCase();
-            if (uriLower.contains("/api/auth") ||
+            if ((uriLower.contains("/api/auth") && !uriLower.contains("/api/auth/logout")) ||
                 uriLower.contains("/api/authenticationservice/login") ||
                 uriLower.contains("/api/health") ||
                 uriLower.contains("/swagger-ui") ||

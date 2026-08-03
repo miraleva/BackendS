@@ -41,10 +41,14 @@ public class ResponseAgent {
     // ─────────────────────────────────────────────────────────────────────────
 
     public String decline(SearchCriteria criteria, boolean isTerminated) {
-        return decline(criteria, isTerminated, null);
+        return decline(criteria, isTerminated, null, null);
     }
 
     public String decline(SearchCriteria criteria, boolean isTerminated, String userMessage) {
+        return decline(criteria, isTerminated, userMessage, null);
+    }
+
+    public String decline(SearchCriteria criteria, boolean isTerminated, String userMessage, String conversationHistory) {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = resolveLanguageName(criteria);
 
@@ -53,10 +57,10 @@ public class ResponseAgent {
                 "The user made a request outside of your supported services (e.g., bus tickets, train tickets, weather, car rental, visa, etc.).\n" +
                 "Write a hospitable, natural response explaining that this assistant currently supports hotel reservations and flight bookings.\n" +
                 "Invite them to ask for help with hotel or flight searches if needed.\n" +
-                "Write the response in %s — matching the user's language.%s\n" +
+                "Write the response in %s — matching the user's language.%s%s\n" +
                 "Keep a helpful, friendly tone, max 1-2 emojis. Context status: %s.\n" +
                 "Return ONLY the response text itself, no extra notes.",
-                targetLanguage, userMessageClause(userMessage), isTerminated ? "TERMINATED" : "ACTIVE"
+                targetLanguage, userMessageClause(userMessage), conversationHistoryClause(conversationHistory), isTerminated ? "TERMINATED" : "ACTIVE"
         );
 
         try {
@@ -198,10 +202,14 @@ public class ResponseAgent {
     }
 
     public String clarify(SearchCriteria criteria) {
-        return clarify(criteria, null);
+        return clarify(criteria, null, null);
     }
 
     public String clarify(SearchCriteria criteria, String userMessage) {
+        return clarify(criteria, userMessage, null);
+    }
+
+    public String clarify(SearchCriteria criteria, String userMessage, String conversationHistory) {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = resolveLanguageName(criteria);
 
@@ -209,9 +217,9 @@ public class ResponseAgent {
                 "You are a warm and professional travel consultant.\n" +
                 "Ask the user in a friendly conversation whether they would like to search for a hotel or a flight ticket.\n" +
                 "Vary your opening naturally (e.g. 'Harika! Size yardımcı olmaktan memnuniyet duyarım 😊' / 'Great! I would love to help with your trip 😊').\n" +
-                "Write the response in %s — matching the language the user is writing in.%s\n" +
+                "Write the response in %s — matching the language the user is writing in.%s%s\n" +
                 "Max 1-2 emojis. Return ONLY the question itself, no extra notes.",
-                targetLanguage, userMessageClause(userMessage)
+                targetLanguage, userMessageClause(userMessage), conversationHistoryClause(conversationHistory)
         );
 
         try {
@@ -227,10 +235,14 @@ public class ResponseAgent {
     }
 
     public String askMissing(List<String> missingFields, SearchCriteria criteria) {
-        return askMissing(missingFields, criteria, null);
+        return askMissing(missingFields, criteria, null, null);
     }
 
     public String askMissing(List<String> missingFields, SearchCriteria criteria, String userMessage) {
+        return askMissing(missingFields, criteria, userMessage, null);
+    }
+
+    public String askMissing(List<String> missingFields, SearchCriteria criteria, String userMessage, String conversationHistory) {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = resolveLanguageName(criteria);
 
@@ -472,9 +484,9 @@ public class ResponseAgent {
                 "3. Speak naturally like a human travel advisor. DO NOT create technical bulleted summary lists (no %s).\n" +
                 "4. STRICT FIELD LIMIT: Ask ONLY for missing destination/city, dates, adult/passenger count, child count/ages, or infant age. NEVER ask for budget, accommodation type, star preference, seat class, etc.\n" +
                 "5. Keep emojis to maximum 2-3 per message.\n\n" +
-                "Write the question in %s — matching the user's language.%s%s%s%s%s%s\n" +
+                "Write the question in %s — matching the user's language.%s%s%s%s%s%s%s\n" +
                 "Return ONLY the formatted response text itself, no extra notes.",
-                searchTypeContext, fieldsCsv, paragraph1Example, boldExamples, bulletSummaryExample, targetLanguage, userMessageClause(userMessage), poiInstruction, knownDetailsInstruction, ageInstruction, dateStateInstruction, CATEGORY_TERMINOLOGY_CONSTRAINTS
+                searchTypeContext, fieldsCsv, paragraph1Example, boldExamples, bulletSummaryExample, targetLanguage, userMessageClause(userMessage), poiInstruction, knownDetailsInstruction, ageInstruction, dateStateInstruction, CATEGORY_TERMINOLOGY_CONSTRAINTS, conversationHistoryClause(conversationHistory)
         );
 
         try {
@@ -519,6 +531,10 @@ public class ResponseAgent {
     }
 
     public String summarize(String intent, String resultsJson, String defaultReply, SearchCriteria criteria, String userMessage, int totalResults, int shownResults) {
+        return summarize(intent, resultsJson, defaultReply, criteria, userMessage, totalResults, shownResults, null);
+    }
+
+    public String summarize(String intent, String resultsJson, String defaultReply, SearchCriteria criteria, String userMessage, int totalResults, int shownResults, String conversationHistory) {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = resolveLanguageName(criteria);
 
@@ -536,13 +552,17 @@ public class ResponseAgent {
             }
         }
 
+        String guestsDescription = describeGuestComposition(criteria);
+
         String prompt = String.format(
                 "You are an expert, hospitable, and professional travel consultant.\n" +
-                "The user's travel search has been completed successfully. Here are the search results in JSON format:\n" +
+                "The user's travel search has been completed successfully for the following traveler composition: %s.\n" +
+                "Here are the search results in JSON format:\n" +
                 "Search Type: %s\n" +
                 "Results:\n%s\n\n" +
                 "Write a warm, polite, professional assistant response introducing these options smoothly.\n" +
-                "Adopt a delightful travel consultant tone. Express enthusiasm for helping them plan their trip.\n\n" +
+                "Adopt a delightful travel consultant tone. Express enthusiasm for helping them plan their trip.\n" +
+                "CRITICAL MANDATORY RULE: In your opening intro sentence, you MUST explicitly mention the traveler/passenger count breakdown (%s - e.g. '1 yetişkin, 1 çocuk ve 1 bebek' or '3 yetişkin') alongside the travel date!\n\n" +
                 "CRITICAL PRESENTATION & FORMATTING RULES:\n" +
                 "- For Hotel Search (HOTEL_SEARCH):\n" +
                 "  Present up to top 5 hotels in the list using a clean, well-formatted Markdown Table:\n\n" +
@@ -570,11 +590,11 @@ public class ResponseAgent {
                 "  EN for Flight: 'You can check flight details in the side panel ✈️ If you\\'d like, I can also sort these by earliest departure or best price.'\n\n" +
                 "Include the following context naturally in your response:\n%s%s\n\n" +
                 "IMPORTANT CONSTRAINTS:\n" +
-                "1. Write the response in %s — matching the user's language.%s\n" +
+                "1. Write the response in %s — matching the user's language.%s%s\n" +
                 "2. ONLY mention facts present in the JSON results (hotel name, stars, location, price, airline, times). If an attribute is missing/null, leave the cell empty without fabricating data.\n" +
                 "3. Never invent nicer names for raw system/sandbox data.\n" +
                 "4. Return ONLY the assistant response itself, no extra notes.",
-                intent, resultsJson, countNote, childNote, targetLanguage, userMessageClause(userMessage)
+                guestsDescription, intent, resultsJson, guestsDescription, countNote, childNote, targetLanguage, userMessageClause(userMessage), conversationHistoryClause(conversationHistory)
         );
 
         try {
@@ -594,10 +614,14 @@ public class ResponseAgent {
     }
 
     public String confirmSelection(Object selectedItem, SearchCriteria criteria) {
-        return confirmSelection(selectedItem, criteria, null);
+        return confirmSelection(selectedItem, criteria, null, null);
     }
 
     public String confirmSelection(Object selectedItem, SearchCriteria criteria, String userMessage) {
+        return confirmSelection(selectedItem, criteria, userMessage, null);
+    }
+
+    public String confirmSelection(Object selectedItem, SearchCriteria criteria, String userMessage, String conversationHistory) {
         Locale locale = resolveLocale(criteria);
         String targetLanguage = resolveLanguageName(criteria);
         String itemName = "";
@@ -878,6 +902,20 @@ public class ResponseAgent {
             return "";
         }
         return " The user's exact message was: \"" + userMessage.replace("\"", "\\\"") + "\".";
+    }
+
+    private String conversationHistoryClause(String conversationHistory) {
+        if (conversationHistory == null || conversationHistory.isBlank()) {
+            return "";
+        }
+        return String.format(
+                "\nRECENT CONVERSATION HISTORY (for context & tone continuity):\n" +
+                "%s\n" +
+                "CONVERSATION CONTINUITY RULES:\n" +
+                "- If the conversation history above shows that the assistant has ALREADY greeted or spoken with the user in previous turns, DO NOT start your response with greetings (e.g. 'Merhaba', 'Selam', 'Hello', 'Harika!'). Continue the dialogue naturally without repeating greetings.\n" +
+                "- Maintain seamless tone, politeness, and topic continuity.\n",
+                conversationHistory.trim()
+        );
     }
 
     private static final java.util.regex.Pattern JSON_KEY_VALUE_PATTERN =
