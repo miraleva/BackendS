@@ -160,8 +160,22 @@ public class ChatOrchestrationService {
 
         // 2. Oturum sonlandırılmışsa erken çık
         if ("TERMINATED".equals(sessionState.getChatStatus())) {
+            String lang = existingCriteria != null && existingCriteria.getPreferredLanguage() != null 
+                    ? existingCriteria.getPreferredLanguage().toLowerCase() 
+                    : "tr";
+            String reply;
+            if (lang.contains("en")) {
+                reply = "This chat has been closed. Please start a new chat.";
+            } else if (lang.contains("de")) {
+                reply = "Dieser Chat wurde geschlossen. Bitte starten Sie einen neuen Chat.";
+            } else if (lang.contains("ru")) {
+                reply = "Этот чат закрыт. Пожалуйста, начните новый чат.";
+            } else {
+                reply = "Bu sohbet sonlandırılmıştır. Lütfen yeni bir sohbet başlatın.";
+            }
+
             return ChatResponse.builder()
-                    .reply(responseAgent.decline(existingCriteria, true, userMessage, conversationHistory))
+                    .reply(reply)
                     .sessionId(sessionId)
                     .searchType("OUT_OF_SCOPE")
                     .missingFields(List.of())
@@ -243,7 +257,19 @@ public class ChatOrchestrationService {
             String aiIntent = extractionResult.getIntent();
             if ("PROFANITY".equals(aiIntent) || "IRRELEVANT".equals(aiIntent) || "OUT_OF_SCOPE".equals(aiIntent)) {
                 intent = aiIntent;
+            } else if ("HOTEL_SEARCH".equals(aiIntent) || "FLIGHT_SEARCH".equals(aiIntent)) {
+                // ExtractionAgent'a mevcut intent zaten bağlam olarak veriliyor ve
+                // "kullanıcı açıkça geçiş yapmadıkça mevcut intent'i koru" talimatı
+                // içeriyor — yani model burada HOTEL_SEARCH/FLIGHT_SEARCH döndürdüyse
+                // ya zaten aynı intent'tir ya da kullanıcı bilinçli olarak diğerine
+                // geçmiştir ("ilk uçağı listele" gibi). Eskiden burada AI'ın kararı
+                // görmezden gelinip eski intent'e zorla geri dönülüyordu, bu da otel
+                // aramasından sonra uçuş isteyen kullanıcıların hiç uçuş sonucu
+                // görememesine yol açıyordu.
+                intent = aiIntent;
             } else {
+                // UNKNOWN veya tanınmayan bir değer — belirsiz mesajlarda mevcut
+                // bağlamı koru.
                 intent = hasActiveSearch ? existingCriteria.getSearchType() : aiIntent;
             }
             incoming = extractionResult.getCriteria();
@@ -282,28 +308,54 @@ public class ChatOrchestrationService {
                     .build();
         }
 
-        // Handle IRRELEVANT (Category C - Progressive 3-level warnings)
-        if ("IRRELEVANT".equals(intent)) {
+        // Handle IRRELEVANT or OUT_OF_SCOPE (Progressive 3-level warnings/decline)
+        if ("IRRELEVANT".equals(intent) || "OUT_OF_SCOPE".equals(intent)) {
             int warningLevel = sessionState.incrementIrrelevantCount();
             String chatStatus = sessionState.getChatStatus();
-            String reply = responseAgent.irrelevantWarning(warningLevel, existingCriteria, userMessage);
+            
+            String reply;
+            String lang = existingCriteria != null && existingCriteria.getPreferredLanguage() != null 
+                    ? existingCriteria.getPreferredLanguage().toLowerCase() 
+                    : "tr";
+            
+            if (chatStatus.equals("TERMINATED") || warningLevel >= 3) {
+                if (lang.contains("en")) {
+                    reply = "I apologize, but I can only assist with hotel and flight bookings. Due to too many off-topic messages, this conversation has been closed. Please start a new chat. 😊";
+                } else if (lang.contains("de")) {
+                    reply = "Es tut mir leid, aber ich kann Ihnen nur bei Hotel- und Flugbuchungen helfen. Aufgrund zu vieler unpassender Nachrichten wurde dieser Chat beendet. Bitte starten Sie einen neuen Chat. 😊";
+                } else if (lang.contains("ru")) {
+                    reply = "Извините, но я могу помочь только с бронированием отелей и авиабилетов. Этот чат был закрыт из-за слишком большого количества сообщений не по теме. Пожалуйста, начните новый чат. 😊";
+                } else {
+                    reply = "Üzgünüm, sadece otel ve uçak rezervasyonları hakkında yardımcı olabiliyorum. Alakasız talepleriniz nedeniyle bu sohbet sonlandırılmıştır. Lütfen yeni bir sohbet başlatın. 😊";
+                }
+            } else {
+                String baseReply;
+                if ("OUT_OF_SCOPE".equals(intent)) {
+                    baseReply = responseAgent.decline(existingCriteria, false, userMessage, conversationHistory);
+                } else {
+                    baseReply = responseAgent.irrelevantWarning(warningLevel, existingCriteria, userMessage);
+                }
+                
+                int remaining = 3 - warningLevel;
+                String suffix;
+                if (lang.contains("en")) {
+                    suffix = "\n\n(Note: Please only ask questions related to hotel or flight bookings. If you continue with off-topic messages, this chat will be closed. Remaining warning rights: " + remaining + ")";
+                } else if (lang.contains("de")) {
+                    suffix = "\n\n(Hinweis: Bitte stellen Sie nur Fragen zu Hotel- oder Flugbuchungen. Wenn Sie mit unpassenden Nachrichten fortfahren, wird dieser Chat geschlossen. Verbleibende Versuche: " + remaining + ")";
+                } else if (lang.contains("ru")) {
+                    suffix = "\n\n(Примечание: Пожалуйста, задавайте вопросы только о бронировании отелей или авиабилетов. Если вы продолжите писать не по теме, чат будет закрыт. Осталось попыток: " + remaining + ")";
+                } else {
+                    suffix = "\n\n(Not: Lütfen sadece otel ve uçuş rezervasyonlarıyla ilgili sorular sorun. Alakasız sorulara devam ederseniz bu sohbet sonlandırılacaktır. Kalan hak: " + remaining + ")";
+                }
+                reply = baseReply + suffix;
+            }
+
             return ChatResponse.builder()
                     .reply(reply)
                     .sessionId(sessionId)
-                    .searchType("IRRELEVANT")
+                    .searchType(intent)
                     .missingFields(List.of())
                     .chatStatus(chatStatus)
-                    .build();
-        }
-
-        // Handle OUT_OF_SCOPE (Category D - Generic scope reply, ACTIVE session, NO counter increment)
-        if ("OUT_OF_SCOPE".equals(intent)) {
-            return ChatResponse.builder()
-                    .reply(responseAgent.decline(existingCriteria, false, userMessage, conversationHistory))
-                    .sessionId(sessionId)
-                    .searchType("OUT_OF_SCOPE")
-                    .missingFields(List.of())
-                    .chatStatus(sessionState.getChatStatus())
                     .build();
         }
 
@@ -369,6 +421,7 @@ public class ChatOrchestrationService {
         // olarak yazılıp sonraki turlarda "hayalet" kriter olarak sızmaya devam ederdi.
         SearchCriteria beforeMerge = existingCriteria.copy();
         existingCriteria.mergeWith(incoming);
+        carryOverCrossIntentFields(existingCriteria, intent);
         applyChildInfantNegation(existingCriteria, userMessage);
         applyExclusiveGuestCountOverride(existingCriteria, userMessage);
         // Bebek/çocuk/yetişkin yaş yeniden-sınıflandırma notu varsa bir kez tüketilir
@@ -570,6 +623,44 @@ public class ChatOrchestrationService {
             return null;
         }
         return trimmed;
+    }
+
+    /**
+     * Otel ve uçuş arasında intent değişince ("ilk uçağı listele" / "ilk oteli
+     * listele" gibi), aynı seyahatin ortak bilgilerini (tarih, yolcu sayısı)
+     * sıfırdan sormak yerine karşı taraftan devralır. Örn. kullanıcı önce
+     * "15 Ağustos gidiş 20 Ağustos dönüş 2 yetişkin" ile uçuş aramışsa, sonra
+     * "ilk oteli listele" dediğinde checkIn/checkOut/adultCount boşsa
+     * departureDate/returnDate/passengerCount'tan doldurulur (ve tersi).
+     */
+    private void carryOverCrossIntentFields(SearchCriteria criteria, String intent) {
+        if (criteria == null) {
+            return;
+        }
+        if ("HOTEL_SEARCH".equals(intent)) {
+            if (criteria.getCheckInDate() == null && criteria.getDepartureDate() != null) {
+                criteria.setCheckInDate(criteria.getDepartureDate());
+            }
+            if (criteria.getCheckOutDate() == null && criteria.getReturnDate() != null) {
+                criteria.setCheckOutDate(criteria.getReturnDate());
+            }
+            if (criteria.getAdultCount() == null && criteria.getPassengerCount() != null) {
+                criteria.setAdultCount(criteria.getPassengerCount());
+            }
+        } else if ("FLIGHT_SEARCH".equals(intent)) {
+            if (criteria.getDepartureDate() == null && criteria.getCheckInDate() != null) {
+                criteria.setDepartureDate(criteria.getCheckInDate());
+            }
+            if (criteria.getReturnDate() == null && criteria.getCheckOutDate() != null) {
+                criteria.setReturnDate(criteria.getCheckOutDate());
+                if (criteria.getTripType() == null || "ONE_WAY".equals(criteria.getTripType())) {
+                    criteria.setTripType("ROUND_TRIP");
+                }
+            }
+            if (criteria.getPassengerCount() == null && criteria.getAdultCount() != null) {
+                criteria.setPassengerCount(criteria.getAdultCount());
+            }
+        }
     }
 
     private void adjustIncomingCriteria(SearchCriteria incoming, String lastField, String message) {
