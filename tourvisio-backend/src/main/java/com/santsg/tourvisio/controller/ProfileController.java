@@ -8,10 +8,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,186 +26,508 @@ public class ProfileController {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public ProfileController(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public ProfileController(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
+    // =========================================================
+    // GET PROFILE
+    // =========================================================
+
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get Profile", description = "Retrieve logged-in user's profile details")
-    public ResponseEntity<?> getProfile(@RequestAttribute(value = "userId", required = false) Long userId) {
+    public ResponseEntity<?> getProfile(
+            @RequestAttribute(value = "userId", required = false) Long userId) {
+
         if (userId == null) {
-            log.warn("[ProfileController] Access denied: userId attribute not found in request");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
-                    "error", "Unauthorized",
-                    "message", "User session is invalid or missing"
-            ));
+            log.warn(
+                    "[ProfileController] Access denied: userId attribute not found in request");
+
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of(
+                            "error", "Unauthorized",
+                            "message", "User session is invalid or missing"));
         }
 
-        log.info("[ProfileController] Fetching profile for userId={}", userId);
-        User user = userRepository.findById(userId).orElse(null);
+        log.info(
+                "[ProfileController] Fetching profile for userId={}",
+                userId);
+
+        User user = userRepository
+                .findById(userId)
+                .orElse(null);
+
         if (user == null) {
-            log.warn("[ProfileController] Profile retrieval failed: user id={} not found", userId);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
-                    "error", "Not Found",
-                    "message", "User profile not found"
-            ));
+            log.warn(
+                    "[ProfileController] Profile retrieval failed: user id={} not found",
+                    userId);
+
+            return ResponseEntity
+                    .status(HttpStatus.NOT_FOUND)
+                    .body(Map.of(
+                            "error", "Not Found",
+                            "message", "User profile not found"));
         }
 
         UserResponse userResponse = mapToUserResponse(user);
+
         return ResponseEntity.ok(userResponse);
     }
+
+    // =========================================================
+    // UPDATE PROFILE
+    // =========================================================
 
     @PutMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Update Profile", description = "Update logged-in user's profile fields")
     public ResponseEntity<?> updateProfile(
             @RequestAttribute(value = "userId", required = false) Long userId,
             @Valid @RequestBody ProfileUpdateRequest request) {
-        
+
         if (userId == null) {
-            log.warn("[ProfileController] Profile update denied: userId attribute not found in request");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
-                    "error", "Unauthorized",
-                    "message", "User session is invalid or missing"
-            ));
+
+            log.warn(
+                    "[ProfileController] Profile update denied: userId attribute not found in request");
+
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of(
+                            "error", "Unauthorized",
+                            "message", "User session is invalid or missing"));
         }
 
-        log.info("[ProfileController] Updating profile for userId={}", userId);
-        User user = userRepository.findById(userId).orElse(null);
+        log.info(
+                "[ProfileController] Updating profile for userId={}",
+                userId);
+
+        User user = userRepository
+                .findById(userId)
+                .orElse(null);
+
         if (user == null) {
-            log.warn("[ProfileController] Profile update failed: user id={} not found", userId);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
-                    "error", "Not Found",
-                    "message", "User profile not found"
-            ));
+
+            log.warn(
+                    "[ProfileController] Profile update failed: user id={} not found",
+                    userId);
+
+            return ResponseEntity
+                    .status(HttpStatus.NOT_FOUND)
+                    .body(Map.of(
+                            "error", "Not Found",
+                            "message", "User profile not found"));
         }
 
-        // Safely update profile fields if they are provided
-        if (request.getFirstName() != null && !request.getFirstName().isBlank()) {
+        if (request.getFirstName() != null
+                && !request.getFirstName().isBlank()) {
             user.setFirstName(request.getFirstName());
         }
-        if (request.getLastName() != null && !request.getLastName().isBlank()) {
+
+        if (request.getLastName() != null
+                && !request.getLastName().isBlank()) {
             user.setLastName(request.getLastName());
         }
-        if (request.getPhone() != null && !request.getPhone().isBlank()) {
+
+        if (request.getPhone() != null
+                && !request.getPhone().isBlank()) {
             user.setPhone(request.getPhone());
         }
-        
-        // These fields are completely nullable, so they can be explicitly updated to null or empty
+
         user.setCountry(request.getCountry());
         user.setGender(request.getGender());
         user.setDateOfBirth(request.getDateOfBirth());
 
         User updatedUser = userRepository.save(user);
-        log.info("[ProfileController] Profile updated successfully for userId={}", userId);
+
+        log.info(
+                "[ProfileController] Profile updated successfully for userId={}",
+                userId);
 
         UserResponse userResponse = mapToUserResponse(updatedUser);
+
         return ResponseEntity.ok(userResponse);
     }
+
+    // =========================================================
+    // DELETE ACCOUNT
+    // =========================================================
 
     @DeleteMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Delete Account", description = "Delete the logged-in user's profile and all associated data")
     @Transactional
-    public ResponseEntity<?> deleteAccount(@RequestAttribute(value = "userId", required = false) Long userId) {
+    public ResponseEntity<?> deleteAccount(
+            @RequestAttribute(value = "userId", required = false) Long userId) {
+
         if (userId == null) {
-            log.warn("[ProfileController] Account deletion denied: userId attribute not found in request");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
-                    "error", "Unauthorized",
-                    "message", "User session is invalid or missing"
-            ));
+
+            log.warn(
+                    "[ProfileController] Account deletion denied: userId attribute not found in request");
+
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of(
+                            "error", "Unauthorized",
+                            "message", "User session is invalid or missing"));
         }
 
-        log.info("[ProfileController] Deleting account for userId={}", userId);
-        User user = userRepository.findById(userId).orElse(null);
+        log.info(
+                "[ProfileController] Deleting account for userId={}",
+                userId);
+
+        User user = userRepository
+                .findById(userId)
+                .orElse(null);
+
         if (user == null) {
-            log.warn("[ProfileController] Account deletion failed: user id={} not found", userId);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
-                    "error", "Not Found",
-                    "message", "User profile not found"
-            ));
+
+            log.warn(
+                    "[ProfileController] Account deletion failed: user id={} not found",
+                    userId);
+
+            return ResponseEntity
+                    .status(HttpStatus.NOT_FOUND)
+                    .body(Map.of(
+                            "error", "Not Found",
+                            "message", "User profile not found"));
         }
 
         userRepository.delete(user);
-        log.info("[ProfileController] Account and all associated data deleted successfully for userId={}", userId);
 
-        return ResponseEntity.ok(Map.of(
-                "message", "Account deleted successfully"
-        ));
+        log.info(
+                "[ProfileController] Account and all associated data deleted successfully for userId={}",
+                userId);
+
+        return ResponseEntity.ok(
+                Map.of(
+                        "message",
+                        "Account deleted successfully"));
     }
+
+    // =========================================================
+    // CHANGE PASSWORD
+    // =========================================================
 
     @PostMapping(value = "/change-password", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Change Password", description = "Change the logged-in user's password")
     public ResponseEntity<?> changePassword(
             @RequestAttribute(value = "userId", required = false) Long userId,
             @Valid @RequestBody com.santsg.tourvisio.dto.auth.ChangePasswordRequest request) {
-        
+
         if (userId == null) {
-            log.warn("[ProfileController] Password change denied: userId attribute not found in request");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
-                    "error", "Unauthorized",
-                    "message", "User session is invalid or missing"
-            ));
+
+            log.warn(
+                    "[ProfileController] Password change denied: userId attribute not found in request");
+
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of(
+                            "error", "Unauthorized",
+                            "message", "User session is invalid or missing"));
         }
 
         String password = request.getPassword();
 
-        log.info("[ProfileController] Changing password for userId={}", userId);
-        User user = userRepository.findById(userId).orElse(null);
+        log.info(
+                "[ProfileController] Changing password for userId={}",
+                userId);
+
+        User user = userRepository
+                .findById(userId)
+                .orElse(null);
+
         if (user == null) {
-            log.warn("[ProfileController] Password change failed: user id={} not found", userId);
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
-                    "error", "Not Found",
-                    "message", "User profile not found"
-            ));
+
+            log.warn(
+                    "[ProfileController] Password change failed: user id={} not found",
+                    userId);
+
+            return ResponseEntity
+                    .status(HttpStatus.NOT_FOUND)
+                    .body(Map.of(
+                            "error", "Not Found",
+                            "message", "User profile not found"));
         }
 
-        // Hash the new password using PasswordEncoder (BCrypt)
         String hashedPassword = passwordEncoder.encode(password);
+
         user.setPassword(hashedPassword);
+
         userRepository.save(user);
 
-        log.info("[ProfileController] Password changed successfully for userId={}", userId);
-        return ResponseEntity.ok(Map.of(
-                "message", "Password changed successfully"
-        ));
+        log.info(
+                "[ProfileController] Password changed successfully for userId={}",
+                userId);
+
+        return ResponseEntity.ok(
+                Map.of(
+                        "message",
+                        "Password changed successfully"));
     }
+
+    // =========================================================
+    // TWO FACTOR AUTHENTICATION
+    // =========================================================
 
     @PutMapping(value = "/two-factor", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Toggle Two-Factor Authentication", description = "Enable or disable two-factor authentication for the logged-in user")
     public ResponseEntity<?> toggleTwoFactor(
             @RequestAttribute(value = "userId", required = false) Long userId,
             @RequestBody Map<String, Boolean> body) {
-        
+
         if (userId == null) {
-            log.warn("[ProfileController] Two-factor toggle denied: userId attribute not found in request");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
-                    "error", "Unauthorized",
-                    "message", "User session is invalid or missing"
-            ));
+
+            log.warn(
+                    "[ProfileController] Two-factor toggle denied: userId attribute not found in request");
+
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of(
+                            "error", "Unauthorized",
+                            "message", "User session is invalid or missing"));
         }
 
-        Boolean enabled = body != null ? body.get("enabled") : null;
+        Boolean enabled = body != null
+                ? body.get("enabled")
+                : null;
+
         if (enabled == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Bad Request", "message", "Missing 'enabled' parameter"));
+
+            return ResponseEntity
+                    .badRequest()
+                    .body(Map.of(
+                            "error", "Bad Request",
+                            "message", "Missing 'enabled' parameter"));
         }
 
-        log.info("[ProfileController] Toggling two-factor to {} for userId={}", enabled, userId);
-        User user = userRepository.findById(userId).orElse(null);
+        log.info(
+                "[ProfileController] Toggling two-factor to {} for userId={}",
+                enabled,
+                userId);
+
+        User user = userRepository
+                .findById(userId)
+                .orElse(null);
+
         if (user == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Not Found", "message", "User profile not found"));
+
+            return ResponseEntity
+                    .status(HttpStatus.NOT_FOUND)
+                    .body(Map.of(
+                            "error", "Not Found",
+                            "message", "User profile not found"));
         }
 
         user.setIsTwoFactorEnabled(enabled);
+
         User updatedUser = userRepository.save(user);
 
-        return ResponseEntity.ok(Map.of(
-                "success", true,
-                "isTwoFactorEnabled", updatedUser.getIsTwoFactorEnabled(),
-                "message", "Two-factor authentication status updated successfully"
-        ));
+        return ResponseEntity.ok(
+                Map.of(
+                        "success", true,
+                        "isTwoFactorEnabled",
+                        updatedUser.getIsTwoFactorEnabled(),
+                        "message",
+                        "Two-factor authentication status updated successfully"));
     }
 
+    // =========================================================
+    // GET NOTIFICATION SETTINGS
+    // =========================================================
+
+    @GetMapping(value = "/notification-settings", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Get Notification Settings", description = "Get notification preferences for the logged-in user")
+    public ResponseEntity<?> getNotificationSettings(
+            @RequestAttribute(value = "userId", required = false) Long userId) {
+
+        if (userId == null) {
+
+            log.warn(
+                    "[ProfileController] Notification settings access denied: userId missing");
+
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of(
+                            "error", "Unauthorized",
+                            "message", "User session is invalid or missing"));
+        }
+
+        User user = userRepository
+                .findById(userId)
+                .orElse(null);
+
+        if (user == null) {
+
+            return ResponseEntity
+                    .status(HttpStatus.NOT_FOUND)
+                    .body(Map.of(
+                            "error", "Not Found",
+                            "message", "User profile not found"));
+        }
+
+        return ResponseEntity.ok(
+                Map.of(
+                        "bookingConfirmations",
+                        user.getNotifyBookingConfirmations(),
+
+                        "bookingChanges",
+                        user.getNotifyBookingChanges(),
+
+                        "flightReminder",
+                        user.getNotifyFlightReminder(),
+
+                        "checkInReminder",
+                        user.getNotifyCheckInReminder(),
+
+                        "hotelReminder",
+                        user.getNotifyHotelReminder(),
+
+                        "priceChanges",
+                        user.getNotifyPriceChanges(),
+
+                        "campaigns",
+                        user.getNotifyCampaigns(),
+
+                        "inApp",
+                        user.getNotifyInApp(),
+
+                        "email",
+                        user.getNotifyEmail()));
+    }
+
+    // =========================================================
+    // UPDATE NOTIFICATION SETTINGS
+    // =========================================================
+
+    @PutMapping(value = "/notification-settings", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Update Notification Settings", description = "Update notification preferences for the logged-in user")
+    public ResponseEntity<?> updateNotificationSettings(
+            @RequestAttribute(value = "userId", required = false) Long userId,
+            @RequestBody Map<String, Boolean> body) {
+
+        if (userId == null) {
+
+            log.warn(
+                    "[ProfileController] Notification settings update denied: userId missing");
+
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of(
+                            "error", "Unauthorized",
+                            "message", "User session is invalid or missing"));
+        }
+
+        User user = userRepository
+                .findById(userId)
+                .orElse(null);
+
+        if (user == null) {
+
+            return ResponseEntity
+                    .status(HttpStatus.NOT_FOUND)
+                    .body(Map.of(
+                            "error", "Not Found",
+                            "message", "User profile not found"));
+        }
+
+        if (body == null) {
+
+            return ResponseEntity
+                    .badRequest()
+                    .body(Map.of(
+                            "error", "Bad Request",
+                            "message", "Notification settings body is required"));
+        }
+
+        if (body.containsKey("bookingConfirmations")) {
+            user.setNotifyBookingConfirmations(
+                    body.get("bookingConfirmations"));
+        }
+
+        if (body.containsKey("bookingChanges")) {
+            user.setNotifyBookingChanges(
+                    body.get("bookingChanges"));
+        }
+
+        if (body.containsKey("flightReminder")) {
+            user.setNotifyFlightReminder(
+                    body.get("flightReminder"));
+        }
+
+        if (body.containsKey("checkInReminder")) {
+            user.setNotifyCheckInReminder(
+                    body.get("checkInReminder"));
+        }
+
+        if (body.containsKey("hotelReminder")) {
+            user.setNotifyHotelReminder(
+                    body.get("hotelReminder"));
+        }
+
+        if (body.containsKey("priceChanges")) {
+            user.setNotifyPriceChanges(
+                    body.get("priceChanges"));
+        }
+
+        if (body.containsKey("campaigns")) {
+            user.setNotifyCampaigns(
+                    body.get("campaigns"));
+        }
+
+        if (body.containsKey("inApp")) {
+            user.setNotifyInApp(
+                    body.get("inApp"));
+        }
+
+        if (body.containsKey("email")) {
+            user.setNotifyEmail(
+                    body.get("email"));
+        }
+
+        User updatedUser = userRepository.save(user);
+
+        log.info(
+                "[ProfileController] Notification settings updated successfully for userId={}",
+                userId);
+
+        return ResponseEntity.ok(
+                Map.of(
+                        "bookingConfirmations",
+                        updatedUser.getNotifyBookingConfirmations(),
+
+                        "bookingChanges",
+                        updatedUser.getNotifyBookingChanges(),
+
+                        "flightReminder",
+                        updatedUser.getNotifyFlightReminder(),
+
+                        "checkInReminder",
+                        updatedUser.getNotifyCheckInReminder(),
+
+                        "hotelReminder",
+                        updatedUser.getNotifyHotelReminder(),
+
+                        "priceChanges",
+                        updatedUser.getNotifyPriceChanges(),
+
+                        "campaigns",
+                        updatedUser.getNotifyCampaigns(),
+
+                        "inApp",
+                        updatedUser.getNotifyInApp(),
+
+                        "email",
+                        updatedUser.getNotifyEmail()));
+    }
+
+    // =========================================================
+    // MAP USER RESPONSE
+    // =========================================================
+
     private UserResponse mapToUserResponse(User user) {
+
         return UserResponse.builder()
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
@@ -215,9 +537,15 @@ public class ProfileController {
                 .gender(user.getGender())
                 .dateOfBirth(user.getDateOfBirth())
                 .createdAt(user.getCreatedAt())
-                .isEmailVerified(Boolean.TRUE.equals(user.getIsEmailVerified()))
-                .isPhoneVerified(Boolean.TRUE.equals(user.getIsPhoneVerified()))
-                .isTwoFactorEnabled(Boolean.TRUE.equals(user.getIsTwoFactorEnabled()))
+                .isEmailVerified(
+                        Boolean.TRUE.equals(
+                                user.getIsEmailVerified()))
+                .isPhoneVerified(
+                        Boolean.TRUE.equals(
+                                user.getIsPhoneVerified()))
+                .isTwoFactorEnabled(
+                        Boolean.TRUE.equals(
+                                user.getIsTwoFactorEnabled()))
                 .build();
     }
 }

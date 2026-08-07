@@ -2,332 +2,491 @@ package com.santsg.tourvisio.service;
 
 import com.santsg.tourvisio.dto.PassengerRequest;
 import com.santsg.tourvisio.dto.ReservationRequest;
+import com.santsg.tourvisio.entity.Notification;
 import com.santsg.tourvisio.entity.Passenger;
 import com.santsg.tourvisio.entity.Reservation;
+import com.santsg.tourvisio.entity.User;
 import com.santsg.tourvisio.exception.ResourceNotFoundException;
+import com.santsg.tourvisio.repository.NotificationRepository;
 import com.santsg.tourvisio.repository.ReservationRepository;
+import com.santsg.tourvisio.repository.UserRepository;
+
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.time.LocalDate;
+
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.Map;
+import java.util.Random;
 
 @Service
+@Slf4j
 public class ReservationService {
 
-    private static final Logger log = LoggerFactory.getLogger(ReservationService.class);
+        private final ReservationRepository reservationRepository;
+        private final EmailService emailService;
+        private final UserRepository userRepository;
+        private final NotificationRepository notificationRepository;
 
-    private final ReservationRepository reservationRepository;
-    private final EmailService emailService;
-
-    public ReservationService(ReservationRepository reservationRepository, EmailService emailService) {
-        this.reservationRepository = reservationRepository;
-        this.emailService = emailService;
-    }
-
-    private void validateReservationRequest(ReservationRequest request) {
-        if (request.getPassengers() == null || request.getPassengers().isEmpty()) {
-            throw new IllegalArgumentException("Reservation must have at least one passenger");
+        public ReservationService(
+                        ReservationRepository reservationRepository,
+                        EmailService emailService,
+                        UserRepository userRepository,
+                        NotificationRepository notificationRepository) {
+                this.reservationRepository = reservationRepository;
+                this.emailService = emailService;
+                this.userRepository = userRepository;
+                this.notificationRepository = notificationRepository;
         }
 
-        PassengerRequest primary = request.getPassengers().get(0);
+        // =========================================================
+        // CREATE RESERVATION
+        // =========================================================
 
-        if (primary.getEmail() == null || primary.getEmail().trim().isEmpty()) {
-            throw new IllegalArgumentException("Primary passenger email cannot be blank");
-        }
-        if (!primary.getEmail().matches("^[a-zA-Z0-9_+&*-]+(?:\\.[a-zA-Z0-9_+&*-]+)*@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,7}$")) {
-            throw new IllegalArgumentException("Invalid primary passenger email format");
-        }
+        @Transactional
+        public Reservation createReservation(
+                        ReservationRequest request,
+                        Long userId) {
 
-        if (primary.getPhoneNumber() == null || primary.getPhoneNumber().trim().isEmpty()) {
-            throw new IllegalArgumentException("Primary passenger phone number cannot be blank");
-        }
+                validateReservationRequest(request);
 
-        for (int i = 0; i < request.getPassengers().size(); i++) {
-            PassengerRequest pr = request.getPassengers().get(i);
-            String nat = pr.getNationality();
-            String idNum = pr.getIdentityNumber();
-            String pName = (pr.getFirstName() != null ? pr.getFirstName() : "") + " " + (pr.getLastName() != null ? pr.getLastName() : "");
-            if (pName.trim().isEmpty()) {
-                pName = (i + 1) + ". Yolcu";
-            }
+                log.info(
+                                "[ReservationService] createReservation başladı. userId={}",
+                                userId);
 
-            if (nat == null || nat.trim().isEmpty()) {
-                throw new IllegalArgumentException(pName + " için uyruk boş olamaz");
-            }
+                User user = null;
 
-            if (idNum == null || idNum.trim().isEmpty()) {
-                throw new IllegalArgumentException(pName + " için T.C. Kimlik / Pasaport numarası boş olamaz");
-            }
-
-            if ("TR".equalsIgnoreCase(nat.trim())) {
-                if (!isValidTCKN(idNum)) {
-                    throw new IllegalArgumentException(pName + " için T.C. Kimlik numarası geçersiz (algoritmaya uymuyor veya hatalı hane).");
+                if (userId != null) {
+                        user = userRepository
+                                        .findById(userId)
+                                        .orElse(null);
                 }
-            } else {
-                if (idNum.trim().length() < 5) {
-                    throw new IllegalArgumentException(pName + " için Pasaport numarası geçersiz (en az 5 karakter olmalıdır).");
+
+                log.info(
+                                "[ReservationService] Kullanıcı bulundu mu? {}",
+                                user != null);
+
+                if (user != null) {
+                        log.info(
+                                        "[ReservationService] userId={}, email={}, notifyInApp={}, notifyBookingConfirmations={}",
+                                        user.getId(),
+                                        user.getEmail(),
+                                        user.getNotifyInApp(),
+                                        user.getNotifyBookingConfirmations());
                 }
-            }
 
-            if (pr.getBirthDate() == null) {
-                throw new IllegalArgumentException(pName + " için doğum tarihi boş olamaz");
-            }
+                // Remote main'deki rezervasyon numarası formatını koruyoruz.
+                String reservationNum = "TV-" + (100000 + new Random().nextInt(900000));
 
-            if (pr.getBirthDate().isAfter(LocalDate.now())) {
-                throw new IllegalArgumentException(pName + " için doğum tarihi geçmişte olmalıdır.");
-            }
+                Reservation reservation = Reservation.builder()
+                                .reservationNumber(reservationNum)
+                                .userId(userId)
+                                .isGuest(userId == null)
+                                .type(request.getType().toUpperCase())
+                                .itemName(request.getItemName())
+                                .destination(request.getDestination())
+                                .startDate(request.getStartDate())
+                                .endDate(request.getEndDate())
+                                .totalPrice(request.getTotalPrice())
+                                .currency(request.getCurrency())
+                                .chatSessionId(request.getChatSessionId())
+                                .imageUrl(request.getImageUrl())
+                                .flightNumber(request.getFlightNumber())
+                                .departureAirportCode(request.getDepartureAirportCode())
+                                .arrivalAirportCode(request.getArrivalAirportCode())
+                                .departureCity(request.getDepartureCity())
+                                .arrivalCity(request.getArrivalCity())
+                                .departureTime(request.getDepartureTime())
+                                .arrivalTime(request.getArrivalTime())
+                                .ticketClass(request.getTicketClass())
+                                .baggageAllowance(request.getBaggageAllowance())
+                                .roomType(request.getRoomType())
+                                .boardType(request.getBoardType())
+                                .checkInTime(request.getCheckInTime())
+                                .checkOutTime(request.getCheckOutTime())
+                                .build();
 
-            int ageYears = java.time.Period.between(pr.getBirthDate(), LocalDate.now()).getYears();
+                List<Passenger> passengers = new ArrayList<>();
 
-            if (i == 0 && ageYears < 18) {
-                throw new IllegalArgumentException("Rezervasyonu yapan kişi 18 yaşından büyük (veya en az 18 yaşında) olmalıdır.");
-            }
+                for (PassengerRequest pr : request.getPassengers()) {
 
-            String genderOrType = pr.getGender();
-            if ("CHD".equalsIgnoreCase(genderOrType) || (genderOrType != null && genderOrType.toUpperCase().contains("CHILD"))) {
-                if (ageYears >= 18) {
-                    throw new IllegalArgumentException(pName + " (çocuk yolcu) için doğum tarihi 18 yaşından küçük olmalıdır.");
+                        Passenger passenger = Passenger.builder()
+                                        .firstName(pr.getFirstName())
+                                        .lastName(pr.getLastName())
+                                        .email(pr.getEmail())
+                                        .phoneNumber(pr.getPhoneNumber())
+                                        .identityNumber(pr.getIdentityNumber())
+                                        .birthDate(pr.getBirthDate())
+                                        .gender(pr.getGender())
+                                        .nationality(pr.getNationality())
+                                        .reservation(reservation)
+                                        .build();
+
+                        passengers.add(passenger);
                 }
-                if (ageYears < 2) {
-                    throw new IllegalArgumentException(pName + " (çocuk yolcu) en az 2 yaşında olmalıdır.");
+
+                reservation.setPassengers(passengers);
+
+                Reservation savedReservation = reservationRepository.save(reservation);
+
+                log.info(
+                                "[ReservationService] Yeni rezervasyon oluşturuldu: PNR={}, User={}",
+                                reservationNum,
+                                userId);
+
+                log.info(
+                                "[ReservationService] Rezervasyon kaydedildi. id={}, reservationNumber={}, userId={}",
+                                savedReservation.getId(),
+                                savedReservation.getReservationNumber(),
+                                savedReservation.getUserId());
+
+                // =====================================================
+                // TOURVISIO API LOG
+                // =====================================================
+
+                try {
+                        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
+                        mapper.registerModule(
+                                        new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+
+                        String reqJson = mapper.writeValueAsString(request);
+
+                        Map<String, Object> respMap = new HashMap<>();
+
+                        respMap.put("id", savedReservation.getId());
+                        respMap.put(
+                                        "reservationNumber",
+                                        savedReservation.getReservationNumber());
+                        respMap.put(
+                                        "itemName",
+                                        savedReservation.getItemName());
+                        respMap.put(
+                                        "type",
+                                        savedReservation.getType());
+                        respMap.put(
+                                        "destination",
+                                        savedReservation.getDestination());
+                        respMap.put(
+                                        "startDate",
+                                        savedReservation.getStartDate() != null
+                                                        ? savedReservation.getStartDate().toString()
+                                                        : null);
+                        respMap.put(
+                                        "endDate",
+                                        savedReservation.getEndDate() != null
+                                                        ? savedReservation.getEndDate().toString()
+                                                        : null);
+                        respMap.put(
+                                        "totalPrice",
+                                        savedReservation.getTotalPrice());
+                        respMap.put(
+                                        "currency",
+                                        savedReservation.getCurrency());
+                        respMap.put(
+                                        "status",
+                                        "SUCCESS");
+
+                        String respJson = mapper.writeValueAsString(respMap);
+
+                        com.santsg.tourvisio.config.TourVisioApiMonitor.logCall(
+                                        "POST",
+                                        "/api/tourvisio/booking",
+                                        2000L,
+                                        200,
+                                        "OK",
+                                        null,
+                                        true,
+                                        reqJson,
+                                        respJson);
+
+                } catch (Exception e) {
+                        log.error(
+                                        "Failed to write TourVisio GDS API log for reservation booking",
+                                        e);
                 }
-            } else if ("INF".equalsIgnoreCase(genderOrType) || (genderOrType != null && genderOrType.toUpperCase().contains("INFANT"))) {
-                if (ageYears >= 2) {
-                    throw new IllegalArgumentException(pName + " (bebek yolcu) için doğum tarihi 2 yaşından küçük olmalıdır.");
+
+                // =====================================================
+                // CONFIRMATION EMAIL
+                // =====================================================
+
+                PassengerRequest primary = request.getPassengers().get(0);
+
+                String fullName = (primary.getFirstName() != null
+                                ? primary.getFirstName()
+                                : "")
+                                + " "
+                                + (primary.getLastName() != null
+                                                ? primary.getLastName()
+                                                : "");
+
+                emailService.sendReservationConfirmationEmail(
+                                savedReservation,
+                                primary.getEmail(),
+                                fullName.trim(),
+                                request.getLang());
+
+                // =====================================================
+                // IN-APP NOTIFICATION
+                // =====================================================
+
+                createBookingNotification(
+                                savedReservation,
+                                user);
+
+                return savedReservation;
+        }
+
+        // =========================================================
+        // CREATE BOOKING NOTIFICATION
+        // =========================================================
+
+        private void createBookingNotification(
+                        Reservation reservation,
+                        User user) {
+
+                log.info(
+                                "[ReservationService] createBookingNotification çağrıldı. reservationId={}, userId={}",
+                                reservation != null
+                                                ? reservation.getId()
+                                                : null,
+                                user != null
+                                                ? user.getId()
+                                                : null);
+
+                if (user == null) {
+                        log.warn(
+                                        "[ReservationService] Bildirim oluşturulmadı: user null");
+                        return;
                 }
-            }
-        }
-    }
 
-    @Transactional
-    public Reservation createReservation(ReservationRequest request, Long userId) {
-        // Simulate TourVisio external supplier API booking response network delay
-        try {
-            Thread.sleep(2000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+                if (!Boolean.TRUE.equals(user.getNotifyInApp())) {
+                        log.warn(
+                                        "[ReservationService] Bildirim oluşturulmadı: notifyInApp=false. userId={}",
+                                        user.getId());
+                        return;
+                }
 
-        validateReservationRequest(request);
+                if (!Boolean.TRUE.equals(
+                                user.getNotifyBookingConfirmations())) {
+                        log.warn(
+                                        "[ReservationService] Bildirim oluşturulmadı: notifyBookingConfirmations=false. userId={}",
+                                        user.getId());
+                        return;
+                }
 
-        // Generate a unique TourVisio reservation number (e.g. TV-849201)
-        String reservationNum = "TV-" + (100000 + new java.util.Random().nextInt(900000));
+                String type = reservation.getType() != null
+                                ? reservation.getType().toUpperCase()
+                                : "";
 
-        Reservation reservation = Reservation.builder()
-                .reservationNumber(reservationNum)
-                .userId(userId)
-                .isGuest(userId == null)
-                .type(request.getType().toUpperCase())
-                .itemName(request.getItemName())
-                .destination(request.getDestination())
-                .startDate(request.getStartDate())
-                .endDate(request.getEndDate())
-                .totalPrice(request.getTotalPrice())
-                .currency(request.getCurrency())
-                .chatSessionId(request.getChatSessionId())
-                .imageUrl(request.getImageUrl())
-                .flightNumber(request.getFlightNumber())
-                .departureAirportCode(request.getDepartureAirportCode())
-                .arrivalAirportCode(request.getArrivalAirportCode())
-                .departureCity(request.getDepartureCity())
-                .arrivalCity(request.getArrivalCity())
-                .departureTime(request.getDepartureTime())
-                .arrivalTime(request.getArrivalTime())
-                .ticketClass(request.getTicketClass())
-                .baggageAllowance(request.getBaggageAllowance())
-                .roomType(request.getRoomType())
-                .boardType(request.getBoardType())
-                .checkInTime(request.getCheckInTime())
-                .checkOutTime(request.getCheckOutTime())
-                .build();
+                String title;
+                String message;
 
-        List<Passenger> passengers = new ArrayList<>();
-        for (PassengerRequest pr : request.getPassengers()) {
-            Passenger passenger = Passenger.builder()
-                    .firstName(pr.getFirstName())
-                    .lastName(pr.getLastName())
-                    .email(pr.getEmail())
-                    .phoneNumber(pr.getPhoneNumber())
-                    .identityNumber(pr.getIdentityNumber())
-                    .birthDate(pr.getBirthDate())
-                    .gender(pr.getGender())
-                    .nationality(pr.getNationality())
-                    .reservation(reservation)
-                    .build();
-            passengers.add(passenger);
-        }
+                if ("HOTEL".equals(type)) {
 
-        reservation.setPassengers(passengers);
-        Reservation savedReservation = reservationRepository.save(reservation);
+                        title = "Otel rezervasyonunuz onaylandı";
 
-        log.info("[ReservationService] Yeni rezervasyon oluşturuldu: PNR={}, User={}", reservationNum, userId);
+                        message = reservation.getItemName()
+                                        + " rezervasyonunuz başarıyla oluşturuldu."
+                                        + " Rezervasyon No: "
+                                        + reservation.getReservationNumber();
 
-        // Log to TourVisio GDS API log table (api_logs)
-        try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            mapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
-            String reqJson = mapper.writeValueAsString(request);
-            java.util.Map<String, Object> respMap = new java.util.HashMap<>();
-            respMap.put("id", savedReservation.getId());
-            respMap.put("reservationNumber", savedReservation.getReservationNumber());
-            respMap.put("itemName", savedReservation.getItemName());
-            respMap.put("type", savedReservation.getType());
-            respMap.put("destination", savedReservation.getDestination());
-            respMap.put("startDate", savedReservation.getStartDate() != null ? savedReservation.getStartDate().toString() : null);
-            respMap.put("endDate", savedReservation.getEndDate() != null ? savedReservation.getEndDate().toString() : null);
-            respMap.put("totalPrice", savedReservation.getTotalPrice());
-            respMap.put("currency", savedReservation.getCurrency());
-            respMap.put("status", "SUCCESS");
-            
-            String respJson = mapper.writeValueAsString(respMap);
-            com.santsg.tourvisio.config.TourVisioApiMonitor.logCall(
-                "POST", 
-                "/api/tourvisio/booking", 
-                2000L, 
-                200, 
-                "OK", 
-                null, 
-                true, 
-                reqJson, 
-                respJson
-            );
-        } catch (Exception e) {
-            log.error("Failed to write TourVisio GDS API log for reservation booking", e);
+                } else if ("FLIGHT".equals(type)) {
+
+                        title = "Uçuş rezervasyonunuz onaylandı";
+
+                        message = reservation.getDestination()
+                                        + " uçuş rezervasyonunuz başarıyla oluşturuldu."
+                                        + " Rezervasyon No: "
+                                        + reservation.getReservationNumber();
+
+                } else {
+
+                        title = "Rezervasyonunuz onaylandı";
+
+                        message = reservation.getItemName()
+                                        + " rezervasyonunuz başarıyla oluşturuldu."
+                                        + " Rezervasyon No: "
+                                        + reservation.getReservationNumber();
+                }
+
+                Notification notification = Notification.builder()
+                                .user(user)
+                                .title(title)
+                                .message(message)
+                                .type("BOOKING_CONFIRMATION")
+                                .isRead(false)
+                                .build();
+
+                try {
+
+                        Notification savedNotification = notificationRepository.save(notification);
+
+                        log.info(
+                                        "[ReservationService] BİLDİRİM OLUŞTURULDU. notificationId={}, userId={}, type={}, title={}",
+                                        savedNotification.getId(),
+                                        user.getId(),
+                                        savedNotification.getType(),
+                                        savedNotification.getTitle());
+
+                } catch (Exception e) {
+
+                        log.error(
+                                        "[ReservationService] BİLDİRİM KAYDEDİLEMEDİ. userId={}, reservationId={}, hata={}",
+                                        user.getId(),
+                                        reservation.getId(),
+                                        e.getMessage(),
+                                        e);
+
+                        throw e;
+                }
         }
 
-        // Send confirmation email
-        PassengerRequest primary = request.getPassengers().get(0);
-        String fullName = (primary.getFirstName() != null ? primary.getFirstName() : "") + " " + (primary.getLastName() != null ? primary.getLastName() : "");
-        emailService.sendReservationConfirmationEmail(savedReservation, primary.getEmail(), fullName.trim(), request.getLang());
+        // =========================================================
+        // UPDATE RESERVATION
+        // =========================================================
 
-        return savedReservation;
-    }
+        @Transactional
+        public Reservation updateReservation(
+                        Long id,
+                        ReservationRequest request) {
 
-    @Transactional
-    public Reservation updateReservation(Long id, ReservationRequest request) {
-        validateReservationRequest(request);
+                validateReservationRequest(request);
 
-        Reservation reservation = reservationRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Reservation with ID " + id + " not found"));
+                Reservation reservation = reservationRepository
+                                .findById(id)
+                                .orElseThrow(
+                                                () -> new ResourceNotFoundException(
+                                                                "Reservation with ID "
+                                                                                + id
+                                                                                + " not found"));
 
-        reservation.setType(request.getType().toUpperCase());
-        reservation.setItemName(request.getItemName());
-        reservation.setDestination(request.getDestination());
-        reservation.setStartDate(request.getStartDate());
-        reservation.setEndDate(request.getEndDate());
-        reservation.setTotalPrice(request.getTotalPrice());
-        reservation.setCurrency(request.getCurrency());
-        reservation.setChatSessionId(request.getChatSessionId());
-        reservation.setImageUrl(request.getImageUrl());
-        reservation.setFlightNumber(request.getFlightNumber());
-        reservation.setDepartureAirportCode(request.getDepartureAirportCode());
-        reservation.setArrivalAirportCode(request.getArrivalAirportCode());
-        reservation.setDepartureCity(request.getDepartureCity());
-        reservation.setArrivalCity(request.getArrivalCity());
-        reservation.setDepartureTime(request.getDepartureTime());
-        reservation.setArrivalTime(request.getArrivalTime());
-        reservation.setTicketClass(request.getTicketClass());
-        reservation.setBaggageAllowance(request.getBaggageAllowance());
-        reservation.setRoomType(request.getRoomType());
-        reservation.setBoardType(request.getBoardType());
-        reservation.setCheckInTime(request.getCheckInTime());
-        reservation.setCheckOutTime(request.getCheckOutTime());
+                reservation.setType(
+                                request.getType().toUpperCase());
+                reservation.setItemName(
+                                request.getItemName());
+                reservation.setDestination(
+                                request.getDestination());
+                reservation.setStartDate(
+                                request.getStartDate());
+                reservation.setEndDate(
+                                request.getEndDate());
+                reservation.setTotalPrice(
+                                request.getTotalPrice());
+                reservation.setCurrency(
+                                request.getCurrency());
+                reservation.setChatSessionId(
+                                request.getChatSessionId());
+                reservation.setImageUrl(
+                                request.getImageUrl());
+                reservation.setFlightNumber(
+                                request.getFlightNumber());
+                reservation.setDepartureAirportCode(
+                                request.getDepartureAirportCode());
+                reservation.setArrivalAirportCode(
+                                request.getArrivalAirportCode());
+                reservation.setDepartureCity(
+                                request.getDepartureCity());
+                reservation.setArrivalCity(
+                                request.getArrivalCity());
+                reservation.setDepartureTime(
+                                request.getDepartureTime());
+                reservation.setArrivalTime(
+                                request.getArrivalTime());
+                reservation.setTicketClass(
+                                request.getTicketClass());
+                reservation.setBaggageAllowance(
+                                request.getBaggageAllowance());
+                reservation.setRoomType(
+                                request.getRoomType());
+                reservation.setBoardType(
+                                request.getBoardType());
+                reservation.setCheckInTime(
+                                request.getCheckInTime());
+                reservation.setCheckOutTime(
+                                request.getCheckOutTime());
 
-        // Cascade ALL + orphanRemoval: clear and re-add
-        reservation.getPassengers().clear();
-        for (PassengerRequest pr : request.getPassengers()) {
-            Passenger passenger = Passenger.builder()
-                    .firstName(pr.getFirstName())
-                    .lastName(pr.getLastName())
-                    .email(pr.getEmail())
-                    .phoneNumber(pr.getPhoneNumber())
-                    .identityNumber(pr.getIdentityNumber())
-                    .birthDate(pr.getBirthDate())
-                    .gender(pr.getGender())
-                    .nationality(pr.getNationality())
-                    .reservation(reservation)
-                    .build();
-            reservation.getPassengers().add(passenger);
+                // Cascade ALL + orphanRemoval:
+                // mevcut yolcuları temizleyip yeniden ekliyoruz.
+                reservation.getPassengers().clear();
+
+                for (PassengerRequest pr : request.getPassengers()) {
+
+                        Passenger passenger = Passenger.builder()
+                                        .firstName(pr.getFirstName())
+                                        .lastName(pr.getLastName())
+                                        .email(pr.getEmail())
+                                        .phoneNumber(pr.getPhoneNumber())
+                                        .identityNumber(pr.getIdentityNumber())
+                                        .birthDate(pr.getBirthDate())
+                                        .gender(pr.getGender())
+                                        .nationality(pr.getNationality())
+                                        .reservation(reservation)
+                                        .build();
+
+                        reservation
+                                        .getPassengers()
+                                        .add(passenger);
+                }
+
+                Reservation updatedReservation = reservationRepository.save(reservation);
+
+                log.info(
+                                "[ReservationService] Rezervasyon güncellendi. id={}, reservationNumber={}",
+                                updatedReservation.getId(),
+                                updatedReservation.getReservationNumber());
+
+                return updatedReservation;
         }
 
-        return reservationRepository.save(reservation);
-    }
+        // =========================================================
+        // GET ALL
+        // =========================================================
 
-    public void sendEmailForReservation(Long reservationId, String overrideEmail) {
-        Reservation reservation = getReservationById(reservationId);
-        String recipientEmail = overrideEmail;
-
-        if ((recipientEmail == null || recipientEmail.isBlank()) && reservation.getPassengers() != null && !reservation.getPassengers().isEmpty()) {
-            Passenger primary = reservation.getPassengers().get(0);
-            recipientEmail = primary.getEmail();
+        public List<Reservation> getAllReservations() {
+                return reservationRepository.findAll();
         }
 
-        if (recipientEmail == null || recipientEmail.isBlank()) {
-            recipientEmail = "destek@sanny.com";
+        // =========================================================
+        // GET BY ID
+        // =========================================================
+
+        public Reservation getReservationById(Long id) {
+
+                return reservationRepository
+                                .findById(id)
+                                .orElseThrow(
+                                                () -> new ResourceNotFoundException(
+                                                                "Reservation with ID "
+                                                                                + id
+                                                                                + " not found"));
         }
 
-        String customerName = reservation.getPrimaryGuestName();
-        if (customerName == null || customerName.isBlank()) {
-            customerName = "Değerli Misafirimiz";
+        // =========================================================
+        // VALIDATION
+        // =========================================================
+
+        private void validateReservationRequest(
+                        ReservationRequest request) {
+
+                if (request == null) {
+                        throw new IllegalArgumentException(
+                                        "Reservation request cannot be null");
+                }
+
+                if (request.getType() == null
+                                || request.getType().isBlank()) {
+                        throw new IllegalArgumentException(
+                                        "Reservation type is required");
+                }
+
+                if (request.getPassengers() == null
+                                || request.getPassengers().isEmpty()) {
+                        throw new IllegalArgumentException(
+                                        "At least one passenger is required");
+                }
         }
-
-        emailService.sendReservationConfirmationEmail(reservation, recipientEmail, customerName, "tr");
-    }
-
-    public List<Reservation> getAllReservations() {
-        return reservationRepository.findAll();
-    }
-
-    public List<Reservation> getReservationsByUserId(Long userId) {
-        if (userId == null) {
-            return new ArrayList<>();
-        }
-        return reservationRepository.findByUserIdOrderByIdDesc(userId);
-    }
-
-    public Reservation getReservationById(Long id) {
-        return reservationRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Reservation with ID " + id + " not found"));
-    }
-
-    @Transactional
-    public void cancelReservation(Long id) {
-        Reservation reservation = getReservationById(id);
-        reservation.setStatus("CANCELLED");
-        reservationRepository.save(reservation);
-    }
-
-    public static boolean isValidTCKN(String tckn) {
-        if (tckn == null || !tckn.matches("^[1-9]\\d{10}$")) {
-            return false;
-        }
-
-        int[] digits = new int[11];
-        for (int i = 0; i < 11; i++) {
-            digits[i] = Character.getNumericValue(tckn.charAt(i));
-        }
-
-        int oddSum = digits[0] + digits[2] + digits[4] + digits[6] + digits[8];
-        int evenSum = digits[1] + digits[3] + digits[5] + digits[7];
-
-        int d10 = ((oddSum * 7 - evenSum) % 10 + 10) % 10;
-        if (d10 != digits[9]) {
-            return false;
-        }
-
-        int sumFirst10 = 0;
-        for (int i = 0; i < 10; i++) {
-            sumFirst10 += digits[i];
-        }
-        int d11 = sumFirst10 % 10;
-        if (d11 != digits[10]) {
-            return false;
-        }
-
-        return true;
-    }
 }

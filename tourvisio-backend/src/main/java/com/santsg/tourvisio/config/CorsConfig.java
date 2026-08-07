@@ -17,7 +17,7 @@ public class CorsConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOriginPatterns("*")
+                .allowedOrigins("*") // Allowing all origins for development and API integration
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
                 .maxAge(3600);
@@ -28,6 +28,9 @@ public class CorsConfig implements WebMvcConfigurer {
         registry.addInterceptor(userAuthInterceptor)
                 .addPathPatterns("/api/**")
                 .excludePathPatterns(
+                        "/api/authenticationservice/login",
+                        "/api/auth/signup",
+                        "/api/auth/login",
                         "/api/health",
                         "/swagger-ui/**",
                         "/v3/api-docs/**",

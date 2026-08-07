@@ -7,10 +7,11 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
+
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "users")
@@ -78,6 +79,48 @@ public class User {
     @Builder.Default
     private Boolean isTwoFactorEnabled = false;
 
+    // =========================================================
+    // NOTIFICATION SETTINGS
+    // =========================================================
+
+    @Column(name = "notify_booking_confirmations")
+    @Builder.Default
+    private Boolean notifyBookingConfirmations = true;
+
+    @Column(name = "notify_booking_changes")
+    @Builder.Default
+    private Boolean notifyBookingChanges = true;
+
+    @Column(name = "notify_flight_reminder")
+    @Builder.Default
+    private Boolean notifyFlightReminder = true;
+
+    @Column(name = "notify_check_in_reminder")
+    @Builder.Default
+    private Boolean notifyCheckInReminder = true;
+
+    @Column(name = "notify_hotel_reminder")
+    @Builder.Default
+    private Boolean notifyHotelReminder = true;
+
+    @Column(name = "notify_price_changes")
+    @Builder.Default
+    private Boolean notifyPriceChanges = false;
+
+    @Column(name = "notify_campaigns")
+    @Builder.Default
+    private Boolean notifyCampaigns = false;
+
+    @Column(name = "notify_in_app")
+    @Builder.Default
+    private Boolean notifyInApp = true;
+
+    @Column(name = "notify_email")
+    @Builder.Default
+    private Boolean notifyEmail = true;
+
+    // =========================================================
+
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
@@ -102,7 +145,66 @@ public class User {
     }
 
     public Boolean getIsTwoFactorEnabled() {
-        return isTwoFactorEnabled != null ? isTwoFactorEnabled : false;
+        return isTwoFactorEnabled != null
+                ? isTwoFactorEnabled
+                : false;
+    }
+
+    // =========================================================
+    // NOTIFICATION DEFAULT GETTERS
+    // =========================================================
+
+    public Boolean getNotifyBookingConfirmations() {
+        return notifyBookingConfirmations != null
+                ? notifyBookingConfirmations
+                : true;
+    }
+
+    public Boolean getNotifyBookingChanges() {
+        return notifyBookingChanges != null
+                ? notifyBookingChanges
+                : true;
+    }
+
+    public Boolean getNotifyFlightReminder() {
+        return notifyFlightReminder != null
+                ? notifyFlightReminder
+                : true;
+    }
+
+    public Boolean getNotifyCheckInReminder() {
+        return notifyCheckInReminder != null
+                ? notifyCheckInReminder
+                : true;
+    }
+
+    public Boolean getNotifyHotelReminder() {
+        return notifyHotelReminder != null
+                ? notifyHotelReminder
+                : true;
+    }
+
+    public Boolean getNotifyPriceChanges() {
+        return notifyPriceChanges != null
+                ? notifyPriceChanges
+                : false;
+    }
+
+    public Boolean getNotifyCampaigns() {
+        return notifyCampaigns != null
+                ? notifyCampaigns
+                : false;
+    }
+
+    public Boolean getNotifyInApp() {
+        return notifyInApp != null
+                ? notifyInApp
+                : true;
+    }
+
+    public Boolean getNotifyEmail() {
+        return notifyEmail != null
+                ? notifyEmail
+                : true;
     }
 }
-

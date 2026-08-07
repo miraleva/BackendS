@@ -1,132 +1,172 @@
 package com.santsg.tourvisio.config;
 
-import com.santsg.tourvisio.repository.UserRepository;
-import com.santsg.tourvisio.entity.User;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
-/**
- * Intercepts incoming HTTP requests to verify the Bearer token in the Authorization header.
- */
 @Component
 public class UserAuthInterceptor implements HandlerInterceptor {
 
     private final ActiveTokenRegistry tokenRegistry;
     private final TourVisioConfig tourVisioConfig;
     private final JwtProvider jwtProvider;
-    private final UserRepository userRepository;
 
     @org.springframework.beans.factory.annotation.Value("${tourvisio.api.test-mode:false}")
     private boolean testMode;
 
-    public UserAuthInterceptor(ActiveTokenRegistry tokenRegistry, TourVisioConfig tourVisioConfig, JwtProvider jwtProvider, UserRepository userRepository) {
+    public UserAuthInterceptor(
+            ActiveTokenRegistry tokenRegistry,
+            TourVisioConfig tourVisioConfig,
+            JwtProvider jwtProvider) {
         this.tokenRegistry = tokenRegistry;
         this.tourVisioConfig = tourVisioConfig;
         this.jwtProvider = jwtProvider;
-        this.userRepository = userRepository;
     }
 
     @Override
-    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        // Add CORS & COOP headers for cross-origin popup compatibility
-        response.setHeader("Access-Control-Allow-Origin", "*");
-        response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-        response.setHeader("Access-Control-Allow-Headers", "*");
-        response.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+    public boolean preHandle(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            Object handler) throws Exception {
 
-        // Bypass check if in test mode
+        // =========================================================
+        // TEST MODE
+        // =========================================================
         if (testMode) {
             return true;
         }
 
-        // Handle OPTIONS request for CORS preflight
+        // =========================================================
+        // CORS PREFLIGHT
+        // =========================================================
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             return true;
         }
 
-        // Get Authorization header
+        String requestURI = request.getRequestURI();
+
+        // =========================================================
+        // PUBLIC AUTH ENDPOINTS
+        // Bu endpointlerde kullanıcı henüz giriş yapmadığı için
+        // Bearer token aranmaz.
+        // =========================================================
+        if (requestURI.equals("/api/auth/login")
+                || requestURI.equals("/api/auth/signup")
+                || requestURI.equals("/api/auth/forgot-password")
+                || requestURI.equals("/api/auth/reset-password")
+                || requestURI.equals("/api/auth/admin-login")
+                || requestURI.equals("/api/auth/oauth-login")
+                || requestURI.equals("/api/auth/google-login")
+                || requestURI.equals("/api/authenticationservice/login")) {
+            return true;
+        }
+
+        // =========================================================
+        // AUTHORIZATION HEADER
+        // =========================================================
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
 
-        if (authHeader != null && authHeader.trim().length() > 7 && authHeader.trim().substring(0, 7).equalsIgnoreCase("Bearer ")) {
-            String token = authHeader.trim().substring(7).trim();
-            
-            if ("sanny-admin-secure-jwt-token-2026".equals(token)) {
-                request.setAttribute("userId", -999L);
-                request.setAttribute("email", "admin@sanny.com");
-                return true;
-            }
-            
-            // 1. Try to validate as our JWT
+        if (authHeader != null
+                && authHeader.startsWith("Bearer ")) {
+
+            String token = authHeader.substring(7).trim();
+
+            // =====================================================
+            // 1. JWT
+            // =====================================================
             try {
+
                 com.auth0.jwt.interfaces.DecodedJWT jwt = jwtProvider.validateToken(token);
+
                 Long userId = jwtProvider.getUserId(jwt);
+
                 String email = jwtProvider.getEmail(jwt);
 
-                if (userId != null && userId != -999L) {
-                    java.util.Optional<User> uOpt = userRepository.findById(userId);
-                    if (uOpt.isPresent() && Boolean.FALSE.equals(uOpt.get().getIsActive())) {
-                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                        response.setContentType("application/json;charset=UTF-8");
-                        response.getWriter().write("{\"error\":\"Forbidden\",\"code\":\"ACCOUNT_RESTRICTED\",\"message\":\"Hesabınız yönetici tarafından kısıtlanmıştır.\"}");
-                        return false;
-                    }
+                if (userId != null) {
+                    request.setAttribute(
+                            "userId",
+                            userId);
                 }
 
-                request.setAttribute("userId", userId);
-                request.setAttribute("email", email);
+                if (email != null && !email.isBlank()) {
+                    request.setAttribute(
+                            "email",
+                            email);
+                }
+
                 return true;
-            } catch (Exception e) {
-                // Not a valid JWT or expired, fall back to existing token registry check
+
+            } catch (Exception ignored) {
+                // JWT değilse registry kontrolüne geç.
             }
 
-            // 2. Fall back to existing token validation
-            if (tokenRegistry.isValid(token) || (tourVisioConfig.isMockMode() && token.length() > 10)) {
+            // =====================================================
+            // 2. ACTIVE TOKEN REGISTRY
+            // =====================================================
+            if (tokenRegistry.isValid(token)) {
+
+                Long userId = tokenRegistry.getUserId(token);
+
+                String email = tokenRegistry.getEmail(token);
+
+                if (userId != null) {
+                    request.setAttribute(
+                            "userId",
+                            userId);
+                }
+
+                if (email != null && !email.isBlank()) {
+                    request.setAttribute(
+                            "email",
+                            email);
+                }
+
+                return true;
+            }
+
+            // =====================================================
+            // 3. MOCK MODE
+            // =====================================================
+            if (tourVisioConfig.isMockMode()
+                    && token.length() > 10) {
                 return true;
             }
         }
 
-        // ─────────────────────────────────────────────────────────────────────────
-        // Public / Guest Endpoints (permitAll)
-        // Giriş yapılmadan bu endpoint'lere istek atılabilmeli.
-        // ─────────────────────────────────────────────────────────────────────────
-        String requestURI = request.getRequestURI();
-        if (requestURI != null) {
-            String uriLower = requestURI.toLowerCase();
-            if ((uriLower.contains("/api/auth") && !uriLower.contains("/api/auth/logout")) ||
-                uriLower.contains("/api/authenticationservice/login") ||
-                uriLower.contains("/api/health") ||
-                uriLower.contains("/swagger-ui") ||
-                uriLower.contains("/v3/api-docs") ||
-                uriLower.contains("/api-docs") ||
-                uriLower.contains("/api/reservations") ||
-                uriLower.contains("/api/tickets") ||
-                uriLower.contains("/api/chat") ||
-                // Otel/uçuş arama sonucundan detay görüntüleme (fotoğraf, açıklama,
-                // olanaklar) misafir kullanıcılar için de çalışmalı — sohbetin kendisi
-                // zaten girişsiz kullanılabiliyor, detay sayfası da öyle olmalı. Bu
-                // whitelist'te olmadığı için misafirlerde her zaman 401 alıp otel
-                // detayının sadece tek bir (arama sonucundaki küçük) fotoğrafla
-                // kalmasına sebep oluyordu.
-                uriLower.contains("/api/hotels") ||
-                uriLower.contains("/api/flights")) {
-                return true;
-            }
-        }
-        // ─────────────────────────────────────────────────────────────────────────
+        // =========================================================
+        // UNAUTHORIZED
+        // =========================================================
+        response.setHeader(
+                "Access-Control-Allow-Origin",
+                "*");
 
-        // Return 401 Unauthorized if token is missing or invalid
-        // Manually add CORS headers because short-circuiting MVC preHandle bypasses CorsFilter/registry
-        response.setHeader("Access-Control-Allow-Origin", "*");
-        response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-        response.setHeader("Access-Control-Allow-Headers", "*");
-        response.setStatus(HttpStatus.UNAUTHORIZED.value());
-        response.setContentType("application/json");
-        response.setCharacterEncoding("UTF-8");
-        response.getWriter().write("{\"error\": \"Unauthorized\", \"message\": \"Authentication is required. Please include a valid Bearer token in the Authorization header.\"}");
+        response.setHeader(
+                "Access-Control-Allow-Methods",
+                "GET, POST, PUT, DELETE, OPTIONS");
+
+        response.setHeader(
+                "Access-Control-Allow-Headers",
+                "*");
+
+        response.setStatus(
+                HttpStatus.UNAUTHORIZED.value());
+
+        response.setContentType(
+                "application/json");
+
+        response.setCharacterEncoding(
+                "UTF-8");
+
+        response.getWriter().write(
+                "{\"error\":\"Unauthorized\","
+                        + "\"message\":\"Authentication is required. "
+                        + "Please include a valid Bearer token "
+                        + "in the Authorization header.\"}");
+
         return false;
     }
 }

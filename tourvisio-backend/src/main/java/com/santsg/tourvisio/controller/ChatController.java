@@ -126,7 +126,6 @@ public class ChatController {
         return ResponseEntity.ok(chatSessionManager.searchSessionsForUser(userId, query));
     }
 
-
     @GetMapping(value = "/sessions/{id}/messages", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Get full message history for a session")
     public ResponseEntity<?> getSessionMessages(
@@ -135,15 +134,13 @@ public class ChatController {
         ChatSessionManager.SessionState state = chatSessionManager.getSessionState(id);
         if (state == null) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(java.util.Map.of(
-                "error", "Not Found",
-                "message", "Session not found: " + id
-            ));
+                    "error", "Not Found",
+                    "message", "Session not found: " + id));
         }
         if (state.getUserId() != null && (userId == null || !userId.equals(state.getUserId()))) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(java.util.Map.of(
-                "error", "Forbidden",
-                "message", "Access denied to session: " + id
-            ));
+                    "error", "Forbidden",
+                    "message", "Access denied to session: " + id));
         }
         return ResponseEntity.ok(state.getMessages());
     }
@@ -156,22 +153,19 @@ public class ChatController {
         ChatSessionManager.SessionState state = chatSessionManager.getSessionState(id);
         if (state == null) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(java.util.Map.of(
-                "error", "Not Found",
-                "message", "Session not found: " + id
-            ));
+                    "error", "Not Found",
+                    "message", "Session not found: " + id));
         }
         if (state.getUserId() != null && (userId == null || !userId.equals(state.getUserId()))) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(java.util.Map.of(
-                "error", "Forbidden",
-                "message", "Access denied to session: " + id
-            ));
+                    "error", "Forbidden",
+                    "message", "Access denied to session: " + id));
         }
         return ResponseEntity.ok(java.util.Map.of(
-            "id", state.getId(),
-            "title", state.getTitle(),
-            "chatStatus", state.getChatStatus(),
-            "mode", state.getMode()
-        ));
+                "id", state.getId(),
+                "title", state.getTitle(),
+                "chatStatus", state.getChatStatus(),
+                "mode", state.getMode()));
     }
 
     @PatchMapping(value = "/sessions/{id}/status", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -183,15 +177,13 @@ public class ChatController {
         ChatSessionManager.SessionState state = chatSessionManager.getSessionState(id);
         if (state == null) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(java.util.Map.of(
-                "error", "Not Found",
-                "message", "Session not found: " + id
-            ));
+                    "error", "Not Found",
+                    "message", "Session not found: " + id));
         }
         if (state.getUserId() != null && (userId == null || !userId.equals(state.getUserId()))) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(java.util.Map.of(
-                "error", "Forbidden",
-                "message", "Access denied to session: " + id
-            ));
+                    "error", "Forbidden",
+                    "message", "Access denied to session: " + id));
         }
         String chatStatus = body.get("chatStatus");
         if (chatStatus != null) {
@@ -212,8 +204,7 @@ public class ChatController {
         }
         if (state.getUserId() != null && (userId == null || !userId.equals(state.getUserId()))) {
             throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.FORBIDDEN, "Access denied to session: " + id
-            );
+                    org.springframework.http.HttpStatus.FORBIDDEN, "Access denied to session: " + id);
         }
         return ResponseEntity.ok(ChatCriteriaSummary.from(chatSessionStore.getOrCreate(id)));
     }
@@ -230,8 +221,7 @@ public class ChatController {
         }
         if (userId != null && !userId.equals(state.getUserId())) {
             throw new org.springframework.web.server.ResponseStatusException(
-                org.springframework.http.HttpStatus.FORBIDDEN, "Access denied to session: " + id
-            );
+                    org.springframework.http.HttpStatus.FORBIDDEN, "Access denied to session: " + id);
         }
         com.santsg.tourvisio.chat.SearchCriteria criteria = chatSessionStore.getOrCreate(id);
         criteria.mergeWith(incoming);
@@ -239,6 +229,47 @@ public class ChatController {
         return ResponseEntity.ok(ChatCriteriaSummary.from(criteria));
     }
 
+    @PostMapping(value = "/sessions/{id}/claim", produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "Misafir sohbet oturumunu giriş yapan kullanıcıya bağla")
+    public ResponseEntity<?> claimGuestSession(
+            @PathVariable String id,
+            @RequestAttribute(value = "userId", required = false) Long userId) {
+
+        if (userId == null) {
+            return ResponseEntity.status(
+                    org.springframework.http.HttpStatus.UNAUTHORIZED).body(
+                            java.util.Map.of(
+                                    "error", "Unauthorized",
+                                    "message", "User session is invalid or missing"));
+        }
+
+        try {
+            ChatSessionManager.SessionState state = chatSessionManager.claimGuestSession(id, userId);
+
+            return ResponseEntity.ok(java.util.Map.of(
+                    "message", "Guest session claimed successfully",
+                    "sessionId", state.getId(),
+                    "userId", state.getUserId()));
+        } catch (ResourceNotFoundException error) {
+            return ResponseEntity.status(
+                    org.springframework.http.HttpStatus.NOT_FOUND).body(
+                            java.util.Map.of(
+                                    "error", "Not Found",
+                                    "message", error.getMessage()));
+        } catch (IllegalStateException error) {
+            return ResponseEntity.status(
+                    org.springframework.http.HttpStatus.FORBIDDEN).body(
+                            java.util.Map.of(
+                                    "error", "Forbidden",
+                                    "message", error.getMessage()));
+        } catch (IllegalArgumentException error) {
+            return ResponseEntity.status(
+                    org.springframework.http.HttpStatus.BAD_REQUEST).body(
+                            java.util.Map.of(
+                                    "error", "Bad Request",
+                                    "message", error.getMessage()));
+        }
+    }
 
     @DeleteMapping(value = "/sessions/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Delete a chat session and all its messages")
@@ -247,22 +278,19 @@ public class ChatController {
             @RequestAttribute(value = "userId", required = false) Long userId) {
         if (userId == null) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).body(java.util.Map.of(
-                "error", "Unauthorized",
-                "message", "User session is invalid or missing"
-            ));
+                    "error", "Unauthorized",
+                    "message", "User session is invalid or missing"));
         }
         ChatSessionManager.SessionState state = chatSessionManager.getSessionState(id);
         if (state == null) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND).body(java.util.Map.of(
-                "error", "Not Found",
-                "message", "Session not found: " + id
-            ));
+                    "error", "Not Found",
+                    "message", "Session not found: " + id));
         }
         if (!userId.equals(state.getUserId())) {
             return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(java.util.Map.of(
-                "error", "Forbidden",
-                "message", "Access denied to session: " + id
-            ));
+                    "error", "Forbidden",
+                    "message", "Access denied to session: " + id));
         }
         chatSessionManager.removeSession(id);
         return ResponseEntity.ok(java.util.Map.of("message", "Session deleted successfully"));

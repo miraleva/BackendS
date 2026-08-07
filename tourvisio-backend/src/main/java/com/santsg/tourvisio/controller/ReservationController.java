@@ -3,12 +3,16 @@ package com.santsg.tourvisio.controller;
 import com.santsg.tourvisio.dto.ReservationRequest;
 import com.santsg.tourvisio.entity.Reservation;
 import com.santsg.tourvisio.service.ReservationService;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+
 import jakarta.validation.Valid;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 
 @RestController
@@ -18,57 +22,55 @@ public class ReservationController {
 
     private final ReservationService reservationService;
 
-    public ReservationController(ReservationService reservationService) {
+    public ReservationController(
+            ReservationService reservationService) {
         this.reservationService = reservationService;
     }
 
+    // =========================================================
+    // CREATE RESERVATION
+    // =========================================================
+
     @PostMapping
-    @Operation(summary = "Create a new reservation", description = "Validates the reservation details and passengers, generates a unique booking number, and persists the record.")
+    @Operation(summary = "Create a new reservation", description = "Creates a reservation for the logged-in user and generates notifications when enabled.")
     public ResponseEntity<Reservation> createReservation(
-            @Valid @RequestBody ReservationRequest request,
-            @RequestAttribute(value = "userId", required = false) Long userId) {
-        Reservation created = reservationService.createReservation(request, userId);
-        return new ResponseEntity<>(created, HttpStatus.CREATED);
+            @RequestAttribute(value = "userId", required = false) Long userId,
+
+            @Valid @RequestBody ReservationRequest request) {
+
+        Reservation created = reservationService.createReservation(
+                request,
+                userId);
+
+        return new ResponseEntity<>(
+                created,
+                HttpStatus.CREATED);
     }
 
+    // =========================================================
+    // GET ALL
+    // =========================================================
+
     @GetMapping
-    @Operation(summary = "Get user reservations", description = "Retrieves all bookings for the logged-in user.")
-    public ResponseEntity<List<Reservation>> getUserReservations(
-            @RequestAttribute(value = "userId", required = false) Long userId) {
-        
-        if (userId == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        
-        List<Reservation> list = reservationService.getReservationsByUserId(userId);
+    @Operation(summary = "Get all reservations", description = "Retrieves all hotel and flight bookings.")
+    public ResponseEntity<List<Reservation>> getAllReservations() {
+
+        List<Reservation> list = reservationService.getAllReservations();
+
         return ResponseEntity.ok(list);
     }
 
-    @GetMapping("/{id}")
-    @Operation(summary = "Get reservation by ID", description = "Retrieves a specific booking by its numeric ID. Returns 404 if not found.")
-    public ResponseEntity<Reservation> getReservationById(@PathVariable Long id) {
+    // =========================================================
+    // GET BY ID
+    // =========================================================
+
+    @GetMapping("/{id:\\d+}")
+    @Operation(summary = "Get reservation by ID", description = "Retrieves a specific booking by its numeric ID.")
+    public ResponseEntity<Reservation> getReservationById(
+            @PathVariable Long id) {
+
         Reservation reservation = reservationService.getReservationById(id);
+
         return ResponseEntity.ok(reservation);
-    }
-
-    @PutMapping("/{id}")
-    @Operation(summary = "Update an existing reservation", description = "Validates the reservation details and updates the booking record and passenger list.")
-    public ResponseEntity<Reservation> updateReservation(@PathVariable Long id, @Valid @RequestBody ReservationRequest request) {
-        Reservation updated = reservationService.updateReservation(id, request);
-        return ResponseEntity.ok(updated);
-    }
-
-    @DeleteMapping("/{id}")
-    @Operation(summary = "Cancel a reservation", description = "Soft deletes a reservation by setting its status to CANCELLED.")
-    public ResponseEntity<Void> cancelReservation(@PathVariable Long id) {
-        reservationService.cancelReservation(id);
-        return ResponseEntity.noContent().build();
-    }
-
-    @PostMapping("/{id}/email")
-    @Operation(summary = "Send confirmation email for reservation", description = "Dispatches reservation summary details to the customer's email address.")
-    public ResponseEntity<Void> sendReservationEmail(@PathVariable Long id, @RequestParam(required = false) String email) {
-        reservationService.sendEmailForReservation(id, email);
-        return ResponseEntity.ok().build();
     }
 }
