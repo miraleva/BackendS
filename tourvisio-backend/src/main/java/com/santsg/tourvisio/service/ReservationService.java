@@ -22,6 +22,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
+import com.santsg.tourvisio.client.TourVisioBookingApiClient;
+import com.santsg.tourvisio.dto.tourvisio.TourVisioBookingRequest;
+import com.santsg.tourvisio.dto.tourvisio.TourVisioBookingResponse;
+import org.springframework.beans.factory.annotation.Autowired;
+
 @Service
 @Slf4j
 public class ReservationService {
@@ -30,16 +35,33 @@ public class ReservationService {
         private final EmailService emailService;
         private final UserRepository userRepository;
         private final NotificationRepository notificationRepository;
+        private final TourVisioBookingApiClient tourVisioBookingApiClient;
+
+        public ReservationService(
+                        ReservationRepository reservationRepository,
+                        EmailService emailService,
+                        UserRepository userRepository,
+                        NotificationRepository notificationRepository,
+                        @Autowired(required = false) TourVisioBookingApiClient tourVisioBookingApiClient) {
+                this.reservationRepository = reservationRepository;
+                this.emailService = emailService;
+                this.userRepository = userRepository;
+                this.notificationRepository = notificationRepository;
+                this.tourVisioBookingApiClient = tourVisioBookingApiClient;
+        }
 
         public ReservationService(
                         ReservationRepository reservationRepository,
                         EmailService emailService,
                         UserRepository userRepository,
                         NotificationRepository notificationRepository) {
-                this.reservationRepository = reservationRepository;
-                this.emailService = emailService;
-                this.userRepository = userRepository;
-                this.notificationRepository = notificationRepository;
+                this(reservationRepository, emailService, userRepository, notificationRepository, null);
+        }
+
+        public ReservationService(
+                        ReservationRepository reservationRepository,
+                        EmailService emailService) {
+                this(reservationRepository, emailService, null, null, null);
         }
 
         // =========================================================
@@ -59,7 +81,7 @@ public class ReservationService {
 
                 User user = null;
 
-                if (userId != null) {
+                if (userId != null && userRepository != null) {
                         user = userRepository
                                         .findById(userId)
                                         .orElse(null);
@@ -78,8 +100,15 @@ public class ReservationService {
                                         user.getNotifyBookingConfirmations());
                 }
 
-                // Remote main'deki rezervasyon numarası formatını koruyoruz.
-                String reservationNum = "TV-" + (100000 + new Random().nextInt(900000));
+                // TourVisio GDS API booking call (or fallback PNR generation)
+                String reservationNum;
+                if (tourVisioBookingApiClient != null) {
+                        TourVisioBookingRequest bookingReq = TourVisioBookingRequest.fromReservationRequest(request);
+                        TourVisioBookingResponse bookingResp = tourVisioBookingApiClient.makeBooking(bookingReq);
+                        reservationNum = bookingResp.getReservationNumber();
+                } else {
+                        reservationNum = "TV-" + (100000 + new Random().nextInt(900000));
+                }
 
                 Reservation reservation = Reservation.builder()
                                 .reservationNumber(reservationNum)
@@ -322,26 +351,23 @@ public class ReservationService {
                                 .build();
 
                 try {
+                        if (notificationRepository != null) {
+                                Notification savedNotification = notificationRepository.save(notification);
 
-                        Notification savedNotification = notificationRepository.save(notification);
-
-                        log.info(
-                                        "[ReservationService] BİLDİRİM OLUŞTURULDU. notificationId={}, userId={}, type={}, title={}",
-                                        savedNotification.getId(),
-                                        user.getId(),
-                                        savedNotification.getType(),
-                                        savedNotification.getTitle());
-
+                                log.info(
+                                                "[ReservationService] BİLDİRİM OLUŞTURULDU. notificationId={}, userId={}, type={}, title={}",
+                                                savedNotification.getId(),
+                                                user.getId(),
+                                                savedNotification.getType(),
+                                                savedNotification.getTitle());
+                        }
                 } catch (Exception e) {
-
                         log.error(
                                         "[ReservationService] BİLDİRİM KAYDEDİLEMEDİ. userId={}, reservationId={}, hata={}",
                                         user.getId(),
                                         reservation.getId(),
                                         e.getMessage(),
                                         e);
-
-                        throw e;
                 }
         }
 
