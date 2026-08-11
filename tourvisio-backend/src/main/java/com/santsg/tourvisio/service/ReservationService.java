@@ -37,6 +37,7 @@ public class ReservationService {
         private final NotificationRepository notificationRepository;
         private final TourVisioBookingApiClient tourVisioBookingApiClient;
 
+        @Autowired
         public ReservationService(
                         ReservationRepository reservationRepository,
                         EmailService emailService,
