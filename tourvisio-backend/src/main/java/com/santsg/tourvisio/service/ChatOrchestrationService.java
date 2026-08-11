@@ -815,7 +815,12 @@ public class ChatOrchestrationService {
 
                 case "çocuk yaşları":
                     if (incoming.getChildAges() == null || incoming.getChildAges().isEmpty()) {
-                        incoming.setChildAges(parseChildAges(message));
+                        List<Integer> allAgesFromMsg = parseChildAges(message);
+                        // Kullanıcı tek mesajda hem çocuk hem bebek yaşı verebilir.
+                        // parseChildAges hem "yaş" hem "aylık" kalıplarını tanır,
+                        // dolayısıyla tüm yaşları childAges'a koyuyoruz —
+                        // reconcileAgeBuckets yaşa göre doğru kovaya dağıtacak.
+                        incoming.setChildAges(allAgesFromMsg);
                     }
                     break;
 
@@ -829,11 +834,19 @@ public class ChatOrchestrationService {
                     break;
 
                 case "bebek yaşları":
-                    // Hangi listeye (infantAges/childAges) yazıldığı önemli değil —
-                    // SearchCriteria.reconcileAgeBuckets() gerçek yaşa göre zaten
-                    // doğru kovaya taşıyacak.
+                    // Kullanıcı tek mesajda hem çocuk hem bebek yaşını verebilir
+                    // (ör. "çocuk 12 yaşında bebek 1 aylık"). Tüm yaşları childAges'a
+                    // koyuyoruz — reconcileAgeBuckets 0-2 yaş → bebek, 3-12 → çocuk
+                    // olarak doğru kovaya taşıyacak.
                     if (incoming.getInfantAges() == null || incoming.getInfantAges().isEmpty()) {
-                        incoming.setInfantAges(parseChildAges(message));
+                        List<Integer> infantAndChildAges = parseChildAges(message);
+                        // Eğer "çocuk yaşları" case'i de aynı tur içinde çalıştıysa
+                        // ve childAges zaten dolduysa, bebek yaşlarını ekle.
+                        if (incoming.getChildAges() != null && !incoming.getChildAges().isEmpty()) {
+                            // Aynı yaşlar zaten childAges'ta olabilir — tekrar ekleme
+                        } else {
+                            incoming.setChildAges(infantAndChildAges);
+                        }
                     }
                     break;
 
@@ -920,14 +933,28 @@ public class ChatOrchestrationService {
      * sayılardan oluşuyorsa (kullanıcı sadece "5, 8" gibi yazdıysa) tüm
      * sayıları yaş kabul eder.
      */
+    // Yaş belirteçleri: "12 yaşında", "5 yaş", "8 years old" vb.
     private static final java.util.regex.Pattern CHILD_AGE_CLAUSE_PATTERN = java.util.regex.Pattern.compile(
             "((?:\\d{1,2}\\s*(?:,|ve|and)?\\s*)+)(?:yaş\\w*|yasinda|yaslarinda|years?\\s*old|y/o)",
             java.util.regex.Pattern.CASE_INSENSITIVE);
 
+    // Ay belirteçleri: "1 aylık", "3 aylik", "6 ay", "11 months" vb.
+    // Yakalanan sayı ay cinsindendir — yıla çevirirken 12'ye bölünüp alta yuvarlanır
+    // (ör. 1 aylık → 0 yaş, 14 aylık → 1 yaş).
+    private static final java.util.regex.Pattern MONTH_AGE_CLAUSE_PATTERN = java.util.regex.Pattern.compile(
+            "(\\d{1,2})\\s*(?:aylık|aylik|aylık\\w*|aylik\\w*|ay(?:lık)?|months?\\s*old|months?)",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Mesajdan çocuk/bebek yaşlarını çıkarır.
+     * Hem yıl cinsinden ("12 yaşında") hem ay cinsinden ("1 aylık" → 0 yaş) ifadeleri tanır.
+     * Bulamazsa ve mesaj tamamen sayılardan oluşuyorsa tüm sayıları yaş kabul eder.
+     */
     private List<Integer> parseChildAges(String message) {
         List<Integer> ages = new java.util.ArrayList<>();
         if (message == null) return ages;
 
+        // 1. Yıl cinsinden yaşlar: "12 yaşında", "5 ve 8 yaş" vb.
         java.util.regex.Matcher clauseMatcher = CHILD_AGE_CLAUSE_PATTERN.matcher(message);
         while (clauseMatcher.find()) {
             java.util.regex.Matcher numMatcher = java.util.regex.Pattern.compile("\\d{1,2}").matcher(clauseMatcher.group(1));
@@ -935,6 +962,14 @@ public class ChatOrchestrationService {
                 ages.add(Integer.parseInt(numMatcher.group()));
             }
         }
+
+        // 2. Ay cinsinden yaşlar: "1 aylık", "6 ay" vb. → yıla çevir (floor(ay/12))
+        java.util.regex.Matcher monthMatcher = MONTH_AGE_CLAUSE_PATTERN.matcher(message);
+        while (monthMatcher.find()) {
+            int months = Integer.parseInt(monthMatcher.group(1));
+            ages.add(months / 12); // 1 aylık → 0, 14 aylık → 1
+        }
+
         if (!ages.isEmpty()) {
             return ages;
         }
