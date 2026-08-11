@@ -364,7 +364,10 @@ public class ChatOrchestrationService {
         // kullanıcı direkt o soruyu cevaplıyordur; yeni bir "sadece N yetişkin" partisi öne
         // sürmüyor. Modelin yine de (çocuk/bebek tekrar anılmadı diye) sıfırlama sinyali
         // döndürdüğü gözlemlendi — bu turda o sinyali güvenilir biçimde yok sayıyoruz.
-        if (hasActiveSearch && lastField != null && lastField.contains("yetişkin sayısı") && incoming != null) {
+        // ANCAK: Kullanıcı cevabında açıkça çocuk/bebek de söylediyse (ör. hızlı yanıt
+        // butonu "2 yetişkin 1 çocuk 1 bebek"), o değerler gerçek niyet taşır — sıfırlamamalıyız.
+        if (hasActiveSearch && lastField != null && lastField.contains("yetişkin sayısı") && incoming != null
+                && !MENTIONS_CHILD_OR_INFANT.matcher(userMessage != null ? userMessage : "").find()) {
             incoming.setChildCount(null);
             incoming.setChildAges(null);
             incoming.setInfantCount(null);

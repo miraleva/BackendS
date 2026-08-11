@@ -8,6 +8,7 @@ import com.santsg.tourvisio.chat.SearchCriteriaValidator;
 import com.santsg.tourvisio.agent.ExtractionAgent;
 import com.santsg.tourvisio.agent.ExtractionResult;
 import com.santsg.tourvisio.agent.ResponseAgent;
+import com.santsg.tourvisio.service.IntentDetectionService;
 import com.santsg.tourvisio.dto.ChatRequest;
 import com.santsg.tourvisio.dto.ChatResponse;
 import com.santsg.tourvisio.dto.ChatSearchResponse;
@@ -641,6 +642,44 @@ class ChatOrchestrationServiceTest {
                 assertThat(updatedCriteria.getReturnDate()).isEqualTo(java.time.LocalDate.of(2026, 8, 20));
                 assertThat(updatedCriteria.getPassengerCount()).isEqualTo(2);
                 assertThat(updatedCriteria.getLocationOrHotelName()).isNull();
+        }
+
+        @Test
+        void orchestrate_shouldPreserveChildAndInfantCounts() {
+                ChatSessionManager chatSessionManager = new ChatSessionManager();
+                ChatSessionStore sessionStore = new ChatSessionStore();
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor();
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService();
+
+                ChatOrchestrationService service = new ChatOrchestrationService(
+                                intentDetectionService,
+                                chatSessionManager,
+                                sessionStore,
+                                extractor,
+                                missingFieldsService, criteriaValidator,
+                                extractionAgent,
+                                responseAgent,
+                                hotelSearchService,
+                                flightSearchService);
+
+                String sessionId = "child-infant-test-session";
+                SearchCriteria extracted = new SearchCriteria();
+                extracted.setAdultCount(2);
+                extracted.setChildCount(1);
+                extracted.setInfantCount(1);
+
+                when(extractionAgent.extract(any(), any(), any(), any(), anyBoolean()))
+                                .thenReturn(new ExtractionResult("HOTEL_SEARCH", extracted));
+
+                service.orchestrate(ChatRequest.builder()
+                                .message("2 yetişkin 1 çocuk 1 bebek")
+                                .sessionId(sessionId)
+                                .build());
+
+                SearchCriteria saved = sessionStore.getOrCreate(sessionId);
+                assertThat(saved.getAdultCount()).isEqualTo(2);
+                assertThat(saved.getChildCount()).isEqualTo(1);
+                assertThat(saved.getInfantCount()).isEqualTo(1);
         }
 }
 

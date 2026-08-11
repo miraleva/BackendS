@@ -179,7 +179,13 @@ public class SearchCriteria {
         // öğrenilmiş gerçek çocuk sayısı yanlışlıkla sıfırlanmasın.
         if (incoming.getChildAges() != null && !incoming.getChildAges().isEmpty()) {
             this.childAges = incoming.getChildAges();
-            this.childCount = incoming.getChildAges().size();
+            // childCount YALNIZCA daha önce belirlenmemişse (null) childAges boyutundan türetilir.
+            // Eğer kullanıcı önceden "1 çocuk" demişse, yaş toplama sırasında ekstraktoruün
+            // hem çocuk hem de bebek yaşlarını childAges'a koyması nedeniyle
+            // childCount yanlışlıkla yazılmamasın — reconcileAgeBuckets doğru sayıyı belirler.
+            if (this.childCount == null) {
+                this.childCount = incoming.getChildAges().size();
+            }
         } else if (incoming.getChildCount() != null && incoming.getChildCount() > 0) {
             this.childCount = incoming.getChildCount();
         } else if (incoming.getChildCount() != null && incoming.getChildCount() == 0
@@ -253,22 +259,21 @@ public class SearchCriteria {
             return;
         }
 
-        // Yaşı henüz bilinmeyen (sadece sayı söylenmiş, yaş sorusu hâlâ bekleniyor
-        // olabilecek) bebek/çocuk sayısı — bunlar aşağıda yaşa göre yeniden
-        // dağıtılan listelere dahil değildir, o yüzden sayı hesaplanırken korunmalı.
+        // Reconcile çalışmadan öNCE mülk değerlerini kaydet — yaş dağıtımının
+        // doğru "eksik yaş" hesabı yapabilmesi için bunlara ihtiyaç var.
+        int origInfantCount = (this.infantCount != null ? this.infantCount : 0);
+        int origChildCount  = (this.childCount  != null ? this.childCount  : 0);
         int prevInfantAgesKnown = this.infantAges != null ? this.infantAges.size() : 0;
-        int prevChildAgesKnown = this.childAges != null ? this.childAges.size() : 0;
-        int infantsWithoutKnownAge = Math.max(0,
-                (this.infantCount != null ? this.infantCount : 0) - prevInfantAgesKnown);
-        int childrenWithoutKnownAge = Math.max(0,
-                (this.childCount != null ? this.childCount : 0) - prevChildAgesKnown);
+        int prevChildAgesKnown  = this.childAges  != null ? this.childAges.size()  : 0;
+        // Toplam sağlanan yaş = childAges + infantAges (ekstrakör bazen ikisini de childAges'e yazar)
+        int totalAgesProvided = prevInfantAgesKnown + prevChildAgesKnown;
 
         List<Integer> newInfantAges = new ArrayList<>();
-        List<Integer> newChildAges = new ArrayList<>();
+        List<Integer> newChildAges  = new ArrayList<>();
         int movedToAdult = 0;
         for (Integer age : allAges) {
             if (age == null) continue;
-            if (age <= 2) newInfantAges.add(age);
+            if (age <= 2)  newInfantAges.add(age);
             else if (age <= 12) newChildAges.add(age);
             else movedToAdult++;
         }
@@ -280,15 +285,33 @@ public class SearchCriteria {
         if (changed) {
             List<String> parts = new ArrayList<>();
             if (!newInfantAges.isEmpty()) parts.add(newInfantAges.size() + " bebek (0-2 yaş)");
-            if (!newChildAges.isEmpty()) parts.add(newChildAges.size() + " çocuk (3-12 yaş)");
-            if (movedToAdult > 0) parts.add(movedToAdult + " yetişkin (12 yaş üstü, yaşa göre yetişkin sayıldı)");
+            if (!newChildAges.isEmpty())  parts.add(newChildAges.size()  + " çocuk (3-12 yaş)");
+            if (movedToAdult > 0)        parts.add(movedToAdult + " yetişkin (12 yaş üstü, yaşa göre yetişkin sayıldı)");
             this.reclassificationNote = "Belirttiğiniz yaşlara göre: " + String.join(", ", parts) + ".";
         }
 
-        this.infantAges = newInfantAges;
-        this.infantCount = newInfantAges.size() + infantsWithoutKnownAge;
-        this.childAges = newChildAges;
-        this.childCount = newChildAges.size() + childrenWithoutKnownAge;
+        // "Henüz yaşı bilinmeyen misafir" sayısı:
+        // Toplam beklenen çocuk/bebek sayısından sağlanan yaş sayısı çıkarılır.
+        // Sağlanan yaşlar bazen ekstrakör tarafından tamamen childAges'a atılır
+        // (bebek ve çocuk yaşları birlikte „5 1“ gibi); reconcile sonrası doğru kovaya
+        // taşınırlar, ancak "bebek için ayrı yaş sayısı" hiçbir zaman infantAges’ta
+        // görünmez — bu nedenle her iki kova için birlеşik toplam üzerinden hesaplarız.
+        int unknownInfants  = Math.max(0, origInfantCount - newInfantAges.size());
+        int unknownChildren = Math.max(0, origChildCount  - newChildAges.size());
+        // Kovaşı olarak yetişkine taşınan yaşlar dikkate alınırsa
+        // toplam bilinmeyen, sağlanan toplam yaş üzerinden klampçelidir.
+        int totalUnknowns = unknownInfants + unknownChildren;
+        int notYetProvided = Math.max(0, (origInfantCount + origChildCount) - totalAgesProvided);
+        if (totalUnknowns > notYetProvided && totalUnknowns > 0) {
+            // Oransal ölçekleme: yaş sayısı beklentiden fazlaysa (yaş > kişi), fazla sayıyı sil.
+            unknownInfants  = unknownInfants  * notYetProvided / totalUnknowns;
+            unknownChildren = notYetProvided  - unknownInfants;
+        }
+
+        this.infantAges  = newInfantAges;
+        this.infantCount = newInfantAges.size() + unknownInfants;
+        this.childAges   = newChildAges;
+        this.childCount  = newChildAges.size()  + unknownChildren;
         if (movedToAdult > 0) {
             this.adultCount = (this.adultCount != null ? this.adultCount : 0) + movedToAdult;
         }
