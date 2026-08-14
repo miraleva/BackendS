@@ -257,6 +257,26 @@ public class ChatOrchestrationService {
                 intent = hasActiveSearch ? existingCriteria.getSearchType() : aiIntent;
             }
             incoming = extractionResult.getCriteria();
+            SearchCriteria ruleExtracted = extractor.extract(userMessage, intent, sessionState.getLastRequestedField());
+            if (incoming == null) {
+                incoming = ruleExtracted;
+            } else if (ruleExtracted != null) {
+                if ((incoming.getChildCount() == null || incoming.getChildCount() == 0) && ruleExtracted.getChildCount() != null && ruleExtracted.getChildCount() > 0) {
+                    incoming.setChildCount(ruleExtracted.getChildCount());
+                }
+                if ((incoming.getInfantCount() == null || incoming.getInfantCount() == 0) && ruleExtracted.getInfantCount() != null && ruleExtracted.getInfantCount() > 0) {
+                    incoming.setInfantCount(ruleExtracted.getInfantCount());
+                }
+                if (incoming.getAdultCount() == null && ruleExtracted.getAdultCount() != null) {
+                    incoming.setAdultCount(ruleExtracted.getAdultCount());
+                }
+                if ((incoming.getChildAges() == null || incoming.getChildAges().isEmpty()) && ruleExtracted.getChildAges() != null && !ruleExtracted.getChildAges().isEmpty()) {
+                    incoming.setChildAges(ruleExtracted.getChildAges());
+                }
+                if ((incoming.getInfantAges() == null || incoming.getInfantAges().isEmpty()) && ruleExtracted.getInfantAges() != null && !ruleExtracted.getInfantAges().isEmpty()) {
+                    incoming.setInfantAges(ruleExtracted.getInfantAges());
+                }
+            }
         } else {
             // Fallback path: Orchestrator-managed local rule-based pipeline
             String fallbackIntent = intentDetectionService.detectIntent(userMessage);
@@ -885,23 +905,26 @@ public class ChatOrchestrationService {
      * (kullanıcı sadece "3" yazdıysa) o sayıyı kullanır.
      */
     private static final java.util.regex.Pattern ADULT_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
-            "(\\d{1,3})\\s*(?:yetişkin|yetiskin|adult|adults)", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "(\\d{1,3})\\s*(?:tane\\s*|adet\\s*)?(?:yetişkin|yetiskin|adult|adults)|(?:yetişkin|yetiskin|adult|adults)\\s*(?:sayısı\\s*)?(\\d{1,3})\\s*(?:tane\\s*|adet\\s*)?", java.util.regex.Pattern.CASE_INSENSITIVE);
     private static final java.util.regex.Pattern PASSENGER_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
-            "(\\d{1,3})\\s*(?:yolcu|passenger|passengers|kişi|kisi|person|people|kişilik|kisilik|yetişkin|yetiskin|adult|adults)",
+            "(\\d{1,3})\\s*(?:tane\\s*|adet\\s*)?(?:yolcu|passenger|passengers|kişi|kisi|person|people|kişilik|kisilik|yetişkin|yetiskin|adult|adults)|(?:yolcu|passenger|passengers|kişi|kisi|person|people|kişilik|kisilik|yetişkin|yetiskin|adult|adults)\\s*(?:sayısı\\s*)?(\\d{1,3})\\s*(?:tane\\s*|adet\\s*)?",
             java.util.regex.Pattern.CASE_INSENSITIVE);
     private static final java.util.regex.Pattern ROOM_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
-            "(\\d{1,2})\\s*(?:oda|room|rooms)", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "(\\d{1,2})\\s*(?:tane\\s*|adet\\s*)?(?:oda|room|rooms)|(?:oda|room|rooms)\\s*(?:sayısı\\s*)?(\\d{1,2})\\s*(?:tane\\s*|adet\\s*)?", java.util.regex.Pattern.CASE_INSENSITIVE);
     private static final java.util.regex.Pattern CHILD_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
-            "(\\d{1,2})\\s*(?:çocuk|cocuk|child|children|kids)", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "(\\d{1,2})\\s*(?:tane\\s*|adet\\s*)?(?:çocuk|cocuk|child|children|kids)|(?:çocuk|cocuk|child|children|kids)\\s*(?:sayısı\\s*)?(\\d{1,2})\\s*(?:tane\\s*|adet\\s*)?", java.util.regex.Pattern.CASE_INSENSITIVE);
     private static final java.util.regex.Pattern INFANT_COUNT_LABEL_PATTERN = java.util.regex.Pattern.compile(
-            "(\\d{1,2})\\s*(?:bebek|infant|infants|baby|babies)", java.util.regex.Pattern.CASE_INSENSITIVE);
+            "(\\d{1,2})\\s*(?:tane\\s*|adet\\s*)?(?:bebek|infant|infants|baby|babies)|(?:bebek|infant|infants|baby|babies)\\s*(?:sayısı\\s*)?(\\d{1,2})\\s*(?:tane\\s*|adet\\s*)?", java.util.regex.Pattern.CASE_INSENSITIVE);
 
     private Integer parseCountWithLabel(String message, java.util.regex.Pattern labelPattern) {
         if (message == null) return null;
 
         java.util.regex.Matcher labelMatcher = labelPattern.matcher(message);
         if (labelMatcher.find()) {
-            return Integer.parseInt(labelMatcher.group(1));
+            String g1 = labelMatcher.group(1);
+            if (g1 != null && !g1.isBlank()) return Integer.parseInt(g1);
+            String g2 = labelMatcher.group(2);
+            if (g2 != null && !g2.isBlank()) return Integer.parseInt(g2);
         }
 
         // Anahtar kelime bulunamadı; mesaj sadece sayılardan/ayraçlardan

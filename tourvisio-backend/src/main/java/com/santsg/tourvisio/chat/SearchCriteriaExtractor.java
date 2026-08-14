@@ -88,15 +88,15 @@ public class SearchCriteriaExtractor {
     // ifadesindeki tireyi eksi işareti sanmıyoruz (önünde başka bir rakam varsa
     // eksi işareti almıyoruz).
     private static final Pattern ADULT_PATTERN = Pattern.compile(
-            "((?<!\\d)-?\\d+)\\s*(?:yetişkin|yetiskin|adult|adults|kişi|kisi)");
+            "((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?(?:yetişkin|yetiskin|adult|adults|kişi|kisi)|(?:yetişkin|yetiskin|adult|adults)\\s*(?:sayısı\\s*)?((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?", Pattern.CASE_INSENSITIVE);
     private static final Pattern CHILD_PATTERN = Pattern.compile(
-            "((?<!\\d)-?\\d+)\\s*(?:çocuk|cocuk|child|children|kids)");
+            "((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?(?:çocuk|cocuk|child|children|kids)|(?:çocuk|cocuk|child|children|kids)\\s*(?:sayısı\\s*)?((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?", Pattern.CASE_INSENSITIVE);
     private static final Pattern INFANT_PATTERN = Pattern.compile(
-            "((?<!\\d)-?\\d+)\\s*(?:bebek|infant|infants|baby|babies)");
+            "((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?(?:bebek|infant|infants|baby|babies)|(?:bebek|infant|infants|baby|babies)\\s*(?:sayısı\\s*)?((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?", Pattern.CASE_INSENSITIVE);
     private static final Pattern ROOM_PATTERN = Pattern.compile(
-            "((?<!\\d)-?\\d+)\\s*(?:oda|room|rooms)");
+            "((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?(?:oda|room|rooms)|(?:oda|room|rooms)\\s*(?:sayısı\\s*)?((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?", Pattern.CASE_INSENSITIVE);
     private static final Pattern PASSENGER_PATTERN = Pattern.compile(
-            "((?<!\\d)-?\\d+)\\s*(?:yolcu|kişi|kisi|passenger|passengers|person|people|kişilik|kisilik|yetişkin|yetiskin|adult|adults)");
+            "((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?(?:yolcu|kişi|kisi|passenger|passengers|person|people|kişilik|kisilik|yetişkin|yetiskin|adult|adults)|(?:yolcu|passenger|passengers|kişi|kisi|person|people|kişilik|kisilik|yetişkin|yetiskin|adult|adults)\\s*(?:sayısı\\s*)?((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?", Pattern.CASE_INSENSITIVE);
 
     // ── Gece sayısı ───────────────────────────────────────────────────────────
     private static final Pattern NIGHT_PATTERN = Pattern.compile(
@@ -199,24 +199,20 @@ public class SearchCriteriaExtractor {
         }
 
         // Oda
-        Matcher rm = ROOM_PATTERN.matcher(lower);
-        if (rm.find())
-            c.setRoomCount(Integer.parseInt(rm.group(1)));
+        Integer rmCount = extractMatchedGroup(ROOM_PATTERN.matcher(lower));
+        if (rmCount != null) c.setRoomCount(rmCount);
 
         // Yetişkin
-        Matcher am = ADULT_PATTERN.matcher(lower);
-        if (am.find())
-            c.setAdultCount(Integer.parseInt(am.group(1)));
+        Integer amCount = extractMatchedGroup(ADULT_PATTERN.matcher(lower));
+        if (amCount != null) c.setAdultCount(amCount);
 
         // Çocuk
-        Matcher cm = CHILD_PATTERN.matcher(lower);
-        if (cm.find())
-            c.setChildCount(Integer.parseInt(cm.group(1)));
+        Integer cmCount = extractMatchedGroup(CHILD_PATTERN.matcher(lower));
+        if (cmCount != null) c.setChildCount(cmCount);
 
         // Bebek
-        Matcher im = INFANT_PATTERN.matcher(lower);
-        if (im.find())
-            c.setInfantCount(Integer.parseInt(im.group(1)));
+        Integer imCount = extractMatchedGroup(INFANT_PATTERN.matcher(lower));
+        if (imCount != null) c.setInfantCount(imCount);
 
         // Tarihler (giriş & çıkış)
         extractHotelDates(lower, c, awaitingField);
@@ -501,6 +497,16 @@ public class SearchCriteriaExtractor {
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
+
+    private Integer extractMatchedGroup(Matcher m) {
+        if (m.find()) {
+            String g1 = m.group(1);
+            if (g1 != null && !g1.isBlank()) return Integer.parseInt(g1);
+            String g2 = m.group(2);
+            if (g2 != null && !g2.isBlank()) return Integer.parseInt(g2);
+        }
+        return null;
+    }
 
     private String extractCurrency(String lower) {
         Matcher m = CURRENCY_PATTERN.matcher(lower);
