@@ -889,6 +889,49 @@ class ChatOrchestrationServiceTest {
                 assertThat(saved.getChildAges()).containsExactly(12);
                 assertThat(saved.getInfantAges()).containsExactly(1);
         }
+
+        @Test
+        void orchestrate_shouldClassifyChild2YearsAsChildAndInfant2MonthsAsInfant() {
+                ChatSessionManager chatSessionManager = new ChatSessionManager();
+                ChatSessionStore sessionStore = new ChatSessionStore();
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor();
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService();
+
+                ChatOrchestrationService service = new ChatOrchestrationService(
+                                intentDetectionService,
+                                chatSessionManager,
+                                sessionStore,
+                                extractor,
+                                missingFieldsService, criteriaValidator,
+                                extractionAgent,
+                                responseAgent,
+                                hotelSearchService,
+                                flightSearchService);
+
+                String sessionId = "cocuk-2yas-bebek-2ay-session";
+                SearchCriteria initial = new SearchCriteria();
+                initial.setSearchType("HOTEL_SEARCH");
+                initial.setAdultCount(2);
+                sessionStore.save(sessionId, initial);
+                chatSessionManager.getOrCreateSession(sessionId, null).setLastRequestedField("çocuk yaşları, bebek yaşları");
+
+                SearchCriteria extracted = new SearchCriteria();
+                extracted.setSearchType("HOTEL_SEARCH");
+                when(extractionAgent.extract(any(), any(), any(), any(), anyBoolean()))
+                                .thenReturn(new ExtractionResult("HOTEL_SEARCH", extracted));
+
+                service.orchestrate(ChatRequest.builder()
+                                .message("çocuk 2 yaşında bebek 2 aylık")
+                                .sessionId(sessionId)
+                                .build());
+
+                SearchCriteria saved = sessionStore.getOrCreate(sessionId);
+                assertThat(saved.getAdultCount()).isEqualTo(2);
+                assertThat(saved.getChildCount()).isEqualTo(1);
+                assertThat(saved.getInfantCount()).isEqualTo(1);
+                assertThat(saved.getChildAges()).containsExactly(2);
+                assertThat(saved.getInfantAges()).containsExactly(0);
+        }
 }
 
 

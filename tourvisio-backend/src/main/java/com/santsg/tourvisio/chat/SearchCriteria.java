@@ -301,7 +301,7 @@ public class SearchCriteria {
         int movedToAdult = 0;
         for (Integer age : allAges) {
             if (age == null) continue;
-            if (age <= 2)  newInfantAges.add(age);
+            if (age <= 1)  newInfantAges.add(age);
             else if (age <= 12) newChildAges.add(age);
             else movedToAdult++;
         }
@@ -312,8 +312,8 @@ public class SearchCriteria {
 
         if (changed) {
             List<String> parts = new ArrayList<>();
-            if (!newInfantAges.isEmpty()) parts.add(newInfantAges.size() + " bebek (0-2 yaş)");
-            if (!newChildAges.isEmpty())  parts.add(newChildAges.size()  + " çocuk (3-12 yaş)");
+            if (!newInfantAges.isEmpty()) parts.add(newInfantAges.size() + " bebek (0-1 yaş)");
+            if (!newChildAges.isEmpty())  parts.add(newChildAges.size()  + " çocuk (2-12 yaş)");
             if (movedToAdult > 0)        parts.add(movedToAdult + " yetişkin (12 yaş üstü, yaşa göre yetişkin sayıldı)");
             this.reclassificationNote = "Belirttiğiniz yaşlara göre: " + String.join(", ", parts) + ".";
         }
