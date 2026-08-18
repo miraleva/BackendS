@@ -749,9 +749,10 @@ public class ChatOrchestrationService {
     }
 
     private void adjustIncomingCriteria(SearchCriteria incoming, String lastField, String message) {
-        if (incoming == null || lastField == null || message == null || message.isBlank()) {
+        if (incoming == null || message == null || message.isBlank()) {
             return;
         }
+        String fieldToAdjust = lastField != null ? lastField : "çocuk yaşları, bebek yaşları";
 
         // "giriş tarihi, çıkış tarihi" gibi birden fazla tarih alanı aynı anda
         // soruluyorken, extractor.extract() (etiket-farkında, "giriş"/"çıkış"
@@ -764,7 +765,7 @@ public class ChatOrchestrationService {
         boolean hotelDateAlreadyResolvedByLabel = incoming.getCheckInDate() != null || incoming.getCheckOutDate() != null;
         boolean flightDateAlreadyResolvedByLabel = incoming.getDepartureDate() != null || incoming.getReturnDate() != null;
 
-        String[] fields = lastField.split(",\\s*");
+        String[] fields = fieldToAdjust.split(",\\s*");
         for (String field : fields) {
             switch (field) {
                 case "konum veya otel adı":
@@ -974,9 +975,17 @@ public class ChatOrchestrationService {
             "(\\d{1,2})\\s*(?:aylık|aylik|aylık\\w*|aylik\\w*|ay(?:lık)?|months?\\s*old|months?)",
             java.util.regex.Pattern.CASE_INSENSITIVE);
 
+    private static final java.util.regex.Pattern LABELLED_CHILD_AGE_PATTERN = java.util.regex.Pattern.compile(
+            "(?:çocuk|cocuk|child|children|kid|kids)\\s*:?\\s*(\\d{1,2})",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    private static final java.util.regex.Pattern LABELLED_INFANT_AGE_PATTERN = java.util.regex.Pattern.compile(
+            "(?:bebek|infant|baby)\\s*:?\\s*(\\d{1,2})",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+
     /**
      * Mesajdan çocuk/bebek yaşlarını çıkarır.
-     * Hem yıl cinsinden ("12 yaşında") hem ay cinsinden ("1 aylık" → 0 yaş) ifadeleri tanır.
+     * Hem yıl cinsinden ("12 yaşında") hem ay cinsinden ("1 aylık" → 0 yaş) hem de etiketli ("çocuk 8 bebek 1") ifadeleri tanır.
      * Bulamazsa ve mesaj tamamen sayılardan oluşuyorsa tüm sayıları yaş kabul eder.
      */
     private List<Integer> parseChildAges(String message) {
@@ -997,6 +1006,18 @@ public class ChatOrchestrationService {
         while (monthMatcher.find()) {
             int months = Integer.parseInt(monthMatcher.group(1));
             ages.add(months / 12); // 1 aylık → 0, 14 aylık → 1
+        }
+
+        // 3. Etiketli yaşlar: "çocuk 8", "bebek 1", "çocuk 8 bebek 1" vb.
+        if (ages.isEmpty()) {
+            java.util.regex.Matcher childLabelMatcher = LABELLED_CHILD_AGE_PATTERN.matcher(message);
+            while (childLabelMatcher.find()) {
+                ages.add(Integer.parseInt(childLabelMatcher.group(1)));
+            }
+            java.util.regex.Matcher infantLabelMatcher = LABELLED_INFANT_AGE_PATTERN.matcher(message);
+            while (infantLabelMatcher.find()) {
+                ages.add(Integer.parseInt(infantLabelMatcher.group(1)));
+            }
         }
 
         if (!ages.isEmpty()) {

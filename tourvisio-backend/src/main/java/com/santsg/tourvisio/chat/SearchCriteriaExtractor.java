@@ -90,9 +90,9 @@ public class SearchCriteriaExtractor {
     private static final Pattern ADULT_PATTERN = Pattern.compile(
             "((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?(?:yetişkin|yetiskin|adult|adults|kişi|kisi)|(?:yetişkin|yetiskin|adult|adults)\\s*(?:sayısı\\s*)?((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?", Pattern.CASE_INSENSITIVE);
     private static final Pattern CHILD_PATTERN = Pattern.compile(
-            "((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?(?:çocuk|cocuk|child|children|kids)|(?:çocuk|cocuk|child|children|kids)\\s*(?:sayısı\\s*)?((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?", Pattern.CASE_INSENSITIVE);
+            "((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?(?:çocuk|cocuk|child|children|kids)|(?:çocuk|cocuk|child|children|kids)\\s*(?:sayısı\\s*)?((?<!\\d)-?\\d+)\\s*(?:tane|adet)|(?:çocuk|cocuk|child|children|kids)\\s*sayısı\\s*:?\\s*((?<!\\d)-?\\d+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern INFANT_PATTERN = Pattern.compile(
-            "((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?(?:bebek|infant|infants|baby|babies)|(?:bebek|infant|infants|baby|babies)\\s*(?:sayısı\\s*)?((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?", Pattern.CASE_INSENSITIVE);
+            "((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?(?:bebek|infant|infants|baby|babies)|(?:bebek|infant|infants|baby|babies)\\s*(?:sayısı\\s*)?((?<!\\d)-?\\d+)\\s*(?:tane|adet)|(?:bebek|infant|infants|baby|babies)\\s*sayısı\\s*:?\\s*((?<!\\d)-?\\d+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern INCREMENTAL_CHILD_PATTERN = Pattern.compile(
             "(?:(\\d{1,2})|bir|1|\\+1)\\s*(?:tane\\s*|adet\\s*)?(?:çocuk|cocuk|child|children|kid|kids)\\s*(?:daha|ekle|eklensin|ekleyelim|olacak|geliyor|var)|(?:daha|ekle|eklensin|ekleyelim|ek)\\s*(?:(\\d{1,2})|bir|1)\\s*(?:tane\\s*|adet\\s*)?(?:çocuk|cocuk|child|children|kid|kids)",
             Pattern.CASE_INSENSITIVE);
@@ -236,7 +236,7 @@ public class SearchCriteriaExtractor {
             if (g1 != null && !g1.isBlank()) add = Integer.parseInt(g1);
             else if (g2 != null && !g2.isBlank()) add = Integer.parseInt(g2);
             c.setIncrementalInfantCount(add);
-        } else {
+        } else if (!lower.matches(".*çocuk\\s*\\d+\\s*bebek.*")) {
             // Bebek
             Integer imCount = extractMatchedGroup(INFANT_PATTERN.matcher(lower));
             if (imCount != null) c.setInfantCount(imCount);
@@ -532,6 +532,10 @@ public class SearchCriteriaExtractor {
             if (g1 != null && !g1.isBlank()) return Integer.parseInt(g1);
             String g2 = m.group(2);
             if (g2 != null && !g2.isBlank()) return Integer.parseInt(g2);
+            if (m.groupCount() >= 3) {
+                String g3 = m.group(3);
+                if (g3 != null && !g3.isBlank()) return Integer.parseInt(g3);
+            }
         }
         return null;
     }

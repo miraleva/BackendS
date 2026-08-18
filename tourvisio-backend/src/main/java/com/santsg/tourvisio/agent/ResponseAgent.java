@@ -410,20 +410,23 @@ public class ResponseAgent {
                         routeStr, datesStr, guestsStr, routeStr
                     );
                 } else {
+                    String missingFieldsStr = missingFields.stream().collect(Collectors.joining(", "));
                     knownDetailsInstruction = isEnglish ? String.format(
                         "\nKNOWN DETAILS ACKNOWLEDGMENT (HOTEL):\n" +
-                        "- Dates: '%s', Guests: '%s', but destination/city is missing.\n" +
+                        "- Dates: '%s', Guests: '%s'. Missing fields: '%s'.\n" +
                         "- Structure into two paragraphs separated by \\n\\n:\n" +
                         "  Paragraph 1: 'I am so excited to help you plan a wonderful trip 🏖️'\n" +
-                        "  Paragraph 2: 'To help me find the best hotel options, could you please share your **check-in date**, **check-out date**, and how many **guests** will be traveling?'",
-                        datesStr, guestsStr
+                        "  Paragraph 2: 'To help me find the best hotel options, could you please specify your %s?'\n" +
+                        "- STRICT RULE: Only ask for fields that are in missing fields ('%s'). Do NOT ask for child/infant ages if they are already known!",
+                        datesStr, guestsStr, missingFieldsStr, missingFieldsStr, missingFieldsStr
                     ) : String.format(
                         "\nKNOWN DETAILS ACKNOWLEDGMENT (HOTEL):\n" +
-                        "- Dates: '%s', Guests: '%s', but destination/city is missing.\n" +
-                        "- Structure into two paragraphs separated by \\n\\n:\n" +
+                        "- Tarihler: '%s', Misafirler: '%s'. Eksik alanlar: '%s'.\n" +
+                        "- Response MUST have two paragraphs separated by \\n\\n:\n" +
                         "  Paragraph 1: 'Harika bir tatil planlamak için sabırsızlanıyorum 🏖️'\n" +
-                        "  Paragraph 2: 'Konaklamanızı en iyi şekilde organize edebilmem için otele **giriş tarihinizi**, **çıkış tarihinizi** ve kaç **misafir** olarak katılacağınızı öğrenebilir miyim?'",
-                        datesStr, guestsStr
+                        "  Paragraph 2: 'Konaklamanızı en iyi şekilde organize edebilmem için **%s** bilgisini öğrenebilir miyim?'\n" +
+                        "- KESİN KURAL: YALNIZCA eksik listede (%s) olan bilgiyi sor. Çocuk ve bebek yaşları zaten biliyorsa ASLA yaşları tekrar sorma!",
+                        datesStr, guestsStr, missingFieldsStr, missingFieldsStr, missingFieldsStr
                     );
                 }
             }

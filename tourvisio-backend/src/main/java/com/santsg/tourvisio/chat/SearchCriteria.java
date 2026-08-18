@@ -324,16 +324,18 @@ public class SearchCriteria {
         // (bebek ve çocuk yaşları birlikte „5 1“ gibi); reconcile sonrası doğru kovaya
         // taşınırlar, ancak "bebek için ayrı yaş sayısı" hiçbir zaman infantAges’ta
         // görünmez — bu nedenle her iki kova için birlеşik toplam üzerinden hesaplarız.
-        int unknownInfants  = Math.max(0, origInfantCount - newInfantAges.size());
-        int unknownChildren = Math.max(0, origChildCount  - newChildAges.size());
-        // Kovaşı olarak yetişkine taşınan yaşlar dikkate alınırsa
-        // toplam bilinmeyen, sağlanan toplam yaş üzerinden klampçelidir.
-        int totalUnknowns = unknownInfants + unknownChildren;
-        int notYetProvided = Math.max(0, (origInfantCount + origChildCount) - totalAgesProvided);
-        if (totalUnknowns > notYetProvided && totalUnknowns > 0) {
-            // Oransal ölçekleme: yaş sayısı beklentiden fazlaysa (yaş > kişi), fazla sayıyı sil.
-            unknownInfants  = unknownInfants  * notYetProvided / totalUnknowns;
-            unknownChildren = notYetProvided  - unknownInfants;
+        int notYetProvided = Math.max(0, (origInfantCount + origChildCount) - allAges.size());
+        int unknownInfants = 0;
+        int unknownChildren = 0;
+
+        if (notYetProvided > 0) {
+            unknownInfants  = Math.max(0, origInfantCount - newInfantAges.size());
+            unknownChildren = Math.max(0, origChildCount  - newChildAges.size());
+            int totalUnknowns = unknownInfants + unknownChildren;
+            if (totalUnknowns > notYetProvided) {
+                unknownInfants  = unknownInfants  * notYetProvided / totalUnknowns;
+                unknownChildren = notYetProvided  - unknownInfants;
+            }
         }
 
         this.infantAges  = newInfantAges;
