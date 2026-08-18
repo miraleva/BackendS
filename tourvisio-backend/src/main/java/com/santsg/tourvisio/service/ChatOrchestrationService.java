@@ -407,7 +407,10 @@ public class ChatOrchestrationService {
         // karşılığı sayıyoruz.
         if ("FLIGHT_SEARCH".equals(intent) && incoming != null
                 && incoming.getPassengerCount() == null && incoming.getAdultCount() != null) {
-            incoming.setPassengerCount(incoming.getAdultCount());
+            int totalPass = incoming.getAdultCount()
+                    + (incoming.getChildCount() != null ? incoming.getChildCount() : 0)
+                    + (incoming.getInfantCount() != null ? incoming.getInfantCount() : 0);
+            incoming.setPassengerCount(totalPass);
         }
 
         // 6. Yeni kriterler önceki session kriterleri üzerine birleştir
