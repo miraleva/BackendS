@@ -320,19 +320,18 @@ public class SearchCriteria {
 
         // "Henüz yaşı bilinmeyen misafir" sayısı:
         // Toplam beklenen çocuk/bebek sayısından sağlanan yaş sayısı çıkarılır.
-        // Sağlanan yaşlar bazen ekstrakör tarafından tamamen childAges'a atılır
-        // (bebek ve çocuk yaşları birlikte „5 1“ gibi); reconcile sonrası doğru kovaya
-        // taşınırlar, ancak "bebek için ayrı yaş sayısı" hiçbir zaman infantAges’ta
-        // görünmez — bu nedenle her iki kova için birlеşik toplam üzerinden hesaplarız.
-        int notYetProvided = Math.max(0, (origInfantCount + origChildCount) - allAges.size());
+        // Eğer tüm misafirlerin yaşı sağlandıysa (sağlanan yaş sayısı >= beklenen toplam),
+        // bilinmeyen misafir sayısı her iki kova için de kesin olarak 0'dır.
+        int expectedTotalNonAdults = origChildCount + origInfantCount;
         int unknownInfants = 0;
         int unknownChildren = 0;
 
-        if (notYetProvided > 0) {
+        if (allAges.size() < expectedTotalNonAdults) {
+            int notYetProvided = expectedTotalNonAdults - allAges.size();
             unknownInfants  = Math.max(0, origInfantCount - newInfantAges.size());
             unknownChildren = Math.max(0, origChildCount  - newChildAges.size());
             int totalUnknowns = unknownInfants + unknownChildren;
-            if (totalUnknowns > notYetProvided) {
+            if (totalUnknowns > notYetProvided && totalUnknowns > 0) {
                 unknownInfants  = unknownInfants  * notYetProvided / totalUnknowns;
                 unknownChildren = notYetProvided  - unknownInfants;
             }
