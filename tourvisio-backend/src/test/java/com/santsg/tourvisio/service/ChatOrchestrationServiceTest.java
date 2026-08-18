@@ -803,6 +803,92 @@ class ChatOrchestrationServiceTest {
                 assertThat(saved.getChildAges()).containsExactly(8);
                 assertThat(saved.getInfantAges()).containsExactly(1);
         }
+
+        @Test
+        void orchestrate_shouldParseChild4AgeAndInfant3MonthsWithoutErrors() {
+                ChatSessionManager chatSessionManager = new ChatSessionManager();
+                ChatSessionStore sessionStore = new ChatSessionStore();
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor();
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService();
+
+                ChatOrchestrationService service = new ChatOrchestrationService(
+                                intentDetectionService,
+                                chatSessionManager,
+                                sessionStore,
+                                extractor,
+                                missingFieldsService, criteriaValidator,
+                                extractionAgent,
+                                responseAgent,
+                                hotelSearchService,
+                                flightSearchService);
+
+                String sessionId = "cocuk-4-bebek-3ay-session";
+                SearchCriteria initial = new SearchCriteria();
+                initial.setSearchType("HOTEL_SEARCH");
+                initial.setAdultCount(2);
+                sessionStore.save(sessionId, initial);
+                chatSessionManager.getOrCreateSession(sessionId, null).setLastRequestedField("çocuk yaşları, bebek yaşları");
+
+                SearchCriteria extracted = new SearchCriteria();
+                extracted.setSearchType("HOTEL_SEARCH");
+                when(extractionAgent.extract(any(), any(), any(), any(), anyBoolean()))
+                                .thenReturn(new ExtractionResult("HOTEL_SEARCH", extracted));
+
+                service.orchestrate(ChatRequest.builder()
+                                .message("çocuk 4 yaşında bebek 3 aylık")
+                                .sessionId(sessionId)
+                                .build());
+
+                SearchCriteria saved = sessionStore.getOrCreate(sessionId);
+                assertThat(saved.getAdultCount()).isEqualTo(2);
+                assertThat(saved.getChildCount()).isEqualTo(1);
+                assertThat(saved.getInfantCount()).isEqualTo(1);
+                assertThat(saved.getChildAges()).containsExactly(4);
+                assertThat(saved.getInfantAges()).containsExactly(0);
+        }
+
+        @Test
+        void orchestrate_shouldParseChild12AgeAndInfant18MonthsWithoutErrors() {
+                ChatSessionManager chatSessionManager = new ChatSessionManager();
+                ChatSessionStore sessionStore = new ChatSessionStore();
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor();
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService();
+
+                ChatOrchestrationService service = new ChatOrchestrationService(
+                                intentDetectionService,
+                                chatSessionManager,
+                                sessionStore,
+                                extractor,
+                                missingFieldsService, criteriaValidator,
+                                extractionAgent,
+                                responseAgent,
+                                hotelSearchService,
+                                flightSearchService);
+
+                String sessionId = "cocuk-12-bebek-18ay-session";
+                SearchCriteria initial = new SearchCriteria();
+                initial.setSearchType("HOTEL_SEARCH");
+                initial.setAdultCount(2);
+                sessionStore.save(sessionId, initial);
+                chatSessionManager.getOrCreateSession(sessionId, null).setLastRequestedField("çocuk yaşları, bebek yaşları");
+
+                SearchCriteria extracted = new SearchCriteria();
+                extracted.setSearchType("HOTEL_SEARCH");
+                when(extractionAgent.extract(any(), any(), any(), any(), anyBoolean()))
+                                .thenReturn(new ExtractionResult("HOTEL_SEARCH", extracted));
+
+                service.orchestrate(ChatRequest.builder()
+                                .message("çocuk 12 yaşında bebek 18 aylık")
+                                .sessionId(sessionId)
+                                .build());
+
+                SearchCriteria saved = sessionStore.getOrCreate(sessionId);
+                assertThat(saved.getAdultCount()).isEqualTo(2);
+                assertThat(saved.getChildCount()).isEqualTo(1);
+                assertThat(saved.getInfantCount()).isEqualTo(1);
+                assertThat(saved.getChildAges()).containsExactly(12);
+                assertThat(saved.getInfantAges()).containsExactly(1);
+        }
 }
 
 
