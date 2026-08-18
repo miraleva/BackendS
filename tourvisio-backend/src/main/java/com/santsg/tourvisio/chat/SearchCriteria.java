@@ -52,6 +52,8 @@ public class SearchCriteria {
     private List<Integer> childAges = new ArrayList<>();
     private Integer infantCount = 0;
     private List<Integer> infantAges = new ArrayList<>();
+    private Integer incrementalChildCount;
+    private Integer incrementalInfantCount;
     private String nationality = "TR";
     private Integer roomCount = 1;
 
@@ -177,14 +179,24 @@ public class SearchCriteria {
         // (misafirle hiç ilgisi olmayan bir mesajda modelin alışkanlıkla "childCount":
         // 0 döndürmesi ihtimaline karşı) 0 değeri yok sayılır ki önceki turda
         // öğrenilmiş gerçek çocuk sayısı yanlışlıkla sıfırlanmasın.
-        if (incoming.getChildAges() != null && !incoming.getChildAges().isEmpty()) {
-            this.childAges = incoming.getChildAges();
-            // childCount YALNIZCA daha önce belirlenmemişse (null) childAges boyutundan türetilir.
-            // Eğer kullanıcı önceden "1 çocuk" demişse, yaş toplama sırasında ekstraktoruün
-            // hem çocuk hem de bebek yaşlarını childAges'a koyması nedeniyle
-            // childCount yanlışlıkla yazılmamasın — reconcileAgeBuckets doğru sayıyı belirler.
-            if (this.childCount == null) {
-                this.childCount = incoming.getChildAges().size();
+        // Artımlı çocuk ekleme (ör. "1 çocuk daha var", "1 tane daha çocuk ekle")
+        if (incoming.getIncrementalChildCount() != null && incoming.getIncrementalChildCount() > 0) {
+            int currentCount = this.childCount != null ? this.childCount : 0;
+            this.childCount = currentCount + incoming.getIncrementalChildCount();
+        } else if (incoming.getChildAges() != null && !incoming.getChildAges().isEmpty()) {
+            if (this.childAges == null || this.childAges.isEmpty() || incoming.getChildAges().size() >= (this.childCount != null ? this.childCount : 0)) {
+                this.childAges = new ArrayList<>(incoming.getChildAges());
+            } else {
+                List<Integer> mergedAges = new ArrayList<>(this.childAges);
+                for (Integer age : incoming.getChildAges()) {
+                    if (mergedAges.size() < (this.childCount != null ? this.childCount : 99)) {
+                        mergedAges.add(age);
+                    }
+                }
+                this.childAges = mergedAges;
+            }
+            if (this.childCount == null || this.childAges.size() > this.childCount) {
+                this.childCount = this.childAges.size();
             }
         } else if (incoming.getChildCount() != null && incoming.getChildCount() > 0) {
             this.childCount = incoming.getChildCount();
@@ -193,10 +205,26 @@ public class SearchCriteria {
             this.childCount = 0;
             this.childAges = new ArrayList<>();
         }
-        // Bebek — aynı mantık çocukla birebir aynı.
-        if (incoming.getInfantAges() != null && !incoming.getInfantAges().isEmpty()) {
-            this.infantAges = incoming.getInfantAges();
-            this.infantCount = incoming.getInfantAges().size();
+
+        // Artımlı bebek ekleme (ör. "1 bebek daha var", "1 tane daha bebek ekle")
+        if (incoming.getIncrementalInfantCount() != null && incoming.getIncrementalInfantCount() > 0) {
+            int currentCount = this.infantCount != null ? this.infantCount : 0;
+            this.infantCount = currentCount + incoming.getIncrementalInfantCount();
+        } else if (incoming.getInfantAges() != null && !incoming.getInfantAges().isEmpty()) {
+            if (this.infantAges == null || this.infantAges.isEmpty() || incoming.getInfantAges().size() >= (this.infantCount != null ? this.infantCount : 0)) {
+                this.infantAges = new ArrayList<>(incoming.getInfantAges());
+            } else {
+                List<Integer> mergedAges = new ArrayList<>(this.infantAges);
+                for (Integer age : incoming.getInfantAges()) {
+                    if (mergedAges.size() < (this.infantCount != null ? this.infantCount : 99)) {
+                        mergedAges.add(age);
+                    }
+                }
+                this.infantAges = mergedAges;
+            }
+            if (this.infantCount == null || this.infantAges.size() > this.infantCount) {
+                this.infantCount = this.infantAges.size();
+            }
         } else if (incoming.getInfantCount() != null && incoming.getInfantCount() > 0) {
             this.infantCount = incoming.getInfantCount();
         } else if (incoming.getInfantCount() != null && incoming.getInfantCount() == 0

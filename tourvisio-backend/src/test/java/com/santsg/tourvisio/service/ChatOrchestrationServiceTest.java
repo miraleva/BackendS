@@ -719,6 +719,47 @@ class ChatOrchestrationServiceTest {
                 SearchCriteria saved = sessionStore.getOrCreate(sessionId);
                 assertThat(saved.getInfantCount()).isEqualTo(2);
         }
+
+        @Test
+        void orchestrate_shouldHandleIncrementalChildAddition() {
+                ChatSessionManager chatSessionManager = new ChatSessionManager();
+                ChatSessionStore sessionStore = new ChatSessionStore();
+                SearchCriteriaExtractor extractor = new SearchCriteriaExtractor();
+                CriteriaMissingFieldsService missingFieldsService = new CriteriaMissingFieldsService();
+
+                ChatOrchestrationService service = new ChatOrchestrationService(
+                                intentDetectionService,
+                                chatSessionManager,
+                                sessionStore,
+                                extractor,
+                                missingFieldsService, criteriaValidator,
+                                extractionAgent,
+                                responseAgent,
+                                hotelSearchService,
+                                flightSearchService);
+
+                String sessionId = "incremental-child-test-session";
+                SearchCriteria initial = new SearchCriteria();
+                initial.setSearchType("HOTEL_SEARCH");
+                initial.setAdultCount(2);
+                initial.setChildCount(2);
+                initial.setChildAges(java.util.List.of(5, 8));
+                sessionStore.save(sessionId, initial);
+
+                SearchCriteria extracted = new SearchCriteria();
+                extracted.setSearchType("HOTEL_SEARCH");
+                when(extractionAgent.extract(any(), any(), any(), any(), anyBoolean()))
+                                .thenReturn(new ExtractionResult("HOTEL_SEARCH", extracted));
+
+                service.orchestrate(ChatRequest.builder()
+                                .message("1 çocuk daha var")
+                                .sessionId(sessionId)
+                                .build());
+
+                SearchCriteria saved = sessionStore.getOrCreate(sessionId);
+                assertThat(saved.getChildCount()).isEqualTo(3);
+                assertThat(saved.getChildAges()).containsExactly(5, 8);
+        }
 }
 
 

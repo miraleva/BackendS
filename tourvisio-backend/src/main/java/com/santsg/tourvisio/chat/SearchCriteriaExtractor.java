@@ -93,6 +93,12 @@ public class SearchCriteriaExtractor {
             "((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?(?:çocuk|cocuk|child|children|kids)|(?:çocuk|cocuk|child|children|kids)\\s*(?:sayısı\\s*)?((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?", Pattern.CASE_INSENSITIVE);
     private static final Pattern INFANT_PATTERN = Pattern.compile(
             "((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?(?:bebek|infant|infants|baby|babies)|(?:bebek|infant|infants|baby|babies)\\s*(?:sayısı\\s*)?((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?", Pattern.CASE_INSENSITIVE);
+    private static final Pattern INCREMENTAL_CHILD_PATTERN = Pattern.compile(
+            "(?:(\\d{1,2})|bir|1|\\+1)\\s*(?:tane\\s*|adet\\s*)?(?:çocuk|cocuk|child|children|kid|kids)\\s*(?:daha|ekle|eklensin|ekleyelim|olacak|geliyor|var)|(?:daha|ekle|eklensin|ekleyelim|ek)\\s*(?:(\\d{1,2})|bir|1)\\s*(?:tane\\s*|adet\\s*)?(?:çocuk|cocuk|child|children|kid|kids)",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern INCREMENTAL_INFANT_PATTERN = Pattern.compile(
+            "(?:(\\d{1,2})|bir|1|\\+1)\\s*(?:tane\\s*|adet\\s*)?(?:bebek|infant|infants|baby|babies)\\s*(?:daha|ekle|eklensin|ekleyelim|olacak|geliyor|var)|(?:daha|ekle|eklensin|ekleyelim|ek)\\s*(?:(\\d{1,2})|bir|1)\\s*(?:tane\\s*|adet\\s*)?(?:bebek|infant|infants|baby|babies)",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern ROOM_PATTERN = Pattern.compile(
             "((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?(?:oda|room|rooms)|(?:oda|room|rooms)\\s*(?:sayısı\\s*)?((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?", Pattern.CASE_INSENSITIVE);
     private static final Pattern PASSENGER_PATTERN = Pattern.compile(
@@ -206,13 +212,35 @@ public class SearchCriteriaExtractor {
         Integer amCount = extractMatchedGroup(ADULT_PATTERN.matcher(lower));
         if (amCount != null) c.setAdultCount(amCount);
 
-        // Çocuk
-        Integer cmCount = extractMatchedGroup(CHILD_PATTERN.matcher(lower));
-        if (cmCount != null) c.setChildCount(cmCount);
+        // Artımlı Çocuk Ekleme ("1 çocuk daha var", "1 tane daha çocuk ekle")
+        Matcher incChildMatcher = INCREMENTAL_CHILD_PATTERN.matcher(lower);
+        if (incChildMatcher.find()) {
+            String g1 = incChildMatcher.group(1);
+            String g2 = incChildMatcher.group(2);
+            int add = 1;
+            if (g1 != null && !g1.isBlank()) add = Integer.parseInt(g1);
+            else if (g2 != null && !g2.isBlank()) add = Integer.parseInt(g2);
+            c.setIncrementalChildCount(add);
+        } else {
+            // Çocuk
+            Integer cmCount = extractMatchedGroup(CHILD_PATTERN.matcher(lower));
+            if (cmCount != null) c.setChildCount(cmCount);
+        }
 
-        // Bebek
-        Integer imCount = extractMatchedGroup(INFANT_PATTERN.matcher(lower));
-        if (imCount != null) c.setInfantCount(imCount);
+        // Artımlı Bebek Ekleme ("1 bebek daha var", "1 tane daha bebek ekle")
+        Matcher incInfantMatcher = INCREMENTAL_INFANT_PATTERN.matcher(lower);
+        if (incInfantMatcher.find()) {
+            String g1 = incInfantMatcher.group(1);
+            String g2 = incInfantMatcher.group(2);
+            int add = 1;
+            if (g1 != null && !g1.isBlank()) add = Integer.parseInt(g1);
+            else if (g2 != null && !g2.isBlank()) add = Integer.parseInt(g2);
+            c.setIncrementalInfantCount(add);
+        } else {
+            // Bebek
+            Integer imCount = extractMatchedGroup(INFANT_PATTERN.matcher(lower));
+            if (imCount != null) c.setInfantCount(imCount);
+        }
 
         // Tarihler (giriş & çıkış)
         extractHotelDates(lower, c, awaitingField);

@@ -270,6 +270,12 @@ public class ChatOrchestrationService {
                 if (incoming.getAdultCount() == null && ruleExtracted.getAdultCount() != null) {
                     incoming.setAdultCount(ruleExtracted.getAdultCount());
                 }
+                if (ruleExtracted.getIncrementalChildCount() != null && ruleExtracted.getIncrementalChildCount() > 0) {
+                    incoming.setIncrementalChildCount(ruleExtracted.getIncrementalChildCount());
+                }
+                if (ruleExtracted.getIncrementalInfantCount() != null && ruleExtracted.getIncrementalInfantCount() > 0) {
+                    incoming.setIncrementalInfantCount(ruleExtracted.getIncrementalInfantCount());
+                }
                 if ((incoming.getChildAges() == null || incoming.getChildAges().isEmpty()) && ruleExtracted.getChildAges() != null && !ruleExtracted.getChildAges().isEmpty()) {
                     incoming.setChildAges(ruleExtracted.getChildAges());
                 }
