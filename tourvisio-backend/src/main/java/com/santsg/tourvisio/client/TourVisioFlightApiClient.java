@@ -216,7 +216,8 @@ public class TourVisioFlightApiClient {
         }
 
         if (!config.isConfigured()) {
-            throw new TourVisioApiException("TourVisio API bağlantısı yapılandırılmamış.");
+            log.warn("[FlightApiClient] TourVisio API credentials not configured. Falling back to mock flights.");
+            return generateMockFlights(request);
         }
 
         try {
