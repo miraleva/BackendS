@@ -295,22 +295,27 @@ public class ResponseAgent {
 
             if (startDate != null && endDate == null) {
                 if (isFlight) {
+                    boolean isRoundTrip = "ROUND_TRIP".equalsIgnoreCase(criteria.getTripType());
                     dateStateInstruction = isEnglish ? String.format(
                         "\nSTRICT DATE ACKNOWLEDGMENT RULE (FLIGHT):\n" +
                         "- Departure Date is ALREADY KNOWN: '%s'.\n" +
-                        "- Return Date is MISSING / UNCLEAR.\n" +
+                        "- Return Date is MISSING.\n" +
                         "- You MUST explicitly acknowledge the Departure Date ('Noted your departure date (%s) ✈️').\n" +
-                        "- Then ask ONLY whether they want a return flight or a one-way ticket (e.g. 'Is this a one-way trip, or should I look for a return flight too?').\n" +
+                        "%s" +
                         "- NEVER call '%s' a return date or ask for departure date again!",
-                        formatDisplayDate(startDate), formatDisplayDate(startDate), formatDisplayDate(startDate)
+                        formatDisplayDate(startDate), formatDisplayDate(startDate),
+                        isRoundTrip ? "- Ask ONLY for their return date." : "- Then ask whether they want a return flight or a one-way ticket.",
+                        formatDisplayDate(startDate)
                     ) : String.format(
                         "\nSTRICT DATE ACKNOWLEDGMENT RULE (FLIGHT):\n" +
                         "- Departure Date (Gidiş Tarihi) is ALREADY KNOWN: '%s'.\n" +
-                        "- Return Date (Dönüş Tarihi) is MISSING / UNCLEAR.\n" +
+                        "- Return Date (Dönüş Tarihi) is MISSING.\n" +
                         "- You MUST explicitly acknowledge the Departure Date ('Gidiş tarihinizi (%s) not aldım ✈️').\n" +
-                        "- Then ask ONLY whether they want a return flight or a one-way ticket (e.g. 'Sadece gidiş mi planlıyorsunuz, yoksa dönüş uçuşuna da bakayım mı?' / 'Is this a one-way trip, or should I look for a return flight too?').\n" +
+                        "%s" +
                         "- NEVER call '%s' a return date or ask for departure date again!",
-                        formatDisplayDate(startDate), formatDisplayDate(startDate), formatDisplayDate(startDate)
+                        formatDisplayDate(startDate), formatDisplayDate(startDate),
+                        isRoundTrip ? "- Uçuş gidiş-dönüş olarak işaretlenmiştir; SADECE dönüş tarihini sorun ('Dönüş tarihinizi öğrenebilir miyim?')." : "- Uçuş tipi henüz belirsizse, tek yön mü gidiş-dönüş mü planladıklarını sorun.",
+                        formatDisplayDate(startDate)
                     );
                 } else {
                     dateStateInstruction = isEnglish ? String.format(
@@ -520,7 +525,11 @@ public class ResponseAgent {
                 }
                 if ("FLIGHT_SEARCH".equals(criteria.getSearchType()) && criteria.getDepartureDate() != null && criteria.getReturnDate() == null) {
                     if ("tr".equals(locale.getLanguage())) {
-                        return String.format("Gidiş tarihinizi (%s) not aldım ✈️\n\nBu keyifli uçuşu planlayabilmem için seyahatinizi **tek yön mü yoksa gidiş-dönüş mü** olarak planlıyoruz?", formatDisplayDate(criteria.getDepartureDate()));
+                        if (criteria.getTripType() == null || criteria.getTripType().isBlank()) {
+                            return String.format("Gidiş tarihinizi (%s) not aldım ✈️\n\nBu keyifli uçuşu planlayabilmem için seyahatinizi **tek yön mü yoksa gidiş-dönüş mü** olarak planlıyoruz?", formatDisplayDate(criteria.getDepartureDate()));
+                        } else if ("ROUND_TRIP".equalsIgnoreCase(criteria.getTripType())) {
+                            return String.format("Gidiş tarihinizi (%s) not aldım ✈️\n\nBu keyifli uçuşu planlayabilmem için **dönüş tarihinizi** öğrenebilir miyim?", formatDisplayDate(criteria.getDepartureDate()));
+                        }
                     }
                 }
             }
