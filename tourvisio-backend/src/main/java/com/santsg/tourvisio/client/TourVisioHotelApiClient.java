@@ -136,43 +136,39 @@ public class TourVisioHotelApiClient {
             return generateMockHotels(criteria);
         }
 
-        String token;
         try {
-            token = authService.getToken();
-        } catch (TourVisioAuthException e) {
-            throw new TourVisioApiException("TourVisio'ya giriş yapılamadı: " + e.getMessage(), e);
-        }
+            String token = authService.getToken();
+            HttpHeaders headers = createAuthHeaders(token);
 
-        HttpHeaders headers = createAuthHeaders(token);
+            // ── 1. Autocomplete ──
+            AutocompleteResult autoResult = resolveLocation(criteria.getLocationOrHotelName(), headers);
+            log.info("[HotelApiClient] (Criteria) Autocomplete: id={}, type={}, name={}",
+                    autoResult.id, autoResult.type, autoResult.name);
 
-        // ── 1. Autocomplete ──
-        AutocompleteResult autoResult = resolveLocation(criteria.getLocationOrHotelName(), headers);
-        log.info("[HotelApiClient] (Criteria) Autocomplete: id={}, type={}, name={}",
-                autoResult.id, autoResult.type, autoResult.name);
+            // ── 2. PriceSearch ──
+            TourVisioHotelSearchRequest searchReq =
+                    TourVisioRequestMapper.toHotelSearchRequestFromCriteria(
+                            criteria, autoResult.id, autoResult.type);
 
-        // ── 2. PriceSearch — SearchCriteria mapper kullan ──
-        TourVisioHotelSearchRequest searchReq =
-                TourVisioRequestMapper.toHotelSearchRequestFromCriteria(
-                        criteria, autoResult.id, autoResult.type);
+            log.info("[HotelApiClient] (Criteria) PriceSearch: checkIn={}, night={}, currency={}, culture={}",
+                    searchReq.getCheckIn(), searchReq.getNight(),
+                    searchReq.getCurrency(), searchReq.getCulture());
 
-        log.info("[HotelApiClient] (Criteria) PriceSearch: checkIn={}, night={}, currency={}, culture={}",
-                searchReq.getCheckIn(), searchReq.getNight(),
-                searchReq.getCurrency(), searchReq.getCulture());
+            String searchUrl = buildUrl(PRICE_SEARCH_PATH);
+            HttpEntity<TourVisioHotelSearchRequest> searchEntity = new HttpEntity<>(searchReq, headers);
 
-        String searchUrl = buildUrl(PRICE_SEARCH_PATH);
-        HttpEntity<TourVisioHotelSearchRequest> searchEntity = new HttpEntity<>(searchReq, headers);
-
-        ResponseEntity<TourVisioHotelSearchResponse> searchRes;
-        try {
-            searchRes = restTemplate.exchange(
+            ResponseEntity<TourVisioHotelSearchResponse> searchRes = restTemplate.exchange(
                     searchUrl, HttpMethod.POST, searchEntity, TourVisioHotelSearchResponse.class);
+
+            List<HotelSearchResponseItem> liveResults = normalizeResponse(searchRes, criteria.getCurrency());
+            if (liveResults != null && !liveResults.isEmpty()) {
+                return liveResults;
+            }
         } catch (Exception e) {
-            throw new TourVisioApiException(
-                    "TourVisio PriceSearch (criteria) başarısız: " + e.getMessage(), e);
+            log.warn("[HotelApiClient] TourVisio live hotel search failed: {} — falling back to mock hotels.", e.getMessage());
         }
 
-        // ── 3. Normalize ──
-        return normalizeResponse(searchRes, criteria.getCurrency());
+        return generateMockHotels(criteria);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
