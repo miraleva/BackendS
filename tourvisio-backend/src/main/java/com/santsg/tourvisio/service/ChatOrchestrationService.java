@@ -995,6 +995,19 @@ public class ChatOrchestrationService {
         List<Integer> ages = new java.util.ArrayList<>();
         if (message == null) return ages;
 
+        String lowerMsg = message.toLowerCase(Locale.ROOT).trim();
+        boolean hasExplicitAgeKeyword = lowerMsg.matches(".*\\b(?:yaş|yas|yaşında|yasinda|yaşlarında|yaslarinda|aylık|aylik|years?|months?)\\b.*");
+
+        // "1 çocuk 1 bebek" / "2 yetişkin 1 çocuk 1 bebek" gibi mesajlarda sayılar kelimelerden ÖNCE gelir (kişi sayısı).
+        // "çocuk 8 bebek 1" gibi etiketli yaş mesajlarında ise sayılar kelimelerden SONRA gelir.
+        // Sayıların kelimelerden önce geldiği ve "yaş"/"aylık" kelimesi içermeyen mesajlar sadece kişi sayısı bildirimidir.
+        boolean isGuestCountOnlyMessage = lowerMsg.matches("^(?:(?:\\d{1,2}|bir|\\+1)\\s*(?:tane|adet)?\\s*(?:yetişkin|yetiskin|adult|adults|çocuk|cocuk|child|children|bebek|infant|baby|kişi|kisi)\\s*|(?:daha|var|olacak|ekle|geliyor)\\s*)+$")
+                && !hasExplicitAgeKeyword;
+
+        if (isGuestCountOnlyMessage) {
+            return ages;
+        }
+
         // 1. Yıl cinsinden yaşlar: "12 yaşında", "5 ve 8 yaş" vb.
         java.util.regex.Matcher clauseMatcher = CHILD_AGE_CLAUSE_PATTERN.matcher(message);
         while (clauseMatcher.find()) {
