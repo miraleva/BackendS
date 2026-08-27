@@ -455,10 +455,8 @@ public class TourVisioHotelApiClient {
 
         // ── Credential kontrolü ──
         if (!config.isConfigured()) {
-            throw new TourVisioApiException(
-                    "TourVisio API bağlantısı yapılandırılmamış. " +
-                    "TOURVISIO_BASE_URL, TOURVISIO_AGENCY, TOURVISIO_USERNAME, TOURVISIO_PASSWORD " +
-                    "environment variable'larını kontrol edin.");
+            log.warn("[HotelApiClient] TourVisio credentials not configured. Falling back to mock autocomplete.");
+            return generateMockAutocomplete(query);
         }
 
         // ── Token al ──
@@ -721,7 +719,8 @@ public class TourVisioHotelApiClient {
         }
 
         if (!config.isConfigured()) {
-            throw new TourVisioApiException("TourVisio API bağlantısı yapılandırılmamış.");
+            log.warn("[HotelApiClient] TourVisio credentials not configured. Falling back to mock product info.");
+            return generateMockProductInfo(request.getProduct());
         }
 
         String token = authService.getToken();
