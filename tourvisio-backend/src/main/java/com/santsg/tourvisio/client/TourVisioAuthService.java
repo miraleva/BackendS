@@ -148,22 +148,27 @@ public class TourVisioAuthService {
             try {
                 log.info("[TourVisioAuth] TourVisio login isteği gönderiliyor (Deneme {}/{}): POST {}", attempt, MAX_LOGIN_RETRIES, url);
 
-                ResponseEntity<TourVisioLoginResponse> response = restTemplate.exchange(
+                ResponseEntity<String> rawRes = restTemplate.exchange(
                         url,
                         HttpMethod.POST,
                         entity,
-                        TourVisioLoginResponse.class
+                        String.class
                 );
 
-                if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                log.info("[TourVisioAuth] Raw TourVisio Login Response Body: {}", rawRes.getBody());
+
+                if (!rawRes.getStatusCode().is2xxSuccessful() || rawRes.getBody() == null) {
                     throw new TourVisioAuthException(
-                            "TourVisio login başarısız — HTTP status: " + response.getStatusCode());
+                            "TourVisio login başarısız — HTTP status: " + rawRes.getStatusCode());
                 }
 
-                String token = response.getBody().extractToken();
+                TourVisioLoginResponse responseObj = new com.fasterxml.jackson.databind.ObjectMapper()
+                        .readValue(rawRes.getBody(), TourVisioLoginResponse.class);
+
+                String token = responseObj != null ? responseObj.extractToken() : null;
                 if (token == null) {
                     throw new TourVisioAuthException(
-                            "TourVisio login yanıtı body.token içermiyor. Response body: " + response.getBody());
+                            "TourVisio login yanıtı body.token içermiyor. Raw response: " + rawRes.getBody());
                 }
 
                 cachedToken = token;
