@@ -10,6 +10,9 @@ import com.santsg.tourvisio.dto.auth.UserResponse;
 import com.santsg.tourvisio.entity.User;
 import com.santsg.tourvisio.repository.UserRepository;
 
+import com.santsg.tourvisio.dto.auth.OAuthLoginRequest;
+import com.santsg.tourvisio.service.OAuthService;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
@@ -30,13 +33,14 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/auth")
 @CrossOrigin(origins = "*")
-@Tag(name = "User Authentication", description = "Endpoints for user signup, login and admin login")
+@Tag(name = "User Authentication", description = "Endpoints for user signup, login, google oauth and admin login")
 @Slf4j
 public class AuthController {
 
     private final UserRepository userRepository;
     private final JwtProvider jwtProvider;
     private final ActiveTokenRegistry tokenRegistry;
+    private final OAuthService oAuthService;
 
     // Admin şifresi
     private final String correctAdminPassword = "admin2026";
@@ -44,10 +48,12 @@ public class AuthController {
     public AuthController(
             UserRepository userRepository,
             JwtProvider jwtProvider,
-            ActiveTokenRegistry tokenRegistry) {
+            ActiveTokenRegistry tokenRegistry,
+            OAuthService oAuthService) {
         this.userRepository = userRepository;
         this.jwtProvider = jwtProvider;
         this.tokenRegistry = tokenRegistry;
+        this.oAuthService = oAuthService;
     }
 
     // =========================================================
@@ -314,6 +320,49 @@ public class AuthController {
                                     "error", "Unauthorized",
                                     "message",
                                     "Invalid admin password"));
+        }
+    }
+
+    // =========================================================
+    // OAUTH LOGIN (Google)
+    // =========================================================
+
+    @PostMapping(value = "/oauth-login", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @Operation(summary = "OAuth Login", description = "Login or signup using Google OAuth ID token")
+    public ResponseEntity<?> oauthLogin(@Valid @RequestBody OAuthLoginRequest request) {
+        log.info("[AuthController] OAuth login request received for provider={}", request.getProvider());
+        try {
+            Map<String, String> googleUserInfo = oAuthService.verifyGoogleToken(request.getIdToken());
+            String email = googleUserInfo.get("email");
+            String firstName = googleUserInfo.get("firstName");
+            String lastName = googleUserInfo.get("lastName");
+
+            User user = oAuthService.findOrCreateUser(email, firstName, lastName, request.getProvider());
+
+            String token = jwtProvider.generateToken(user.getId(), user.getEmail());
+            tokenRegistry.registerToken(token, user.getId(), user.getEmail());
+
+            UserResponse userResponse = UserResponse.builder()
+                    .firstName(user.getFirstName())
+                    .lastName(user.getLastName())
+                    .email(user.getEmail())
+                    .phone(user.getPhone())
+                    .country(user.getCountry())
+                    .gender(user.getGender())
+                    .dateOfBirth(user.getDateOfBirth())
+                    .build();
+
+            LoginResponse loginResponse = LoginResponse.builder()
+                    .token(token)
+                    .user(userResponse)
+                    .build();
+
+            log.info("[AuthController] OAuth login successful for email={}, userId={}", user.getEmail(), user.getId());
+            return ResponseEntity.ok(loginResponse);
+        } catch (Exception e) {
+            log.error("[AuthController] OAuth login failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Unauthorized", "message", "Google verification failed: " + e.getMessage()));
         }
     }
 }
