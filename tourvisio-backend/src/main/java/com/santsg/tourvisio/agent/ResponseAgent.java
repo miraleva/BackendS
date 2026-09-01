@@ -399,20 +399,23 @@ public class ResponseAgent {
                     String origin = criteria.getDepartureLocation();
                     String dest = criteria.getArrivalLocation();
                     String routeStr = (origin != null ? origin : "?") + " → " + (dest != null ? dest : "?");
+                    String missingFieldsStr = missingFields.stream().collect(Collectors.joining(", "));
                     knownDetailsInstruction = isEnglish ? String.format(
                         "\nKNOWN DETAILS ACKNOWLEDGMENT (FLIGHT):\n" +
-                        "- Route: '%s', Dates: '%s', Passengers: '%s'.\n" +
+                        "- Route: '%s', Dates: '%s', Passengers: '%s'. Missing fields: '%s'.\n" +
                         "- Structure into two paragraphs separated by \\n\\n:\n" +
-                        "  Paragraph 1: 'I am so excited to help you plan your upcoming flight on the %s route ✈️'\n" +
-                        "  Paragraph 2: 'To help me find the best flight options for you, could you please let me know your preferred **departure date**, whether this will be a **one-way / round-trip** flight, and the exact **number of passengers**?'",
-                        routeStr, datesStr, guestsStr, routeStr
+                        "  Paragraph 1: 'I am so excited to help you plan your upcoming flight ✈️'\n" +
+                        "  Paragraph 2: 'To help me find the best flight options for you, could you please specify your **%s**?'\n" +
+                        "- STRICT RULE: Only ask for fields that are in missing fields ('%s'). Do NOT ask for already provided details!",
+                        routeStr, datesStr, guestsStr, missingFieldsStr, missingFieldsStr, missingFieldsStr
                     ) : String.format(
                         "\nKNOWN DETAILS ACKNOWLEDGMENT (FLIGHT):\n" +
-                        "- Route: '%s', Dates: '%s', Passengers: '%s'.\n" +
-                        "- Structure into two paragraphs separated by \\n\\n:\n" +
-                        "  Paragraph 1: '%s rotasında harika bir uçuş planlamak için sabırsızlanıyorum ✈️'\n" +
-                        "  Paragraph 2: 'Uçuşunuzu en iyi şekilde organize edebilmem için seyahatinizi **tek yön mü yoksa gidiş-dönüş mü** planladığınızı, **gidiş tarihinizi** ve **yolcu sayısını** belirtebilir misiniz?'",
-                        routeStr, datesStr, guestsStr, routeStr
+                        "- Rota: '%s', Tarihler: '%s', Yolcular: '%s'. Eksik alanlar: '%s'.\n" +
+                        "- Response MUST have two paragraphs separated by \\n\\n:\n" +
+                        "  Paragraph 1: 'Harika bir uçuş planlamak için sabırsızlanıyorum ✈️'\n" +
+                        "  Paragraph 2: 'Uçuşunuzu en iyi şekilde listeleyebilmem için **%s** bilgisini paylaşabilir misiniz?'\n" +
+                        "- KESİN KURAL: YALNIZCA eksik listede (%s) olan bilgiyi sor. Zaten verilen kalkış yeri/tarih gibi bilgileri tekrar sorma!",
+                        routeStr, datesStr, guestsStr, missingFieldsStr, missingFieldsStr, missingFieldsStr
                     );
                 } else {
                     String missingFieldsStr = missingFields.stream().collect(Collectors.joining(", "));
@@ -656,7 +659,12 @@ public class ResponseAgent {
         try {
             String aiResponse = geminiClient.generate(prompt);
             if (isValidResponse(aiResponse)) {
-                return aiResponse.trim();
+                String trimmed = aiResponse.trim();
+                String lower = trimmed.toLowerCase(Locale.ROOT);
+                if (!lower.contains("onaylıyor musunuz") && !lower.contains("onayliyor musunuz")) {
+                    return trimmed;
+                }
+                log.warn("[ResponseAgent] AI generated confirmation text inside summarize(), rejecting AI response and using defaultReply");
             }
         } catch (Exception e) {
             log.warn("[ResponseAgent] Summarize AI generation failed, using fallback localization: {}", e.getMessage(), e);

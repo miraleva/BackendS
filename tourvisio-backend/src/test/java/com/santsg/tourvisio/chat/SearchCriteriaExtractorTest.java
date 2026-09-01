@@ -128,4 +128,58 @@ class SearchCriteriaExtractorTest {
         assertThat(criteria.getCheckInDate()).isEqualTo(LocalDate.of(2026, 9, 9));
         assertThat(criteria.getCheckOutDate()).isNull();
     }
+
+    @Test
+    void testChildAndInfantAgeExtraction() {
+        // 2 çocuk var, ikisi de 5 yaşında
+        SearchCriteria criteria1 = extractor.extract("2 çocuk var, ikisi de 5 yaşında", "HOTEL_SEARCH", null);
+        System.out.println("--- DEBUG criteria1: childCount = " + criteria1.getChildCount() + ", ages = " + criteria1.getChildAges());
+        assertThat(criteria1.getChildCount()).isEqualTo(2);
+        assertThat(criteria1.getChildAges()).containsExactly(5, 5);
+
+        // 2 çocuk, biri 5 diğeri 7 yaşında
+        SearchCriteria criteria2 = extractor.extract("2 çocuk, biri 5 diğeri 7 yaşında", "HOTEL_SEARCH", null);
+        assertThat(criteria2.getChildCount()).isEqualTo(2);
+        assertThat(criteria2.getChildAges()).containsExactlyInAnyOrder(5, 7);
+
+        // 3 çocuk var, yaşları 5, 5 ve 7
+        SearchCriteria criteria3 = extractor.extract("3 çocuk var, yaşları 5, 5 ve 7", "HOTEL_SEARCH", null);
+        assertThat(criteria3.getChildCount()).isEqualTo(3);
+        assertThat(criteria3.getChildAges()).containsExactlyInAnyOrder(5, 5, 7);
+
+        // 2 bebek, 10 aylık
+        SearchCriteria criteria4 = extractor.extract("2 bebek, 10 aylık", "HOTEL_SEARCH", null);
+        assertThat(criteria4.getInfantCount()).isEqualTo(2);
+        assertThat(criteria4.getInfantAges()).containsExactly(0, 0);
+    }
+
+    @Test
+    void testIncrementalInfantPhrases() {
+        SearchCriteria c1 = extractor.extract("1 tane de bebek olacak", "HOTEL_SEARCH", null);
+        assertThat(c1.getIncrementalInfantCount()).isEqualTo(1);
+
+        SearchCriteria c2 = extractor.extract("bebek ekle", "HOTEL_SEARCH", null);
+        assertThat(c2.getIncrementalInfantCount()).isEqualTo(1);
+
+        SearchCriteria c3 = extractor.extract("bebek de var", "HOTEL_SEARCH", null);
+        assertThat(c3.getIncrementalInfantCount()).isEqualTo(1);
+    }
+
+    @Test
+    void testRemovalInfantAndChildPhrases() {
+        SearchCriteria c1 = extractor.extract("bebek olmayacak", "HOTEL_SEARCH", null);
+        assertThat(c1.getInfantCount()).isEqualTo(0);
+
+        SearchCriteria c2 = extractor.extract("bebeği iptal et", "HOTEL_SEARCH", null);
+        assertThat(c2.getInfantCount()).isEqualTo(0);
+
+        SearchCriteria c3 = extractor.extract("bebeği çıkar", "HOTEL_SEARCH", null);
+        assertThat(c3.getInfantCount()).isEqualTo(0);
+
+        SearchCriteria c4 = extractor.extract("çocuk olmasın", "HOTEL_SEARCH", null);
+        assertThat(c4.getChildCount()).isEqualTo(0);
+
+        SearchCriteria c5 = extractor.extract("çocuğu iptal et", "HOTEL_SEARCH", null);
+        assertThat(c5.getChildCount()).isEqualTo(0);
+    }
 }

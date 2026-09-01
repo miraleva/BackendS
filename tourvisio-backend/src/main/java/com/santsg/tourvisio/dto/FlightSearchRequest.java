@@ -36,6 +36,7 @@ public class FlightSearchRequest {
     private String departureAirport;
     private String arrivalAirport;
     private LocalDate returnDate;
+    private Integer adultCount;
     private Integer childCount;
     private java.util.List<Integer> childAges;
     private Integer infantCount;

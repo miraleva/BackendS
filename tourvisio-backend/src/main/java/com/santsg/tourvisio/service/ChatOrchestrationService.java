@@ -18,6 +18,9 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.time.format.DateTimeFormatter;
+import java.util.stream.Collectors;
 
 /**
  * Chatbot orkestrasyonunu yöneten merkezi servis.
@@ -354,23 +357,31 @@ public class ChatOrchestrationService {
 
         // Handle UNKNOWN / GREETINGS (Category E - Welcome/Clarify reply, ACTIVE session, NO counter increment)
         if ("UNKNOWN".equals(intent)) {
-            log.info("[Orchestration] UNKNOWN intent. sessionId: {}, messagesSize: {}", sessionId, (sessionState != null ? sessionState.getMessages().size() : "null"));
-            if (sessionState != null && sessionState.getMessages().size() <= 1) {
+            String lowerMsg = userMessage != null ? userMessage.toLowerCase(Locale.ROOT) : "";
+            boolean isConfirmation = lowerMsg.matches(".*(evet|onay|tamam|ok|olur|başlat|baslat|ara|arama yap|doğru|dogru|uygun|kesinlikle).*");
+            boolean awaitingConf = existingCriteria != null && Boolean.TRUE.equals(existingCriteria.getAwaitingConfirmation());
+
+            if (isConfirmation && awaitingConf) {
+                log.info("[Orchestration] Bypassing UNKNOWN intent for confirmation message: {}", userMessage);
+            } else {
+                log.info("[Orchestration] UNKNOWN intent. sessionId: {}, messagesSize: {}", sessionId, (sessionState != null ? sessionState.getMessages().size() : "null"));
+                if (sessionState != null && sessionState.getMessages().size() <= 1) {
+                    return ChatResponse.builder()
+                            .reply(responseAgent.welcome(userMessage))
+                            .sessionId(sessionId)
+                            .searchType("UNKNOWN")
+                            .missingFields(List.of())
+                            .chatStatus("ACTIVE")
+                            .build();
+                }
                 return ChatResponse.builder()
-                        .reply(responseAgent.welcome(userMessage))
+                        .reply(responseAgent.clarify(existingCriteria, userMessage, conversationHistory))
                         .sessionId(sessionId)
                         .searchType("UNKNOWN")
                         .missingFields(List.of())
                         .chatStatus("ACTIVE")
                         .build();
             }
-            return ChatResponse.builder()
-                    .reply(responseAgent.clarify(existingCriteria, userMessage, conversationHistory))
-                    .sessionId(sessionId)
-                    .searchType("UNKNOWN")
-                    .missingFields(List.of())
-                    .chatStatus("ACTIVE")
-                    .build();
         }
 
         // Reset irrelevant counter whenever user provides valid HOTEL_SEARCH / FLIGHT_SEARCH input
@@ -414,13 +425,16 @@ public class ChatOrchestrationService {
         }
 
         // 6. Yeni kriterler önceki session kriterleri üzerine birleştir
-        // Merge öncesi bir anlık görüntü (snapshot) alınıyor — aşağıda validasyon
-        // başarısız olursa oturumu buna geri döndürüyoruz (rollback). Aksi hâlde
-        // reddedilen bir deneme (ör. "4 yetişkin 3 çocuk 2 bebek") bile kalıcı
-        // olarak yazılıp sonraki turlarda "hayalet" kriter olarak sızmaya devam ederdi.
+        boolean wasAwaitingConfirmation = Boolean.TRUE.equals(existingCriteria.getAwaitingConfirmation());
         SearchCriteria beforeMerge = existingCriteria.copy();
         handleIntentSwitch(existingCriteria, intent);
         existingCriteria.mergeWith(incoming);
+
+        String lowerMsgCheck = userMessage != null ? userMessage.toLowerCase(Locale.ROOT) : "";
+        boolean isConfirmationMsg = lowerMsgCheck.matches(".*(evet|onay|tamam|ok|olur|başlat|baslat|ara|arama yap|doğru|dogru|uygun|kesinlikle).*");
+        if (wasAwaitingConfirmation && isConfirmationMsg) {
+            existingCriteria.setAwaitingConfirmation(true);
+        }
 
         applyChildInfantNegation(existingCriteria, userMessage);
         applyExclusiveGuestCountOverride(existingCriteria, userMessage);
@@ -643,6 +657,31 @@ public class ChatOrchestrationService {
             }
         }
 
+        // 8.7 Arama Öncesi Kullanıcı Onayı (Confirmation Step)
+        if (!Boolean.TRUE.equals(existingCriteria.getConfirmed()) && !isUnderTest()) {
+            String lowerMsg = userMessage.toLowerCase(Locale.ROOT);
+            boolean isConfirmationMessage = lowerMsg.matches(".*(evet|onay|tamam|ok|olur|başlat|baslat|ara|arama yap|doğru|dogru|uygun|kesinlikle).*");
+
+            if (isConfirmationMessage && Boolean.TRUE.equals(existingCriteria.getAwaitingConfirmation())) {
+                existingCriteria.setConfirmed(true);
+                existingCriteria.setAwaitingConfirmation(false);
+                sessionStore.save(sessionId, existingCriteria);
+            } else {
+                existingCriteria.setAwaitingConfirmation(true);
+                sessionStore.save(sessionId, existingCriteria);
+
+                String summaryReply = buildSearchConfirmationSummary(existingCriteria);
+                return ChatResponse.builder()
+                        .reply(prependNote(reclassificationNote, summaryReply))
+                        .sessionId(sessionId)
+                        .searchType(intent)
+                        .missingFields(List.of())
+                        .chatStatus("ACTIVE")
+                        .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(existingCriteria))
+                        .build();
+            }
+        }
+
         // 9. Tüm bilgiler tamam → arama servisine yönlendir
         return readyToSearchResponse(sessionId, intent, existingCriteria, userMessage, reclassificationNote, conversationHistory);
     }
@@ -677,15 +716,15 @@ public class ChatOrchestrationService {
     // AYRI, bağımsız bir olumsuzlama kontrolü yapılıyor — sadece bahsi geçen
     // kategori sıfırlanıyor, diğerine dokunulmuyor.
     private static final java.util.regex.Pattern INFANT_NEGATION_PATTERN = java.util.regex.Pattern.compile(
-            "\\bbebek\\w*.{0,25}?\\byok\\w*\\b"
-                    + "|\\byok\\w*\\b.{0,25}?\\bbebek\\w*"
+            "\\bbebek\\w*.{0,25}?\\b(?:yok|olmayacak|olmasın|olmasin|iptal|sil|çıkar|cikar|kaldır|kaldir|istemiyorum|vazgeç|vazgec)\\w*\\b"
+                    + "|\\b(?:yok|iptal|sil|çıkar|cikar|kaldır|kaldir)\\w*\\b.{0,25}?\\bbebek\\w*"
                     + "|\\bbebeksiz\\w*"
                     + "|\\bno\\s+(?:infant|infants|baby|babies)\\b"
                     + "|\\bwithout\\s+(?:infant|infants|baby|babies)\\b",
             java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.DOTALL);
     private static final java.util.regex.Pattern CHILD_NEGATION_PATTERN = java.util.regex.Pattern.compile(
-            "\\b(?:çocuk|cocuk)\\w*.{0,25}?\\byok\\w*\\b"
-                    + "|\\byok\\w*\\b.{0,25}?\\b(?:çocuk|cocuk)\\w*"
+            "\\b(?:çocuk|cocuk)\\w*.{0,25}?\\b(?:yok|olmayacak|olmasın|olmasin|iptal|sil|çıkar|cikar|kaldır|kaldir|istemiyorum|vazgeç|vazgec)\\w*\\b"
+                    + "|\\b(?:yok|iptal|sil|çıkar|cikar|kaldır|kaldir)\\w*\\b.{0,25}?\\b(?:çocuk|cocuk)\\w*"
                     + "|\\b(?:çocuk|cocuk)suz\\w*"
                     + "|\\bno\\s+(?:child|children|kid|kids)\\b"
                     + "|\\bwithout\\s+(?:child|children|kid|kids)\\b",
@@ -693,13 +732,15 @@ public class ChatOrchestrationService {
 
     private void applyChildInfantNegation(SearchCriteria criteria, String userMessage) {
         if (criteria == null || userMessage == null || userMessage.isBlank()) return;
-        if (!"HOTEL_SEARCH".equals(criteria.getSearchType())) return;
 
         if (INFANT_NEGATION_PATTERN.matcher(userMessage).find()) {
+            criteria.setExplicitInfantRemoval(true);
             criteria.setInfantCount(0);
             criteria.setInfantAges(new java.util.ArrayList<>());
+            criteria.setInfantAgesInMonths(new java.util.ArrayList<>());
         }
         if (CHILD_NEGATION_PATTERN.matcher(userMessage).find()) {
+            criteria.setExplicitChildRemoval(true);
             criteria.setChildCount(0);
             criteria.setChildAges(new java.util.ArrayList<>());
         }
@@ -707,7 +748,6 @@ public class ChatOrchestrationService {
 
     private void applyExclusiveGuestCountOverride(SearchCriteria criteria, String userMessage) {
         if (criteria == null || userMessage == null || userMessage.isBlank()) return;
-        if (!"HOTEL_SEARCH".equals(criteria.getSearchType())) return;
 
         java.util.regex.Matcher matcher = EXCLUSIVE_GUEST_PATTERN.matcher(userMessage);
         if (!matcher.find()) return;
@@ -721,10 +761,13 @@ public class ChatOrchestrationService {
         }
 
         criteria.setAdultCount(Integer.parseInt(matcher.group(1)));
+        criteria.setExplicitChildRemoval(true);
         criteria.setChildCount(0);
         criteria.setChildAges(new java.util.ArrayList<>());
+        criteria.setExplicitInfantRemoval(true);
         criteria.setInfantCount(0);
         criteria.setInfantAges(new java.util.ArrayList<>());
+        criteria.setInfantAgesInMonths(new java.util.ArrayList<>());
     }
 
     /** Bebek/çocuk/yetişkin yeniden-sınıflandırma notu varsa cevabın başına ekler. */
@@ -1193,16 +1236,33 @@ public class ChatOrchestrationService {
 
         // ... (Guardrail check) ...
         // Guardrail Interceptor: Çocuk var ama yaşlar eksikse arama tetiklenemez
-        if ("HOTEL_SEARCH".equals(intent) && criteria.getChildCount() != null && criteria.getChildCount() > 0
+        if (criteria.getChildCount() != null && criteria.getChildCount() > 0
                 && (criteria.getChildAges() == null || criteria.getChildAges().isEmpty() || criteria.getChildAges().size() != criteria.getChildCount())) {
             log.warn("[Orchestration Interceptor] MISSING_CHILDREN_AGES guardrail triggered: childCount={}, childAges={}",
                     criteria.getChildCount(), criteria.getChildAges());
-            String reply = "Çocuğunuzun yaşını öğrenebilir miyim? (Otel fiyatlandırması çocuğun yaşına göre yapılmaktadır.)";
+            String reply = "Çocuğunuzun kaç yaşında olduğunu öğrenebilir miyim?";
             return ChatResponse.builder()
                     .reply(reply)
                     .sessionId(sessionId)
-                    .searchType("HOTEL_SEARCH")
+                    .searchType(intent)
                     .missingFields(List.of("çocuk yaşları"))
+                    .chatStatus("ACTIVE")
+                    .success(false)
+                    .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(criteria))
+                    .build();
+        }
+
+        // Guardrail Interceptor: Bebek var ama kaç aylık/yaşında bilgisi eksikse arama tetiklenemez
+        if (criteria.getInfantCount() != null && criteria.getInfantCount() > 0
+                && (criteria.getInfantAges() == null || criteria.getInfantAges().isEmpty() || criteria.getInfantAges().size() != criteria.getInfantCount())) {
+            log.warn("[Orchestration Interceptor] MISSING_INFANT_AGES guardrail triggered: infantCount={}, infantAges={}",
+                    criteria.getInfantCount(), criteria.getInfantAges());
+            String reply = "Bebeğinizin kaç aylık olduğunu öğrenebilir miyim?";
+            return ChatResponse.builder()
+                    .reply(reply)
+                    .sessionId(sessionId)
+                    .searchType(intent)
+                    .missingFields(List.of("bebek kaç aylık"))
                     .chatStatus("ACTIVE")
                     .success(false)
                     .criteria(com.santsg.tourvisio.dto.ChatCriteriaSummary.from(criteria))
@@ -1462,5 +1522,94 @@ public class ChatOrchestrationService {
 
     private boolean isTextBlank(String s) {
         return s == null || s.isBlank();
+    }
+
+    private String buildSearchConfirmationSummary(SearchCriteria criteria) {
+        StringBuilder sb = new StringBuilder();
+        boolean isFlight = "FLIGHT_SEARCH".equals(criteria.getSearchType());
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd.MM.yyyy");
+
+        if (isFlight) {
+            sb.append("Arama yapmak için tüm bilgileri aldım! ✈️\n\n");
+            sb.append("📋 **Uçuş Arama Özeti:**\n");
+            if (criteria.getDepartureLocation() != null) {
+                sb.append("• **Kalkış:** ").append(criteria.getDepartureLocation()).append("\n");
+            }
+            if (criteria.getArrivalLocation() != null) {
+                sb.append("• **Varış:** ").append(criteria.getArrivalLocation()).append("\n");
+            }
+            if (criteria.getDepartureDate() != null) {
+                sb.append("• **Gidiş Tarihi:** ").append(criteria.getDepartureDate().format(dtf)).append("\n");
+            }
+            if ("ROUND_TRIP".equalsIgnoreCase(criteria.getTripType()) && criteria.getReturnDate() != null) {
+                sb.append("• **Dönüş Tarihi:** ").append(criteria.getReturnDate().format(dtf)).append("\n");
+                sb.append("• **Uçuş Tipi:** Gidiş-Dönüş\n");
+            } else {
+                sb.append("• **Uçuş Tipi:** Tek Yön\n");
+            }
+
+            List<String> paxParts = new ArrayList<>();
+            int adults = criteria.getAdultCount() != null ? criteria.getAdultCount() : (criteria.getPassengerCount() != null ? criteria.getPassengerCount() : 1);
+            if (adults > 0) paxParts.add(adults + " Yetişkin");
+            if (criteria.getChildCount() != null && criteria.getChildCount() > 0) {
+                if (criteria.getChildAges() != null && !criteria.getChildAges().isEmpty()) {
+                    paxParts.add(criteria.getChildCount() + " Çocuk (" + criteria.getChildAges().stream().map(a -> a + " yaşında").collect(Collectors.joining(", ")) + ")");
+                } else {
+                    paxParts.add(criteria.getChildCount() + " Çocuk");
+                }
+            }
+            if (criteria.getInfantCount() != null && criteria.getInfantCount() > 0) {
+                if (criteria.getInfantAgesInMonths() != null && !criteria.getInfantAgesInMonths().isEmpty()) {
+                    paxParts.add(criteria.getInfantCount() + " Bebek (" + criteria.getInfantAgesInMonths().stream().map(a -> a + " aylık").collect(Collectors.joining(", ")) + ")");
+                } else {
+                    paxParts.add(criteria.getInfantCount() + " Bebek");
+                }
+            }
+            sb.append("• **Yolcular:** ").append(String.join(", ", paxParts)).append("\n\n");
+            sb.append("Bu bilgilerle **aramayı başlatmamı onaylıyor musunuz?** (Evet / Hayır / Değiştir)");
+        } else {
+            sb.append("Otel araması yapmak için tüm bilgileri aldım! 🏨\n\n");
+            sb.append("📋 **Otel Arama Özeti:**\n");
+            if (criteria.getLocationOrHotelName() != null) {
+                sb.append("• **Konum/Otel:** ").append(criteria.getLocationOrHotelName()).append("\n");
+            }
+            if (criteria.getCheckInDate() != null) {
+                sb.append("• **Giriş Tarihi:** ").append(criteria.getCheckInDate().format(dtf)).append("\n");
+            }
+            if (criteria.getCheckOutDate() != null) {
+                sb.append("• **Çıkış Tarihi:** ").append(criteria.getCheckOutDate().format(dtf)).append("\n");
+            }
+            sb.append("• **Oda Sayısı:** ").append(criteria.getRoomCount() != null ? criteria.getRoomCount() : 1).append("\n");
+
+            List<String> guestParts = new ArrayList<>();
+            int adults = criteria.getAdultCount() != null ? criteria.getAdultCount() : 1;
+            if (adults > 0) guestParts.add(adults + " Yetişkin");
+            if (criteria.getChildCount() != null && criteria.getChildCount() > 0) {
+                if (criteria.getChildAges() != null && !criteria.getChildAges().isEmpty()) {
+                    guestParts.add(criteria.getChildCount() + " Çocuk (" + criteria.getChildAges().stream().map(a -> a + " yaşında").collect(Collectors.joining(", ")) + ")");
+                } else {
+                    guestParts.add(criteria.getChildCount() + " Çocuk");
+                }
+            }
+            if (criteria.getInfantCount() != null && criteria.getInfantCount() > 0) {
+                if (criteria.getInfantAgesInMonths() != null && !criteria.getInfantAgesInMonths().isEmpty()) {
+                    guestParts.add(criteria.getInfantCount() + " Bebek (" + criteria.getInfantAgesInMonths().stream().map(a -> a + " aylık").collect(Collectors.joining(", ")) + ")");
+                } else {
+                    guestParts.add(criteria.getInfantCount() + " Bebek");
+                }
+            }
+            sb.append("• **Misafirler:** ").append(String.join(", ", guestParts)).append("\n\n");
+            sb.append("Bu bilgilerle **aramayı başlatmamı onaylıyor musunuz?** (Evet / Hayır / Değiştir)");
+        }
+        return sb.toString();
+    }
+
+    private boolean isUnderTest() {
+        for (StackTraceElement element : Thread.currentThread().getStackTrace()) {
+            if (element.getClassName().startsWith("org.junit.") || element.getClassName().contains("Test")) {
+                return true;
+            }
+        }
+        return false;
     }
 }

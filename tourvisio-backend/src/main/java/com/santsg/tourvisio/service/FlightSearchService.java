@@ -87,11 +87,17 @@ public class FlightSearchService {
                 return buildNoResultsResponse(request, locale);
             }
 
-            int pax = (request.getPassengerCount() != null && request.getPassengerCount() > 0) ? request.getPassengerCount() : 1;
+            int adults = criteria.getAdultCount() != null ? criteria.getAdultCount() : (criteria.getPassengerCount() != null ? criteria.getPassengerCount() : 1);
+            int children = criteria.getChildCount() != null ? criteria.getChildCount() : 0;
+            int infants = criteria.getInfantCount() != null ? criteria.getInfantCount() : 0;
+            int totalPax = adults + children + infants;
+
             List<FlightSearchResponseItem> results = new ArrayList<>();
             for (FlightSearchResponseItem item : rawResults) {
-                Double rawPrice = item.getPrice();
-                Double totalPrice = rawPrice != null ? rawPrice * pax : null;
+                Double unitPrice = item.getUnitPrice() != null ? item.getUnitPrice() : item.getPrice();
+                Double totalPrice = (item.getPrice() != null && !item.getPrice().equals(unitPrice))
+                        ? item.getPrice()
+                        : (unitPrice != null ? (unitPrice * adults + (unitPrice * 0.75 * children) + (unitPrice * 0.10 * infants)) : null);
                 FlightSearchResponseItem updatedItem = FlightSearchResponseItem.builder()
                         .airline(item.getAirline())
                         .departureTime(item.getDepartureTime())
@@ -99,7 +105,7 @@ public class FlightSearchService {
                         .transfers(item.getTransfers())
                         .baggage(item.getBaggage())
                         .price(totalPrice)
-                        .unitPrice(rawPrice)
+                        .unitPrice(unitPrice)
                         .currency(item.getCurrency())
                         .returnAirline(item.getReturnAirline())
                         .returnDepartureTime(item.getReturnDepartureTime())
@@ -113,17 +119,14 @@ public class FlightSearchService {
             FlightSearchResponseItem best = results.get(0);
             Double totalPrice = best.getPrice() != null ? best.getPrice() : 0.0;
             Double unitPrice = best.getUnitPrice() != null ? best.getUnitPrice() : 0.0;
-            String bestInfo = pax > 1
-                    ? String.format("%s — %.2f %s (Kişi Başı: %.2f %s)",
-                    best.getAirline(), totalPrice, best.getCurrency(), unitPrice, best.getCurrency())
-                    : String.format("%s — %.2f %s",
-                    best.getAirline(), totalPrice, best.getCurrency());
 
-            String reply = pax > 1
-                    ? String.format("%d kişi için en iyi teklif: %s — %.2f %s", pax, best.getAirline(), totalPrice, best.getCurrency())
-                    : messageSource.getMessage("flight.search.success",
-                    new Object[]{results.size(), criteria.getDepartureLocation(), criteria.getArrivalLocation(), bestInfo},
-                    locale);
+            List<String> paxParts = new ArrayList<>();
+            if (adults > 0) paxParts.add(adults + " yetişkin");
+            if (children > 0) paxParts.add(children + " çocuk");
+            if (infants > 0) paxParts.add(infants + " bebek");
+            String passengerText = !paxParts.isEmpty() ? String.join(", ", paxParts) : (totalPax + " kişi");
+
+            String reply = String.format("%s için en iyi teklif: %s — %.2f %s", passengerText, best.getAirline(), totalPrice, best.getCurrency());
 
             return ChatSearchResponse.builder()
                     .reply(reply)

@@ -243,10 +243,11 @@ public class TourVisioFlightApiClient {
             // Çocuk/bebek sayıları kendi tipleriyle gönderilmezse arama sadece
             // yetişkinler için fiyatlanır ve toplam fiyat gerçek yolcu
             // kompozisyonunu yansıtmaz.
+            int adultPax = request.getAdultCount() != null ? request.getAdultCount() : (request.getPassengerCount() != null ? request.getPassengerCount() : 1);
             List<TourVisioFlightSearchRequest.PassengerCriteria> passengers = new ArrayList<>();
             passengers.add(TourVisioFlightSearchRequest.PassengerCriteria.builder()
                     .type(1)
-                    .count(request.getPassengerCount())
+                    .count(adultPax)
                     .build());
             if (request.getChildCount() != null && request.getChildCount() > 0) {
                 passengers.add(TourVisioFlightSearchRequest.PassengerCriteria.builder()
@@ -462,10 +463,12 @@ public class TourVisioFlightApiClient {
                     .arrivalTime(leg.arrivalTime)
                     .transfers(leg.transfers)
                     .baggage(leg.baggage)
-                    .price(offer != null && offer.getSingleAdultPrice() != null
-                            ? offer.getSingleAdultPrice().getAmount() : null)
-                    .currency(offer != null && offer.getSingleAdultPrice() != null
-                            ? offer.getSingleAdultPrice().getCurrency() : null)
+                    .price(offer != null && offer.getPrice() != null && offer.getPrice().getAmount() != null
+                            ? offer.getPrice().getAmount()
+                            : (offer != null && offer.getSingleAdultPrice() != null ? offer.getSingleAdultPrice().getAmount() : null))
+                    .currency(offer != null && offer.getPrice() != null && offer.getPrice().getCurrency() != null
+                            ? offer.getPrice().getCurrency()
+                            : (offer != null && offer.getSingleAdultPrice() != null ? offer.getSingleAdultPrice().getCurrency() : null))
                     .build());
         }
         return dedupe(result);

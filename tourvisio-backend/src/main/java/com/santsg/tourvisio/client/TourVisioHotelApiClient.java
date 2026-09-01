@@ -157,8 +157,17 @@ public class TourVisioHotelApiClient {
             String searchUrl = buildUrl(PRICE_SEARCH_PATH);
             HttpEntity<TourVisioHotelSearchRequest> searchEntity = new HttpEntity<>(searchReq, headers);
 
-            ResponseEntity<TourVisioHotelSearchResponse> searchRes = restTemplate.exchange(
-                    searchUrl, HttpMethod.POST, searchEntity, TourVisioHotelSearchResponse.class);
+            // İlk önce ham yanıtı alalım (debug amaçlı)
+            ResponseEntity<String> rawRes = restTemplate.exchange(
+                    searchUrl, HttpMethod.POST, searchEntity, String.class);
+            log.info("[HotelApiClient] (Criteria) PriceSearch RAW response (first 2000 chars): {}",
+                    rawRes.getBody() != null ? rawRes.getBody().substring(0, Math.min(rawRes.getBody().length(), 2000)) : "NULL");
+
+            // Ham yanıtı parse et
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            mapper.configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+            TourVisioHotelSearchResponse parsedBody = mapper.readValue(rawRes.getBody(), TourVisioHotelSearchResponse.class);
+            ResponseEntity<TourVisioHotelSearchResponse> searchRes = ResponseEntity.status(rawRes.getStatusCode()).body(parsedBody);
 
             List<HotelSearchResponseItem> liveResults = normalizeResponse(searchRes, criteria.getCurrency());
             if (liveResults != null && !liveResults.isEmpty()) {

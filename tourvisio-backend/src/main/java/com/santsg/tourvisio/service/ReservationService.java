@@ -10,6 +10,9 @@ import com.santsg.tourvisio.exception.ResourceNotFoundException;
 import com.santsg.tourvisio.repository.NotificationRepository;
 import com.santsg.tourvisio.repository.ReservationRepository;
 import com.santsg.tourvisio.repository.UserRepository;
+import com.santsg.tourvisio.chat.SearchCriteria;
+import com.santsg.tourvisio.chat.ChatSessionStore;
+import java.time.LocalDate;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -25,6 +28,7 @@ import java.util.Random;
 import com.santsg.tourvisio.client.TourVisioBookingApiClient;
 import com.santsg.tourvisio.dto.tourvisio.TourVisioBookingRequest;
 import com.santsg.tourvisio.dto.tourvisio.TourVisioBookingResponse;
+import com.santsg.tourvisio.exception.TourVisioApiException;
 import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
@@ -36,6 +40,7 @@ public class ReservationService {
         private final UserRepository userRepository;
         private final NotificationRepository notificationRepository;
         private final TourVisioBookingApiClient tourVisioBookingApiClient;
+        private final ChatSessionStore chatSessionStore;
 
         @Autowired
         public ReservationService(
@@ -43,12 +48,14 @@ public class ReservationService {
                         EmailService emailService,
                         UserRepository userRepository,
                         NotificationRepository notificationRepository,
-                        @Autowired(required = false) TourVisioBookingApiClient tourVisioBookingApiClient) {
+                        @Autowired(required = false) TourVisioBookingApiClient tourVisioBookingApiClient,
+                        @Autowired(required = false) ChatSessionStore chatSessionStore) {
                 this.reservationRepository = reservationRepository;
                 this.emailService = emailService;
                 this.userRepository = userRepository;
                 this.notificationRepository = notificationRepository;
                 this.tourVisioBookingApiClient = tourVisioBookingApiClient;
+                this.chatSessionStore = chatSessionStore;
         }
 
         public ReservationService(
@@ -56,13 +63,13 @@ public class ReservationService {
                         EmailService emailService,
                         UserRepository userRepository,
                         NotificationRepository notificationRepository) {
-                this(reservationRepository, emailService, userRepository, notificationRepository, null);
+                this(reservationRepository, emailService, userRepository, notificationRepository, null, null);
         }
 
         public ReservationService(
                         ReservationRepository reservationRepository,
                         EmailService emailService) {
-                this(reservationRepository, emailService, null, null, null);
+                this(reservationRepository, emailService, null, null, null, null);
         }
 
         // =========================================================
@@ -73,6 +80,23 @@ public class ReservationService {
         public Reservation createReservation(
                         ReservationRequest request,
                         Long userId) {
+
+                if (request.getChatSessionId() != null && chatSessionStore != null) {
+                        try {
+                                SearchCriteria criteria = chatSessionStore.getOrCreate(request.getChatSessionId());
+                                if (criteria != null) {
+                                        autoFillPassengerBirthDates(request, criteria);
+                                        if (request.getDepartureCity() == null && criteria.getDepartureLocation() != null) {
+                                                request.setDepartureCity(criteria.getDepartureLocation());
+                                        }
+                                        if (request.getArrivalCity() == null && criteria.getArrivalLocation() != null) {
+                                                request.setArrivalCity(criteria.getArrivalLocation());
+                                        }
+                                }
+                        } catch (Exception e) {
+                                log.error("[ReservationService] Failed to auto-fill details from chatSessionId=" + request.getChatSessionId(), e);
+                        }
+                }
 
                 validateReservationRequest(request);
 
@@ -106,6 +130,9 @@ public class ReservationService {
                 if (tourVisioBookingApiClient != null) {
                         TourVisioBookingRequest bookingReq = TourVisioBookingRequest.fromReservationRequest(request);
                         TourVisioBookingResponse bookingResp = tourVisioBookingApiClient.makeBooking(bookingReq);
+                        if (!bookingResp.isSuccess()) {
+                                throw new TourVisioApiException(bookingResp.getMessage());
+                        }
                         reservationNum = bookingResp.getReservationNumber();
                 } else {
                         reservationNum = "TV-" + (100000 + new Random().nextInt(900000));
@@ -514,6 +541,83 @@ public class ReservationService {
                                 || request.getPassengers().isEmpty()) {
                         throw new IllegalArgumentException(
                                         "At least one passenger is required");
+                }
+        }
+
+        private void autoFillPassengerBirthDates(ReservationRequest request, SearchCriteria criteria) {
+                if (request.getPassengers() == null || request.getPassengers().isEmpty()) {
+                        return;
+                }
+
+                int adultCount = criteria.getAdultCount() != null ? criteria.getAdultCount() : 1;
+                int childCount = criteria.getChildCount() != null ? criteria.getChildCount() : 0;
+                int infantCount = criteria.getInfantCount() != null ? criteria.getInfantCount() : 0;
+
+                List<Integer> childAges = criteria.getChildAges() != null ? criteria.getChildAges() : new ArrayList<>();
+                List<Integer> infantMonths = criteria.getInfantAgesInMonths() != null ? criteria.getInfantAgesInMonths() : new ArrayList<>();
+
+                // Safe defaults if age lists are shorter than count
+                while (childAges.size() < childCount) {
+                        childAges.add(6); // default 6 years old
+                }
+                while (infantMonths.size() < infantCount) {
+                        infantMonths.add(6); // default 6 months old
+                }
+
+                LocalDate tripStart = request.getStartDate() != null ? request.getStartDate() : LocalDate.now();
+
+                List<PassengerRequest> passengers = request.getPassengers();
+                for (int i = 0; i < passengers.size(); i++) {
+                        PassengerRequest pr = passengers.get(i);
+                        String genderUpper = pr.getGender() != null ? pr.getGender().toUpperCase() : "";
+
+                        boolean isInfant = genderUpper.equals("INF") || genderUpper.equals("INFANT");
+                        boolean isChild = genderUpper.equals("CHD") || genderUpper.equals("CHILD");
+
+                        // If gender/title is not explicit, use index order classification
+                        if (!isInfant && !isChild) {
+                                int childStartIndex = adultCount;
+                                int infantStartIndex = adultCount + childCount;
+
+                                if (i >= infantStartIndex && i < infantStartIndex + infantCount) {
+                                        isInfant = true;
+                                } else if (i >= childStartIndex && i < childStartIndex + childCount) {
+                                        isChild = true;
+                                }
+                        }
+
+                        if (isInfant) {
+                                int infantIdx = 0;
+                                // If using index order, calculate index relative to infant start
+                                if (i >= (adultCount + childCount)) {
+                                        infantIdx = i - (adultCount + childCount);
+                                }
+                                int months = 6; // default
+                                if (infantIdx < infantMonths.size()) {
+                                        months = infantMonths.get(infantIdx);
+                                }
+                                // Set birth date so they are exactly 'months' old at trip start
+                                pr.setBirthDate(tripStart.minusMonths(months));
+                                // Set gender to INF if not set
+                                if (pr.getGender() == null || pr.getGender().isBlank() || pr.getGender().equals("MR") || pr.getGender().equals("MRS")) {
+                                        pr.setGender("INF");
+                                }
+                                log.info("[ReservationService] Auto-filled infant birthdate for passenger {}: {}, age = {} months", i, pr.getBirthDate(), months);
+                        } else if (isChild) {
+                                int childIdx = 0;
+                                if (i >= adultCount) {
+                                        childIdx = i - adultCount;
+                                }
+                                int years = 6; // default
+                                if (childIdx < childAges.size()) {
+                                        years = childAges.get(childIdx);
+                                }
+                                pr.setBirthDate(tripStart.minusYears(years));
+                                if (pr.getGender() == null || pr.getGender().isBlank() || pr.getGender().equals("MR") || pr.getGender().equals("MRS")) {
+                                        pr.setGender("CHD");
+                                }
+                                log.info("[ReservationService] Auto-filled child birthdate for passenger {}: {}, age = {} years", i, pr.getBirthDate(), years);
+                        }
                 }
         }
 }

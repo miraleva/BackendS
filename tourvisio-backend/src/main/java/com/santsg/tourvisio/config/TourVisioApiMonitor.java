@@ -85,10 +85,7 @@ public class TourVisioApiMonitor {
             List<Long> list = entry.getValue();
             synchronized (list) {
                 if (list.isEmpty()) {
-                    if ("HotelSearch".equals(entry.getKey())) avgs.put(entry.getKey(), 460L);
-                    else if ("FlightSearch".equals(entry.getKey())) avgs.put(entry.getKey(), 620L);
-                    else if ("Auth".equals(entry.getKey())) avgs.put(entry.getKey(), 320L);
-                    else avgs.put(entry.getKey(), 180L);
+                    avgs.put(entry.getKey(), 0L);
                 } else {
                     double avg = list.stream().mapToLong(Long::longValue).average().orElse(0.0);
                     avgs.put(entry.getKey(), Math.round(avg));

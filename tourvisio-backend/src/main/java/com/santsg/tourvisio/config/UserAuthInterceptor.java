@@ -138,6 +138,14 @@ public class UserAuthInterceptor implements HandlerInterceptor {
         }
 
         // =========================================================
+        // GUEST ALLOWED ENDPOINTS CHECK
+        // =========================================================
+        boolean isGuestAllowed = isGuestAllowedEndpoint(requestURI, request.getMethod());
+        if (isGuestAllowed) {
+            return true;
+        }
+
+        // =========================================================
         // UNAUTHORIZED
         // =========================================================
         response.setHeader(
@@ -167,6 +175,18 @@ public class UserAuthInterceptor implements HandlerInterceptor {
                         + "Please include a valid Bearer token "
                         + "in the Authorization header.\"}");
 
+        return false;
+    }
+
+    private boolean isGuestAllowedEndpoint(String uri, String method) {
+        if (uri.startsWith("/api/auth/")) return true;
+        if (uri.startsWith("/api/hotels/") || uri.startsWith("/api/flights/")) return true;
+        if (uri.startsWith("/api/reservations")) return true;
+        if (uri.startsWith("/api/chat/")) {
+            if (uri.endsWith("/claim")) return false;
+            if ("DELETE".equalsIgnoreCase(method)) return false;
+            return true;
+        }
         return false;
     }
 }

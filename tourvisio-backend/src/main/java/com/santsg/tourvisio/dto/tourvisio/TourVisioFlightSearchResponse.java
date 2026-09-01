@@ -165,6 +165,7 @@ public class TourVisioFlightSearchResponse {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Offer {
         private int segmentNumber;
+        private Money price;
         private Money singleAdultPrice;
         // Gidis-donus eslestirmesi icin: bu teklifin hangi "grup"lara ait
         // oldugunu belirtir. Iki farkli ucusun (gidis/donus) teklifleri en az
@@ -191,7 +192,7 @@ public class TourVisioFlightSearchResponse {
     @AllArgsConstructor
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Money {
-        private double amount;
+        private Double amount;
         private String currency;
     }
 }

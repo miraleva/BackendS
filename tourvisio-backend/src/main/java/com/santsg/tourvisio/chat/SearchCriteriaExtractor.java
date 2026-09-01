@@ -94,15 +94,25 @@ public class SearchCriteriaExtractor {
     private static final Pattern INFANT_PATTERN = Pattern.compile(
             "((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?(?:bebek|infant|infants|baby|babies)|(?:bebek|infant|infants|baby|babies)\\s*(?:sayısı\\s*)?((?<!\\d)-?\\d+)\\s*(?:tane|adet)|(?:bebek|infant|infants|baby|babies)\\s*sayısı\\s*:?\\s*((?<!\\d)-?\\d+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern INCREMENTAL_CHILD_PATTERN = Pattern.compile(
-            "(?:(\\d{1,2})|bir|1|\\+1)\\s*(?:tane\\s*|adet\\s*)?(?:çocuk|cocuk|child|children|kid|kids)\\s*(?:daha|ekle|eklensin|ekleyelim|olacak|geliyor|var)|(?:daha|ekle|eklensin|ekleyelim|ek)\\s*(?:(\\d{1,2})|bir|1)\\s*(?:tane\\s*|adet\\s*)?(?:çocuk|cocuk|child|children|kid|kids)",
+            "(?:(?:(\\d{1,2})|bir|1|\\+1)\\s*(?:tane\\s*|adet\\s*)?)?(?:de\\s*|da\\s*)?(?:çocuk|cocuk|child|children|kid|kids|çocuğumuz|cocugumuz)\\s*(?:de\\s*|da\\s*)?(?:daha|ekle|eklensin|ekleyelim|ilave|dahil|(?:te|de)?\\s*olacak)",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern INCREMENTAL_INFANT_PATTERN = Pattern.compile(
-            "(?:(\\d{1,2})|bir|1|\\+1)\\s*(?:tane\\s*|adet\\s*)?(?:bebek|infant|infants|baby|babies)\\s*(?:daha|ekle|eklensin|ekleyelim|olacak|geliyor|var)|(?:daha|ekle|eklensin|ekleyelim|ek)\\s*(?:(\\d{1,2})|bir|1)\\s*(?:tane\\s*|adet\\s*)?(?:bebek|infant|infants|baby|babies)",
+            "(?:(?:(\\d{1,2})|bir|1|\\+1)\\s*(?:tane\\s*|adet\\s*)?)?(?:de\\s*|da\\s*)?(?:bebek|infant|infants|baby|babies|bebeğimiz|bebegimiz)\\s*(?:de\\s*|da\\s*)?(?:daha|ekle|eklensin|ekleyelim|ilave|dahil|(?:te|de)?\\s*olacak)",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern REMOVE_INFANT_PATTERN = Pattern.compile(
+            "\\b(?:0|zero|no)\\s+(?:bebek|bebekler|infant|infants|baby|babies|bebeği|bebegi|bebeğim|bebegim)\\b|\\b(?:bebek|bebekler|bebekleri|bebeklerimiz|infant|infants|baby|babies|bebeği|bebegi|bebeğim|bebegim)\\s+(?:olmayacak|olmasın|olmasin|iptal|iptal\\s+olacak|iptal\\s+et|çıkar|cikar|sil|kaldır|kaldir|istemiyorum|istemiyoruz|yok|yoktur|vazgeç|vazgec|düş|dus)\\b|\\b(?:iptal|iptal\\s+olacak|iptal\\s+et|çıkar|cikar|sil|kaldır|kaldir|düş|dus)\\s+(?:bebek|bebekler|bebekleri|infant|baby|bebeği|bebegi)\\b|\\b(?:bebeksiz|bebeksuz|nobaby)\\b",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern REMOVE_CHILD_PATTERN = Pattern.compile(
+            "\\b(?:0|zero|no)\\s+(?:çocuk|çocuklar|cocuk|cocuklar|child|children|kid|kids|çocuğu|cocugu|çocuğum|cocugum)\\b|\\b(?:çocuk|çocuklar|çocukları|çocuklarımız|cocuk|cocuklar|child|children|kid|kids|çocuğu|cocugu|çocuğum|cocugum)\\s+(?:olmayacak|olmasın|olmasin|iptal|iptal\\s+olacak|iptal\\s+et|çıkar|cikar|sil|kaldır|kaldir|istemiyorum|istemiyoruz|yok|yoktur|vazgeç|vazgec|düş|dus)\\b|\\b(?:iptal|iptal\\s+olacak|iptal\\s+et|çıkar|cikar|sil|kaldır|kaldir|düş|dus)\\s+(?:çocuk|çocuklar|çocukları|cocuk|cocuklar|child|çocuğu|cocugu)\\b|\\b(?:çocuksuz|cocuksuz|nochildren|nokids)\\b",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern ROOM_PATTERN = Pattern.compile(
             "((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?(?:oda|room|rooms)|(?:oda|room|rooms)\\s*(?:sayısı\\s*)?((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?", Pattern.CASE_INSENSITIVE);
     private static final Pattern PASSENGER_PATTERN = Pattern.compile(
             "((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?(?:yolcu|kişi|kisi|passenger|passengers|person|people|kişilik|kisilik|yetişkin|yetiskin|adult|adults)|(?:yolcu|passenger|passengers|kişi|kisi|person|people|kişilik|kisilik|yetişkin|yetiskin|adult|adults)\\s*(?:sayısı\\s*)?((?<!\\d)-?\\d+)\\s*(?:tane\\s*|adet\\s*)?", Pattern.CASE_INSENSITIVE);
+    private static final Pattern MONTH_AGE_PATTERN = Pattern.compile(
+            "(\\d+)\\s*(?:aylık|aylik|ay)\\s*(?:bebek|infant|baby|çocuk|cocuk|child)?", Pattern.CASE_INSENSITIVE);
+    private static final Pattern YEAR_AGE_PATTERN = Pattern.compile(
+            "(\\d+)\\s*(?:yaşında|yaşinda|yaş|yas)\\s*(?:çocuk|cocuk|child|bebek|infant|baby)?", Pattern.CASE_INSENSITIVE);
 
     // ── Gece sayısı ───────────────────────────────────────────────────────────
     private static final Pattern NIGHT_PATTERN = Pattern.compile(
@@ -212,35 +222,59 @@ public class SearchCriteriaExtractor {
         Integer amCount = extractMatchedGroup(ADULT_PATTERN.matcher(lower));
         if (amCount != null) c.setAdultCount(amCount);
 
-        // Artımlı Çocuk Ekleme ("1 çocuk daha var", "1 tane daha çocuk ekle")
-        Matcher incChildMatcher = INCREMENTAL_CHILD_PATTERN.matcher(lower);
-        if (incChildMatcher.find()) {
-            String g1 = incChildMatcher.group(1);
-            String g2 = incChildMatcher.group(2);
-            int add = 1;
-            if (g1 != null && !g1.isBlank()) add = Integer.parseInt(g1);
-            else if (g2 != null && !g2.isBlank()) add = Integer.parseInt(g2);
-            c.setIncrementalChildCount(add);
+        // 1. Önce açık çocuk kaldırma / iptal / 0 çocuk kontrolü
+        if (REMOVE_CHILD_PATTERN.matcher(lower).find()) {
+            c.setExplicitChildRemoval(true);
+            c.setChildCount(0);
+            c.setChildAges(new ArrayList<>());
         } else {
-            // Çocuk
-            Integer cmCount = extractMatchedGroup(CHILD_PATTERN.matcher(lower));
-            if (cmCount != null) c.setChildCount(cmCount);
+            // Önce artımlı Çocuk Ekleme ("1 çocuk daha var", "1 tane de çocuk olacak", "çocuk ekle")
+            Matcher incChildMatcher = INCREMENTAL_CHILD_PATTERN.matcher(lower);
+            if (incChildMatcher.find() && !lower.contains("olmayacak") && !lower.contains("olmasın") && !lower.contains("iptal") && !lower.contains("sil") && !lower.contains("çıkar")) {
+                String g1 = incChildMatcher.groupCount() >= 1 ? incChildMatcher.group(1) : null;
+                int add = 1;
+                if (g1 != null && !g1.isBlank()) add = Integer.parseInt(g1);
+                c.setIncrementalChildCount(add);
+            } else {
+                // Açık sayısal çocuk kontrolü ("2 çocuk", "3 çocuk")
+                Integer cmCount = extractMatchedGroup(CHILD_PATTERN.matcher(lower));
+                if (cmCount != null) {
+                    c.setChildCount(cmCount);
+                } else if ((lower.contains("çocuk") || lower.contains("cocuk") || lower.contains("child") || lower.contains("kid"))
+                           && !lower.contains("0 çocuk") && !lower.contains("çocuk yok") && !lower.contains("çocuk olmasın") && !lower.contains("çocuksuz") && !lower.contains("olmayacak") && !lower.contains("iptal") && !lower.contains("sil") && !lower.contains("çıkar")) {
+                    c.setIncrementalChildCount(1);
+                }
+            }
         }
 
-        // Artımlı Bebek Ekleme ("1 bebek daha var", "1 tane daha bebek ekle")
-        Matcher incInfantMatcher = INCREMENTAL_INFANT_PATTERN.matcher(lower);
-        if (incInfantMatcher.find()) {
-            String g1 = incInfantMatcher.group(1);
-            String g2 = incInfantMatcher.group(2);
-            int add = 1;
-            if (g1 != null && !g1.isBlank()) add = Integer.parseInt(g1);
-            else if (g2 != null && !g2.isBlank()) add = Integer.parseInt(g2);
-            c.setIncrementalInfantCount(add);
-        } else if (!lower.matches(".*çocuk\\s*\\d+\\s*bebek.*")) {
-            // Bebek
-            Integer imCount = extractMatchedGroup(INFANT_PATTERN.matcher(lower));
-            if (imCount != null) c.setInfantCount(imCount);
+        // 2. Önce açık bebek kaldırma / iptal / 0 bebek kontrolü
+        if (REMOVE_INFANT_PATTERN.matcher(lower).find()) {
+            c.setExplicitInfantRemoval(true);
+            c.setInfantCount(0);
+            c.setInfantAges(new ArrayList<>());
+            c.setInfantAgesInMonths(new ArrayList<>());
+        } else {
+            // Önce artımlı Bebek Ekleme ("1 bebek daha var", "1 tane de bebek olacak", "bebek ekle")
+            Matcher incInfantMatcher = INCREMENTAL_INFANT_PATTERN.matcher(lower);
+            if (incInfantMatcher.find() && !lower.contains("olmayacak") && !lower.contains("olmasın") && !lower.contains("iptal") && !lower.contains("sil") && !lower.contains("çıkar")) {
+                String g1 = incInfantMatcher.groupCount() >= 1 ? incInfantMatcher.group(1) : null;
+                int add = 1;
+                if (g1 != null && !g1.isBlank()) add = Integer.parseInt(g1);
+                c.setIncrementalInfantCount(add);
+            } else {
+                // Açık sayısal bebek kontrolü ("2 bebek", "1 bebek")
+                Integer imCount = extractMatchedGroup(INFANT_PATTERN.matcher(lower));
+                if (imCount != null && imCount <= 3) {
+                    c.setInfantCount(imCount);
+                } else if ((lower.contains("bebek") || lower.contains("infant") || lower.contains("baby") || lower.contains("bebeğ"))
+                           && !lower.contains("0 bebek") && !lower.contains("bebek yok") && !lower.contains("bebek olmasın") && !lower.contains("bebeksiz") && !lower.contains("olmayacak") && !lower.contains("iptal") && !lower.contains("sil") && !lower.contains("çıkar")) {
+                    c.setIncrementalInfantCount(1);
+                }
+            }
         }
+
+        // Bebek/Çocuk Yaş ve Ay Detayları ("14 aylık", "5 yaşında")
+        extractAgeAndMonthDetails(lower, c);
 
         // Tarihler (giriş & çıkış)
         extractHotelDates(lower, c, awaitingField);
@@ -362,15 +396,63 @@ public class SearchCriteriaExtractor {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Flight extraction
-    // ─────────────────────────────────────────────────────────────────────────
-
     private void extractFlightFields(String lower, SearchCriteria c, String awaitingField) {
 
-        // Yolcu sayısı
-        Matcher pm = PASSENGER_PATTERN.matcher(lower);
-        if (pm.find())
-            c.setPassengerCount(Integer.parseInt(pm.group(1)));
+        // Yetişkin
+        Integer amCount = extractMatchedGroup(ADULT_PATTERN.matcher(lower));
+        if (amCount != null) c.setAdultCount(amCount);
+
+        // 1. Önce açık sayısal çocuk kontrolü ("2 çocuk", "3 çocuk")
+        Integer cmCount = extractMatchedGroup(CHILD_PATTERN.matcher(lower));
+        if (cmCount != null) {
+            c.setChildCount(cmCount);
+        } else {
+            // Artımlı Çocuk Ekleme ("1 çocuk daha var", "1 tane de çocuk olacak", "çocuk ekle")
+            Matcher incChildMatcher = INCREMENTAL_CHILD_PATTERN.matcher(lower);
+            if (incChildMatcher.find()) {
+                String g1 = incChildMatcher.groupCount() >= 1 ? incChildMatcher.group(1) : null;
+                int add = 1;
+                if (g1 != null && !g1.isBlank()) add = Integer.parseInt(g1);
+                c.setIncrementalChildCount(add);
+            } else if (lower.contains("çocuk") || lower.contains("cocuk") || lower.contains("child") || lower.contains("kid")) {
+                if (!lower.contains("0 çocuk") && !lower.contains("çocuk yok") && !lower.contains("çocuk olmasın") && !lower.contains("çocuksuz")) {
+                    c.setIncrementalChildCount(1);
+                }
+            }
+        }
+
+        // 2. Önce açık sayısal bebek kontrolü ("2 bebek", "1 bebek")
+        Integer imCount = extractMatchedGroup(INFANT_PATTERN.matcher(lower));
+        if (imCount != null) {
+            c.setInfantCount(imCount);
+        } else {
+            // Artımlı Bebek Ekleme ("1 tane de bebek olacak", "bebek ekle")
+            Matcher incInfantMatcher = INCREMENTAL_INFANT_PATTERN.matcher(lower);
+            if (incInfantMatcher.find()) {
+                String g1 = incInfantMatcher.groupCount() >= 1 ? incInfantMatcher.group(1) : null;
+                int add = 1;
+                if (g1 != null && !g1.isBlank()) add = Integer.parseInt(g1);
+                c.setIncrementalInfantCount(add);
+            } else if (lower.contains("bebek") || lower.contains("infant") || lower.contains("baby") || lower.contains("bebeğ")) {
+                if (!lower.contains("0 bebek") && !lower.contains("bebek yok") && !lower.contains("bebek olmasın") && !lower.contains("bebeksiz")) {
+                    c.setIncrementalInfantCount(1);
+                }
+            }
+        }
+
+        // Genel yolcu sayısı (sadece özel yetişkin/çocuk/bebek belirtilmediyse)
+        if (amCount == null && c.getChildCount() == null && c.getInfantCount() == null
+                && c.getIncrementalChildCount() == null && c.getIncrementalInfantCount() == null) {
+            Matcher pm = PASSENGER_PATTERN.matcher(lower);
+            if (pm.find()) {
+                int parsedCount = Integer.parseInt(pm.group(1));
+                c.setPassengerCount(parsedCount);
+                c.setAdultCount(parsedCount);
+            }
+        }
+
+        // Bebek/Çocuk Yaş ve Ay Detayları ("14 aylık", "5 yaşında")
+        extractAgeAndMonthDetails(lower, c);
 
         // Trip type
         if (lower.contains("tek yön") || lower.contains("tek yon")
@@ -518,6 +600,130 @@ public class SearchCriteriaExtractor {
                 }
             } else if (dates.size() == 1) {
                 c.setDepartureDate(dates.get(0));
+            }
+        }
+    }
+
+    private void extractAgeAndMonthDetails(String lower, SearchCriteria c) {
+        if (lower == null || lower.isBlank()) return;
+
+        String temp = lower;
+
+        // 1. "14 aylık", "6 aylık" gibi ay ifadelerini ayıkla ve metinden temizle
+        Matcher mm = MONTH_AGE_PATTERN.matcher(temp);
+        StringBuffer sbMonth = new StringBuffer();
+        while (mm.find()) {
+            try {
+                int months = Integer.parseInt(mm.group(1));
+                int ageYears = months / 12; // 14 aylık -> 1 yaş, 6 aylık -> 0 yaş
+                if (months < 24) {
+                    if (c.getInfantAges() == null) c.setInfantAges(new ArrayList<>());
+                    c.getInfantAges().add(ageYears);
+                    if (c.getInfantAgesInMonths() == null) c.setInfantAgesInMonths(new ArrayList<>());
+                    c.getInfantAgesInMonths().add(months);
+                } else {
+                    if (c.getChildAges() == null) c.setChildAges(new ArrayList<>());
+                    c.getChildAges().add(ageYears);
+                }
+            } catch (Exception ignored) {}
+            mm.appendReplacement(sbMonth, "");
+        }
+        mm.appendTail(sbMonth);
+        temp = sbMonth.toString();
+
+        // 2. "5 yaşında", "3 yaş" gibi yaş ifadelerini ayıkla ve metinden temizle
+        Matcher ym = YEAR_AGE_PATTERN.matcher(temp);
+        StringBuffer sbYear = new StringBuffer();
+        while (ym.find()) {
+            try {
+                int age = Integer.parseInt(ym.group(1));
+                if (age <= 1) {
+                    if (c.getInfantAges() == null) c.setInfantAges(new ArrayList<>());
+                    c.getInfantAges().add(age);
+                    if (c.getInfantAgesInMonths() == null) c.setInfantAgesInMonths(new ArrayList<>());
+                    c.getInfantAgesInMonths().add(age == 1 ? 12 : 6);
+                } else if (age <= 12) {
+                    if (c.getChildAges() == null) c.setChildAges(new ArrayList<>());
+                    c.getChildAges().add(age);
+                }
+            } catch (Exception ignored) {}
+            ym.appendReplacement(sbYear, "");
+        }
+        ym.appendTail(sbYear);
+        temp = sbYear.toString();
+
+        // 3. Fallback: Eğer çocuk veya bebek sayısı belirtilmişse, ama girilen yaş listesi eksik kalmışsa,
+        // metindeki diğer sayıları bulup yaş olarak eklemeye çalışıyoruz (ör. "2 çocuk, biri 5 diğeri 7 yaşında").
+        temp = CHILD_PATTERN.matcher(temp).replaceAll("");
+        temp = INFANT_PATTERN.matcher(temp).replaceAll("");
+        temp = ADULT_PATTERN.matcher(temp).replaceAll("");
+        temp = PASSENGER_PATTERN.matcher(temp).replaceAll("");
+        temp = ROOM_PATTERN.matcher(temp).replaceAll("");
+        temp = NIGHT_PATTERN.matcher(temp).replaceAll("");
+
+        if (Pattern.compile("\\b(?:yaş|yaşında|yaşinda|yas|aylık|aylik)\\b", Pattern.CASE_INSENSITIVE).matcher(lower).find()) {
+            Matcher numMatcher = Pattern.compile("\\d+").matcher(temp);
+            while (numMatcher.find()) {
+                try {
+                    int age = Integer.parseInt(numMatcher.group());
+                    if (age <= 1) {
+                        if (c.getInfantAges() == null) c.setInfantAges(new ArrayList<>());
+                        c.getInfantAges().add(age);
+                        if (c.getInfantAgesInMonths() == null) c.setInfantAgesInMonths(new ArrayList<>());
+                        c.getInfantAgesInMonths().add(age == 1 ? 12 : 6);
+                    } else if (age <= 12) {
+                        if (c.getChildAges() == null) c.setChildAges(new ArrayList<>());
+                        c.getChildAges().add(age);
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+
+        // Post-processing:
+        // Eğer childCount önceden set edilmişse ve childAges listesinden büyükse,
+        // ve childAges tek bir elemana sahipse (ör. "2 çocuk, ikisi de 5 yaşında"),
+        // bu tek yaşı childCount adet olacak şekilde dolduruyoruz.
+        if (c.getChildCount() != null && c.getChildCount() > 0) {
+            if (c.getChildAges() != null && c.getChildAges().size() == 1 && c.getChildAges().size() < c.getChildCount()) {
+                int singleAge = c.getChildAges().get(0);
+                while (c.getChildAges().size() < c.getChildCount()) {
+                    c.getChildAges().add(singleAge);
+                }
+            }
+        } else {
+            // Eğer childCount set edilmemişse, girilen yaş sayısı kadar çocuk olduğunu varsayıyoruz
+            if (c.getChildAges() != null && !c.getChildAges().isEmpty()) {
+                c.setChildCount(c.getChildAges().size());
+            }
+        }
+
+        // Aynı işlemi bebekler için de yapıyoruz
+        if (c.getInfantCount() != null && c.getInfantCount() > 0) {
+            if (c.getInfantAges() != null && c.getInfantAges().size() == 1 && c.getInfantAges().size() < c.getInfantCount()) {
+                int singleAge = c.getInfantAges().get(0);
+                while (c.getInfantAges().size() < c.getInfantCount()) {
+                    c.getInfantAges().add(singleAge);
+                }
+            }
+            // Align infantAgesInMonths size with infantAges list size
+            if (c.getInfantAgesInMonths() == null) {
+                c.setInfantAgesInMonths(new ArrayList<>());
+            }
+            if (c.getInfantAges() != null) {
+                if (c.getInfantAgesInMonths().size() == 1 && c.getInfantAgesInMonths().size() < c.getInfantCount()) {
+                    int singleMonths = c.getInfantAgesInMonths().get(0);
+                    while (c.getInfantAgesInMonths().size() < c.getInfantCount()) {
+                        c.getInfantAgesInMonths().add(singleMonths);
+                    }
+                }
+                while (c.getInfantAgesInMonths().size() < c.getInfantAges().size()) {
+                    int ageInYears = c.getInfantAges().get(c.getInfantAgesInMonths().size());
+                    c.getInfantAgesInMonths().add(ageInYears == 1 ? 12 : 6);
+                }
+            }
+        } else {
+            if (c.getInfantAges() != null && !c.getInfantAges().isEmpty()) {
+                c.setInfantCount(c.getInfantAges().size());
             }
         }
     }

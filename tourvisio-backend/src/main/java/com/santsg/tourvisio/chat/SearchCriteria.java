@@ -52,8 +52,11 @@ public class SearchCriteria {
     private List<Integer> childAges = new ArrayList<>();
     private Integer infantCount = 0;
     private List<Integer> infantAges = new ArrayList<>();
+    private List<Integer> infantAgesInMonths = new ArrayList<>();
     private Integer incrementalChildCount;
     private Integer incrementalInfantCount;
+    private Boolean explicitChildRemoval = false;
+    private Boolean explicitInfantRemoval = false;
     private String nationality = "TR";
     private Integer roomCount = 1;
 
@@ -79,6 +82,9 @@ public class SearchCriteria {
     /** ONE_WAY | ROUND_TRIP */
     private String tripType;
     private Boolean assumedTripType = false;
+
+    private Boolean confirmed = false;
+    private Boolean awaitingConfirmation = false;
 
     // ──────────────────────────────────────────────────────────────────────────
     // Copy helper
@@ -107,6 +113,7 @@ public class SearchCriteria {
         c.childAges = this.childAges != null ? new ArrayList<>(this.childAges) : new ArrayList<>();
         c.infantCount = this.infantCount;
         c.infantAges = this.infantAges != null ? new ArrayList<>(this.infantAges) : new ArrayList<>();
+        c.infantAgesInMonths = this.infantAgesInMonths != null ? new ArrayList<>(this.infantAgesInMonths) : new ArrayList<>();
         c.nationality = this.nationality;
         c.roomCount = this.roomCount;
         c.departureLocation = this.departureLocation;
@@ -117,6 +124,8 @@ public class SearchCriteria {
         c.assumedPassengerCount = this.assumedPassengerCount;
         c.tripType = this.tripType;
         c.assumedTripType = this.assumedTripType;
+        c.confirmed = this.confirmed;
+        c.awaitingConfirmation = this.awaitingConfirmation;
         c.maxPrice = this.maxPrice;
         c.minPrice = this.minPrice;
         c.minStars = this.minStars;
@@ -137,6 +146,23 @@ public class SearchCriteria {
     public void mergeWith(SearchCriteria incoming) {
         if (incoming == null)
             return;
+
+        // Capture previous values of search fields
+        String oldLocation = this.locationOrHotelName;
+        LocalDate oldCheckIn = this.checkInDate;
+        LocalDate oldCheckOut = this.checkOutDate;
+        String oldDepLoc = this.departureLocation;
+        String oldArrLoc = this.arrivalLocation;
+        LocalDate oldDepDate = this.departureDate;
+        LocalDate oldRetDate = this.returnDate;
+        Integer oldAdults = this.adultCount;
+        Integer oldChildren = this.childCount;
+        Integer oldInfants = this.infantCount;
+        Integer oldRooms = this.roomCount;
+        Integer oldPassengers = this.passengerCount;
+        String oldTripType = this.tripType;
+        List<Integer> oldChildAges = this.childAges != null ? new ArrayList<>(this.childAges) : new ArrayList<>();
+        List<Integer> oldInfantAges = this.infantAges != null ? new ArrayList<>(this.infantAges) : new ArrayList<>();
 
         if (incoming.getSearchType() != null)
             this.searchType = incoming.getSearchType();
@@ -183,54 +209,64 @@ public class SearchCriteria {
         if (incoming.getIncrementalChildCount() != null && incoming.getIncrementalChildCount() > 0) {
             int currentCount = this.childCount != null ? this.childCount : 0;
             this.childCount = currentCount + incoming.getIncrementalChildCount();
-        } else if (incoming.getChildAges() != null && !incoming.getChildAges().isEmpty()) {
-            if (this.childAges == null || this.childAges.isEmpty() || incoming.getChildAges().size() >= (this.childCount != null ? this.childCount : 0)) {
+        } else if (incoming.getChildCount() != null && incoming.getChildCount() > 0) {
+            this.childCount = incoming.getChildCount();
+        } else if (Boolean.TRUE.equals(incoming.getExplicitChildRemoval())) {
+            this.childCount = 0;
+            this.childAges = new ArrayList<>();
+        }
+
+        if (this.childCount != null && this.childCount > 0 && incoming.getChildAges() != null && !incoming.getChildAges().isEmpty()) {
+            if (this.childAges == null || this.childAges.isEmpty() || incoming.getChildAges().size() >= this.childCount) {
                 this.childAges = new ArrayList<>(incoming.getChildAges());
             } else {
                 List<Integer> mergedAges = new ArrayList<>(this.childAges);
                 for (Integer age : incoming.getChildAges()) {
-                    if (mergedAges.size() < (this.childCount != null ? this.childCount : 99)) {
+                    if (mergedAges.size() < this.childCount) {
                         mergedAges.add(age);
                     }
                 }
                 this.childAges = mergedAges;
             }
+        } else if (incoming.getChildAges() != null && !incoming.getChildAges().isEmpty()) {
+            this.childAges = new ArrayList<>(incoming.getChildAges());
             if (this.childCount == null || this.childAges.size() > this.childCount) {
                 this.childCount = this.childAges.size();
             }
-        } else if (incoming.getChildCount() != null && incoming.getChildCount() > 0) {
-            this.childCount = incoming.getChildCount();
-        } else if (incoming.getChildCount() != null && incoming.getChildCount() == 0
-                && incoming.getAdultCount() != null) {
-            this.childCount = 0;
-            this.childAges = new ArrayList<>();
         }
 
         // Artımlı bebek ekleme (ör. "1 bebek daha var", "1 tane daha bebek ekle")
         if (incoming.getIncrementalInfantCount() != null && incoming.getIncrementalInfantCount() > 0) {
             int currentCount = this.infantCount != null ? this.infantCount : 0;
             this.infantCount = currentCount + incoming.getIncrementalInfantCount();
-        } else if (incoming.getInfantAges() != null && !incoming.getInfantAges().isEmpty()) {
-            if (this.infantAges == null || this.infantAges.isEmpty() || incoming.getInfantAges().size() >= (this.infantCount != null ? this.infantCount : 0)) {
+        } else if (incoming.getInfantCount() != null && incoming.getInfantCount() > 0) {
+            this.infantCount = incoming.getInfantCount();
+        } else if (Boolean.TRUE.equals(incoming.getExplicitInfantRemoval())) {
+            this.infantCount = 0;
+            this.infantAges = new ArrayList<>();
+            this.infantAgesInMonths = new ArrayList<>();
+        }
+
+        if (this.infantCount != null && this.infantCount > 0 && incoming.getInfantAges() != null && !incoming.getInfantAges().isEmpty()) {
+            if (this.infantAges == null || this.infantAges.isEmpty() || incoming.getInfantAges().size() >= this.infantCount) {
                 this.infantAges = new ArrayList<>(incoming.getInfantAges());
             } else {
                 List<Integer> mergedAges = new ArrayList<>(this.infantAges);
                 for (Integer age : incoming.getInfantAges()) {
-                    if (mergedAges.size() < (this.infantCount != null ? this.infantCount : 99)) {
+                    if (mergedAges.size() < this.infantCount) {
                         mergedAges.add(age);
                     }
                 }
                 this.infantAges = mergedAges;
             }
+        } else if (incoming.getInfantAges() != null && !incoming.getInfantAges().isEmpty()) {
+            this.infantAges = new ArrayList<>(incoming.getInfantAges());
             if (this.infantCount == null || this.infantAges.size() > this.infantCount) {
                 this.infantCount = this.infantAges.size();
             }
-        } else if (incoming.getInfantCount() != null && incoming.getInfantCount() > 0) {
-            this.infantCount = incoming.getInfantCount();
-        } else if (incoming.getInfantCount() != null && incoming.getInfantCount() == 0
-                && incoming.getAdultCount() != null) {
-            this.infantCount = 0;
-            this.infantAges = new ArrayList<>();
+        }
+        if (incoming.getInfantAgesInMonths() != null && !incoming.getInfantAgesInMonths().isEmpty()) {
+            this.infantAgesInMonths = new ArrayList<>(incoming.getInfantAgesInMonths());
         }
         if (incoming.getNationality() != null)
             this.nationality = incoming.getNationality();
@@ -254,6 +290,13 @@ public class SearchCriteria {
             this.passengerCount = incoming.getPassengerCount();
             this.assumedPassengerCount = false;
         }
+        if (this.adultCount != null || (this.childCount != null && this.childCount > 0) || (this.infantCount != null && this.infantCount > 0)) {
+            int totalPax = (this.adultCount != null ? this.adultCount : 1)
+                    + (this.childCount != null ? this.childCount : 0)
+                    + (this.infantCount != null ? this.infantCount : 0);
+            this.passengerCount = totalPax;
+            this.assumedPassengerCount = false;
+        }
         if (incoming.getTripType() != null) {
             this.tripType = incoming.getTripType();
             this.assumedTripType = false;
@@ -264,6 +307,27 @@ public class SearchCriteria {
             this.minPrice = incoming.getMinPrice();
         if (incoming.getMinStars() != null)
             this.minStars = incoming.getMinStars();
+
+        // Check if any search parameter actually changed value during merge
+        boolean hasChanged = !equalsNullable(oldLocation, this.locationOrHotelName)
+                || !equalsNullable(oldCheckIn, this.checkInDate)
+                || !equalsNullable(oldCheckOut, this.checkOutDate)
+                || !equalsNullable(oldDepLoc, this.departureLocation)
+                || !equalsNullable(oldArrLoc, this.arrivalLocation)
+                || !equalsNullable(oldDepDate, this.departureDate)
+                || !equalsNullable(oldRetDate, this.returnDate)
+                || !equalsNullable(oldAdults, this.adultCount)
+                || !equalsNullable(oldChildren, this.childCount)
+                || !equalsNullable(oldInfants, this.infantCount)
+                || !equalsNullable(oldRooms, this.roomCount)
+                || !equalsNullable(oldPassengers, this.passengerCount)
+                || !equalsNullable(oldTripType, this.tripType)
+                || !oldChildAges.equals(this.childAges != null ? this.childAges : new ArrayList<>())
+                || !oldInfantAges.equals(this.infantAges != null ? this.infantAges : new ArrayList<>());
+
+        if (hasChanged) {
+            this.confirmed = false;
+        }
 
 
         reconcileAgeBuckets();
@@ -344,6 +408,19 @@ public class SearchCriteria {
         if (movedToAdult > 0) {
             this.adultCount = (this.adultCount != null ? this.adultCount : 0) + movedToAdult;
         }
+
+        // Align infantAgesInMonths size with newInfantAges size
+        if (this.infantAgesInMonths == null) {
+            this.infantAgesInMonths = new ArrayList<>();
+        }
+        if (this.infantAgesInMonths.size() > newInfantAges.size()) {
+            this.infantAgesInMonths = new ArrayList<>(this.infantAgesInMonths.subList(0, newInfantAges.size()));
+        } else {
+            while (this.infantAgesInMonths.size() < newInfantAges.size()) {
+                int ageInYears = newInfantAges.get(this.infantAgesInMonths.size());
+                this.infantAgesInMonths.add(ageInYears == 1 ? 12 : 6);
+            }
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -394,10 +471,11 @@ public class SearchCriteria {
         req.setDepartureLocation(departureLocation);
         req.setArrivalLocation(arrivalLocation);
         req.setDepartureDate(departureDate);
-        // passengerCount tarihsel olarak "yetişkin sayısı" gibi kullanılıyor; çocuk/bebek
-        // ayrı yolcu tipleriyle (2=Child, 3=Infant) gönderilir. adultCount doluysa onu
-        // tercih ediyoruz ki "2 yetişkin 1 çocuk" derken çocuk yetişkin koltuğu sayılmasın.
-        req.setPassengerCount(adultCount != null && adultCount > 0 ? adultCount : passengerCount);
+        int totalPax = (adultCount != null ? adultCount : (passengerCount != null ? passengerCount : 1))
+                + (childCount != null ? childCount : 0)
+                + (infantCount != null ? infantCount : 0);
+        req.setPassengerCount(totalPax);
+        req.setAdultCount(adultCount != null ? adultCount : 1);
         req.setTripType(tripType);
         req.setCurrency(effectiveCurrency);
         // Set new fields
@@ -409,5 +487,11 @@ public class SearchCriteria {
         req.setInfantCount(infantCount);
         req.setRoomCount(roomCount);
         return req;
+    }
+
+    private boolean equalsNullable(Object a, Object b) {
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        return a.equals(b);
     }
 }
