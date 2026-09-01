@@ -90,8 +90,7 @@ public class SearchCriteriaValidator {
             // her oda TourVisio'ya TAM yetişkin sayısıyla gönderiliyor (bkz.
             // TourVisioRequestMapper), yani "2 kişi, 50 oda" aslında 100 kişilik yer
             // aramaya dönüşüyordu.
-            if (criteria.getRoomCount() != null && totalGuests > 0
-                    && (criteria.getRoomCount() > totalGuests || criteria.getRoomCount() > MAX_ROOM_COUNT)) {
+            if (criteria.getRoomCount() != null && criteria.getRoomCount() > MAX_ROOM_COUNT) {
                 return new ValidationResult(false, "TOO_MANY_ROOMS");
             }
         }

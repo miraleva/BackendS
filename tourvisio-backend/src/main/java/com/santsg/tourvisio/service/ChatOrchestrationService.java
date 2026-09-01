@@ -273,6 +273,9 @@ public class ChatOrchestrationService {
                 if (incoming.getAdultCount() == null && ruleExtracted.getAdultCount() != null) {
                     incoming.setAdultCount(ruleExtracted.getAdultCount());
                 }
+                if (incoming.getRoomCount() == null && ruleExtracted.getRoomCount() != null) {
+                    incoming.setRoomCount(ruleExtracted.getRoomCount());
+                }
                 if (ruleExtracted.getIncrementalChildCount() != null && ruleExtracted.getIncrementalChildCount() > 0) {
                     incoming.setIncrementalChildCount(ruleExtracted.getIncrementalChildCount());
                 }

@@ -75,12 +75,19 @@ public class TourVisioRequestMapper {
         int roomCount = request.getRoomCount() != null && request.getRoomCount() > 0
                 ? request.getRoomCount() : 1;
 
-        int baseAdultCount = request.getAdultCount() != null ? request.getAdultCount() : 1;
+        int baseAdultCount = request.getAdultCount() != null ? request.getAdultCount() : Math.max(1, roomCount);
+        if (baseAdultCount < roomCount) {
+            baseAdultCount = roomCount;
+        }
+
+        int adultsPerRoom = Math.max(1, baseAdultCount / roomCount);
+        int extraAdults = baseAdultCount % roomCount;
 
         List<TourVisioHotelSearchRequest.RoomCriteria> rooms = new ArrayList<>();
         for (int i = 0; i < roomCount; i++) {
+            int adultsInThisRoom = adultsPerRoom + (i < extraAdults ? 1 : 0);
             rooms.add(TourVisioHotelSearchRequest.RoomCriteria.builder()
-                    .adult(baseAdultCount)
+                    .adult(adultsInThisRoom)
                     .childAges(i == 0 ? mappedChildAges : new ArrayList<>())
                     .build());
         }
@@ -165,12 +172,19 @@ public class TourVisioRequestMapper {
         int roomCount = criteria.getRoomCount() != null && criteria.getRoomCount() > 0
                 ? criteria.getRoomCount() : 1;
 
-        int baseAdultCount = criteria.getAdultCount() != null ? criteria.getAdultCount() : 1;
+        int baseAdultCount = criteria.getAdultCount() != null ? criteria.getAdultCount() : Math.max(1, roomCount);
+        if (baseAdultCount < roomCount) {
+            baseAdultCount = roomCount;
+        }
+
+        int adultsPerRoom = Math.max(1, baseAdultCount / roomCount);
+        int extraAdults = baseAdultCount % roomCount;
 
         List<TourVisioHotelSearchRequest.RoomCriteria> rooms = new ArrayList<>();
         for (int i = 0; i < roomCount; i++) {
+            int adultsInThisRoom = adultsPerRoom + (i < extraAdults ? 1 : 0);
             rooms.add(TourVisioHotelSearchRequest.RoomCriteria.builder()
-                    .adult(baseAdultCount)
+                    .adult(adultsInThisRoom)
                     .childAges(i == 0 ? mappedChildAges : new ArrayList<>())
                     .build());
         }
