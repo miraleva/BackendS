@@ -170,14 +170,21 @@ public class TourVisioHotelApiClient {
             ResponseEntity<TourVisioHotelSearchResponse> searchRes = ResponseEntity.status(rawRes.getStatusCode()).body(parsedBody);
 
             List<HotelSearchResponseItem> liveResults = normalizeResponse(searchRes, criteria.getCurrency());
-            if (liveResults != null && !liveResults.isEmpty()) {
+            if (liveResults != null) {
                 return liveResults;
             }
         } catch (Exception e) {
-            log.warn("[HotelApiClient] TourVisio live hotel search failed: {} — falling back to mock hotels.", e.getMessage());
+            log.warn("[HotelApiClient] TourVisio live hotel search failed: {} — mockMode={}", e.getMessage(), config.isMockMode());
+            if (config.isMockMode()) {
+                return generateMockHotels(criteria);
+            }
+            return new ArrayList<>();
         }
 
-        return generateMockHotels(criteria);
+        if (config.isMockMode()) {
+            return generateMockHotels(criteria);
+        }
+        return new ArrayList<>();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -197,46 +204,52 @@ public class TourVisioHotelApiClient {
 
         log.info("[HotelApiClient] Autocomplete isteği: query='{}', url={}", query, url);
 
-        ResponseEntity<TourVisioAutocompleteResponse> res;
+        ResponseEntity<TourVisioAutocompleteResponse> res = null;
         try {
             res = restTemplate.exchange(url, HttpMethod.POST, entity, TourVisioAutocompleteResponse.class);
         } catch (Exception e) {
-            throw new TourVisioApiException(
-                    "TourVisio Autocomplete isteği başarısız (query='" + query + "'): " + e.getMessage(), e);
+            log.warn("[HotelApiClient] TourVisio Autocomplete API failed for query='{}': {}", query, e.getMessage());
         }
 
-        if (!res.getStatusCode().is2xxSuccessful() || res.getBody() == null) {
-            throw new TourVisioApiException(
-                    "TourVisio Autocomplete yanıtı başarısız. Status: " + res.getStatusCode());
+        if (res != null && res.getStatusCode().is2xxSuccessful() && res.getBody() != null && res.getBody().getBody() != null) {
+            TourVisioAutocompleteResponse.Body body = res.getBody().getBody();
+            if (body.getItems() != null && !body.getItems().isEmpty()) {
+                TourVisioAutocompleteResponse.AutocompleteItem item = body.getItems().get(0);
+                int itemType = item.getType();
+
+                if (item.getCity() != null && item.getCity().getId() != null) {
+                    return new AutocompleteResult(item.getCity().getId(), itemType, item.getCity().getName());
+                }
+                if (item.getState() != null && item.getState().getId() != null) {
+                    return new AutocompleteResult(item.getState().getId(), itemType, item.getState().getName());
+                }
+                if (item.getHotel() != null && item.getHotel().getId() != null) {
+                    return new AutocompleteResult(item.getHotel().getId(), itemType, item.getHotel().getName());
+                }
+                if (item.getCountry() != null && item.getCountry().getId() != null) {
+                    return new AutocompleteResult(item.getCountry().getId(), itemType, item.getCountry().getName());
+                }
+            }
         }
 
-        TourVisioAutocompleteResponse.Body body = res.getBody().getBody();
-        if (body == null || body.getItems() == null || body.getItems().isEmpty()) {
-            throw new TourVisioApiException(
-                    "'" + query + "' için TourVisio Autocomplete'de sonuç bulunamadı. " +
-                    "Lütfen geçerli bir şehir veya otel adı girin.");
+        // Fallback static IDs for popular cities in TourVisio
+        if (query != null) {
+            String qLower = query.trim().toLowerCase(java.util.Locale.ROOT);
+            if (qLower.contains("antalya") || qLower.contains("kemer") || qLower.contains("side") || qLower.contains("belek") || qLower.contains("alanya")) {
+                return new AutocompleteResult("23494", 1, "Antalya");
+            }
+            if (qLower.contains("istanbul")) {
+                return new AutocompleteResult("23480", 1, "Istanbul");
+            }
+            if (qLower.contains("izmir")) {
+                return new AutocompleteResult("23490", 1, "Izmir");
+            }
+            if (qLower.contains("bodrum") || qLower.contains("marmaris") || qLower.contains("fethiye")) {
+                return new AutocompleteResult("23495", 1, "Muğla");
+            }
         }
 
-        // İlk sonuçtan ID çöz
-        TourVisioAutocompleteResponse.AutocompleteItem item = body.getItems().get(0);
-        int itemType = item.getType();
-
-        // City ID'si varsa onu kullan, yoksa state, en son country
-        if (item.getCity() != null && item.getCity().getId() != null) {
-            return new AutocompleteResult(item.getCity().getId(), itemType, item.getCity().getName());
-        }
-        if (item.getState() != null && item.getState().getId() != null) {
-            return new AutocompleteResult(item.getState().getId(), itemType, item.getState().getName());
-        }
-        if (item.getHotel() != null && item.getHotel().getId() != null) {
-            return new AutocompleteResult(item.getHotel().getId(), itemType, item.getHotel().getName());
-        }
-        if (item.getCountry() != null && item.getCountry().getId() != null) {
-            return new AutocompleteResult(item.getCountry().getId(), itemType, item.getCountry().getName());
-        }
-
-        throw new TourVisioApiException(
-                "'" + query + "' için Autocomplete sonucu alındı ama ID çözümlenemedi.");
+        throw new TourVisioApiException("'" + query + "' için TourVisio Autocomplete'de sonuç bulunamadı.");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
